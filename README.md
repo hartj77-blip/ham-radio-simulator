@@ -8,7 +8,7 @@ A realistic amateur (ham) radio simulator that runs in the browser. You build a 
 python3 -m http.server 8000
 ```
 
-Then open http://localhost:8000. GitHub Pages works too. Use headphones. Chrome or Edge is recommended, because live voice depends on speech recognition.
+Then open https://hartj77-blip.github.io/ham-radio-simulator/ Use headphones. Chrome or Edge is recommended, because live voice depends on speech recognition.
 
 ## What you can do
 
