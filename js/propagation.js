@@ -1,5 +1,5 @@
 // Simplified but physically-motivated HF/VHF propagation model.
-import { clamp, rand, randi, chance } from './util.js';
+import { clamp, rand, randi, chance, seeded } from './util.js';
 import { S, save } from './state.js';
 
 const R = 6371;
@@ -33,15 +33,28 @@ export function grid(lat, lon) {
 }
 
 export const SUN = {
-  sfi: 140, k: 2, a: 8, es: false, seed: 0,
+  sfi: 140, k: 2, a: 8, es: false, seed: 0, override: false,
+  // Shared space weather: a pure function of the UTC date (SFI, Es) and 3-hour block (K),
+  // so every player experiences the same band conditions at the same moment.
+  shared(d = simDate()) {
+    if (this.override) return;
+    const day = d.toISOString().slice(0, 10), blk = Math.floor(d.getUTCHours() / 3);
+    const key = `${day}|${blk}`;
+    if (this.key === key) return;
+    this.key = key;
+    seeded(`sun|${day}`, () => { this.sfi = randi(68, 230); this.es = chance(0.25); });
+    seeded(`k|${day}|${blk}`, () => { this.k = Math.min(7, Math.max(0, Math.round(-Math.log(Math.random()) * 1.6))); this.a = [0, 3, 7, 15, 27, 48, 80, 132][this.k] + randi(0, 3); });
+    return true;
+  },
   randomize() {
+    this.override = true;
     this.sfi = randi(68, 230);
     this.k = Math.min(7, Math.max(0, Math.round(-Math.log(Math.random()) * 1.6)));
     this.a = [0, 3, 7, 15, 27, 48, 80, 132][this.k] + randi(0, 3);
     this.es = chance(0.25);
   },
 };
-SUN.randomize();
+SUN.shared();
 
 // Simulated UTC time. Real UTC unless the player overrides the hour (time warp).
 export function simDate() {

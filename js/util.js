@@ -106,3 +106,14 @@ export function download(filename, text, type = 'text/plain') {
 }
 
 export const now = () => performance.now() / 1000;
+
+// Deterministic randomness: run fn with Math.random replaced by a seeded PRNG
+// (mulberry32). Used so every player sees the same shared world.
+export function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+export function seeded(seed, fn) {
+  let a = typeof seed === 'number' ? seed >>> 0 : hashStr(String(seed));
+  const prng = () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const orig = Math.random;
+  Math.random = prng;
+  try { return fn(); } finally { Math.random = orig; }
+}

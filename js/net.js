@@ -6,7 +6,7 @@
 // "lobby" peer ID on the public PeerJS broker and keeps the roster; everyone else sends it
 // a heartbeat every 2 s and gets the roster back. If the lobby host leaves, the next player
 // to notice claims the ID and takes over.
-import { S } from './state.js';
+import { S, save } from './state.js';
 import { h, toast, bus, now, randi, rand } from './util.js';
 import { audio } from './audio.js';
 import { voice } from './voice.js';
@@ -36,7 +36,9 @@ function loadLib() {
 }
 
 async function goOnline() {
-  audio.init();
+  if (net.online || net.status === 'connecting…') return;
+  try { audio.init(); } catch (e) { }
+  if (S.settings.hour != null) { S.settings.hour = null; save(); world.repopulate(); toast('⏱ On the air together, everyone runs on real UTC — time warp turned off.', 'info'); }
   setStatus('connecting…');
   try { await loadLib(); } catch (e) { setStatus('offline'); return toast('Could not load the networking library (are you offline?).', 'bad'); }
   const id = `hamshack-${(S.call || 'swl').toLowerCase()}-${randi(1000, 9999)}`;
@@ -158,6 +160,7 @@ async function join(e, talk = true) {
   if (!net.online) return;
   bus.emit('tune-to', e.freq, e.mode);
   if (!net.peers.has(e.id)) connect(e.id);
+  const lp = net.peers.get(e.id); if (lp) lp.pinned = true;
   const est = pathEstimate(e);
   const canTalk = S.license && checkTx(S.license, e.freq, e.mode).ok;
   if (talk && canTalk) await ensureMic();
@@ -209,7 +212,9 @@ function onIncomingCall(call) {
 }
 function attachStream(id, stream) {
   const p = net.peers.get(id);
-  if (!p || !audio.ready) return;
+  if (!p) return;
+  if (!audio.ready) { p.pendingStream = stream; return; }
+  p.pendingStream = null;
   if (p.media) { try { p.media.gain.disconnect(); } catch (e) { } }
   p.media = audio.streamIn(stream);
   renderRoster();
@@ -263,7 +268,11 @@ function ensureStation(p) {
 function tick() {
   broadcast(myState());
   // drop linked players that went silent (closed tab, lost network)
-  for (const p of [...net.peers.values()]) if (p.call !== '?' && now() - p.last > 8) { toast(`🌐 ${p.call} went off the air.`, 'info'); removePeer(p.id); }
+  for (const p of [...net.peers.values()]) {
+    if (p.call !== '?' && now() - p.last > 8) { if (p.pinned) toast(`🌐 ${p.call} went off the air.`, 'info'); removePeer(p.id); continue; }
+    if (p.pendingStream && audio.ready) attachStream(p.id, p.pendingStream);
+  }
+  autoLink();
   // keep linked players present on the band the player is listening to
   for (const p of net.peers.values()) {
     if (!p.station) continue;
@@ -273,6 +282,30 @@ function tick() {
     const inList = world.stations.includes(p.station);
     if (here && !inList) world.stations.push(p.station);
     if (!here && inList) world.stations = world.stations.filter((s) => s !== p.station);
+  }
+}
+
+// Like a real receiver: you're linked to every player on the band you're tuned to, so you
+// hear anyone who transmits on your frequency (subject to propagation). Links to players on
+// other bands are dropped after a while to keep the mesh small. The lower ID initiates.
+const MAX_LINKS = 24;
+let lastAuto = 0;
+function autoLink() {
+  if (!net.online || now() - lastAuto < 1.5) return;
+  lastAuto = now();
+  const myBand = world.band;
+  const same = net.roster.filter((e) => bandOf(e.freq)?.name === myBand && myBand);
+  same.sort((a, b) => Math.abs(a.freq - S.radio.freq) - Math.abs(b.freq - S.radio.freq));
+  for (const e of same) {
+    if (net.peers.size >= MAX_LINKS) break;
+    if (!net.peers.has(e.id) && net.id < e.id) connect(e.id);
+  }
+  for (const p of [...net.peers.values()]) {
+    const e = net.roster.find((x) => x.id === p.id);
+    const band = e ? bandOf(e.freq)?.name : null;
+    if (band === myBand || p.pinned) { p.offBand = 0; continue; }
+    p.offBand ||= now();
+    if (now() - p.offBand > 30) removePeer(p.id);
   }
 }
 
@@ -292,10 +325,24 @@ net.signals = (dial, mode, att, nBW) => {
     const s = p.station;
     const tx = s.tx && s.tx.kind === 'peervoice' && s.tx.end > now();
     const off = s.freq - dial;
-    let audible = false;
+    // How the receiver renders their voice: clean, shifted (mistuned) or inverted (wrong sideband).
+    let audible = false, garble = 0, shiftHz = 0;
     if (tx && s.band === world.band) {
-      if (mode === 'FM') audible = s.mode === 'FM' && Math.abs(off) < 5000;
-      else if (mode === 'USB' || mode === 'LSB' || mode === 'AM') audible = s.mode === 'SSB' && (s.sb === mode || mode === 'AM') && Math.abs(off) < 400;
+      const ao = Math.abs(off);
+      if (mode === 'FM') { if (s.mode === 'FM') { audible = ao < 10000; garble = ao < 4000 ? 0 : 1; shiftHz = 700; } else if (ao < 3000) { audible = true; garble = 1; shiftHz = 300; } }
+      else if (s.mode === 'SSB') {
+        const same = s.sb === mode || mode === 'AM';
+        const audioShift = mode === 'LSB' ? -off : off; // + = pitched up
+        if (same && ao <= 120) audible = true;
+        else if (same && ao < 2600) { audible = true; garble = Math.min(1, (ao - 120) / 180); shiftHz = Math.max(60, ao); }
+        else if (!same && ao < 2600) { audible = true; garble = 1; shiftHz = 2900 + audioShift; }
+        if (mode === 'CW') { audible = ao < 2600; garble = 1; shiftHz = 900; }
+      } else if (s.mode === 'FM' && ao < 8000) { audible = true; garble = 1; shiftHz = 500; }
+    }
+    if (p.media.wet && audio.ready) {
+      p.media.wet.gain.setTargetAtTime(garble, audio.t, 0.05);
+      p.media.dry.gain.setTargetAtTime(1 - garble, audio.t, 0.05);
+      p.media.osc.frequency.setTargetAtTime(Math.max(30, Math.abs(shiftHz)), audio.t, 0.05);
     }
     const dbm = s.freq ? world.rxDbm(s) - att : -200;
     out.push({ node: p.media.gain, gain: p.media.gain, audible, snr: dbm - nBW, dbm });
@@ -318,30 +365,37 @@ function render() {
   rosterBox = h('div', { class: 'roster' });
   root.append(h('div', { class: 'card net', id: 'net-card' },
     h('div', { class: 'row spread' }, h('h3', {}, '🌐 Who\'s on the air (real players)'), h('div', { class: 'row' }, net.hosting ? h('span', { class: 'badge', title: 'Your browser is currently keeping the player list' }, 'lobby host') : null, statusEl)),
-    h('p', { class: 'small muted' }, 'Like voice chat in other games — but through the radio. Go online to see every player, their frequency and who\'s talking right now. Press Join to tune in, then hold SPACE to talk. You only hear each other on the same frequency and mode, when the band is open between your QTHs. Others see your callsign, state and frequency while you\'re online.'),
+    h('p', { class: 'small muted' }, 'A shared, real-time ham band. On the air, you hear any player who transmits where you\'re tuned — just like a real receiver — if the band is open between your QTHs. Mistuned voices sound garbled; the wrong sideband sounds like Donald Duck. Tune to anyone\'s frequency (or press Join) and hold SPACE to talk. Everyone shares the same AI stations, space weather and UTC clock. Others see your callsign, state and frequency while you\'re on the air.'),
     net.online
       ? h('div', {},
         rosterBox,
         h('details', { class: 'small' }, h('summary', {}, 'Advanced: connect by station ID'),
           h('div', { class: 'row' }, h('span', {}, 'Your ID: '), h('code', { class: 'peer-id' }, net.id || '…'), h('button', { class: 'btn small', onclick: () => { navigator.clipboard?.writeText(net.id); toast('Copied!', 'good'); } }, 'Copy')),
           h('div', { class: 'row' }, idIn, h('button', { class: 'btn small', onclick: () => connect(idIn.value) }, 'Connect'))),
-        h('div', { class: 'row' }, h('button', { class: 'btn small', onclick: goOffline }, 'Go offline')))
-      : h('button', { class: 'btn primary', onclick: goOnline }, '🌐 Go online — see who\'s on'),
+        h('div', { class: 'row' }, autoChk(), h('button', { class: 'btn small', onclick: goOffline }, 'Go offline')))
+      : h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => { S.settings.autoOnline = true; save(); goOnline(); } }, '🌐 Go on the air with real players'), h('span', { class: 'muted small' }, 'You\'ll stay on the air automatically next time (untick to stop).')),
   ));
   renderRoster();
 }
+
+function autoChk() {
+  const c = h('input', { type: 'checkbox', checked: !!S.settings.autoOnline });
+  c.onchange = () => { S.settings.autoOnline = c.checked; save(); };
+  return h('label', { class: 'inline small' }, c, ' go on the air automatically when I open the game');
+}
+export function autoOnline() { if (S.settings.autoOnline && !net.online) goOnline(); }
 
 function renderRoster() {
   if (!rosterBox || !net.online) return;
   const list = net.roster;
   rosterBox.innerHTML = '';
   if (!list.length) {
-    rosterBox.append(h('p', { class: 'muted small' }, net.hosting || (lobby.conn && lobby.conn.open) ? '📭 Nobody else is online right now. Leave this open — you\'ll see players appear here. (Share the game link with a friend!)' : '⏳ Finding the lobby…'));
+    rosterBox.append(h('p', { class: 'muted small' }, net.hosting || (lobby.conn && lobby.conn.open) ? '📭 Nobody else is on the air right now. You\'re listening — anyone who comes on your band will be heard automatically. (Share the game link with a friend!)' : '⏳ Finding the lobby…'));
     return;
   }
   const dial = S.radio.freq;
   rosterBox.append(h('table', { class: 'tbl roster-tbl' },
-    h('tr', {}, ...['', 'Call', 'QTH', 'Freq', 'Mode', 'Path to you', ''].map((t) => h('th', {}, t))),
+    h('tr', {}, ...['', 'Call', 'QTH', 'Freq', 'Mode', 'Path to you', 'Link', ''].map((t) => h('th', {}, t))),
     ...list.map((e) => {
       const linked = net.peers.get(e.id);
       const here = Math.abs(e.freq - dial) < 500 && e.mode === S.radio.mode;
@@ -354,6 +408,7 @@ function renderRoster() {
         h('td', { class: 'mono' }, `${(e.freq / 1e6).toFixed(3)}${band ? ` (${band.name})` : ''}`),
         h('td', {}, e.mode),
         h('td', { class: est ? (est.open ? 'ok' : 'bad') : 'muted' }, est ? (est.open ? `≈ ${est.s}` : 'band closed') : '—'),
+        h('td', { class: 'small' }, linked ? (linked.media ? '🔗 audio' : '🔗') : bandOf(e.freq)?.name === world.band ? '…' : h('span', { class: 'muted' }, 'other band')),
         h('td', {}, here && linked ? h('span', { class: 'badge ok' }, 'joined') : h('button', { class: 'btn primary small', onclick: () => join(e) }, e.tx ? '▶ Join (on air)' : '▶ Join')));
     })));
 }
