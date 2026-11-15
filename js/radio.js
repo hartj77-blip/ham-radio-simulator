@@ -10,6 +10,7 @@ import { bandNoiseDbm, sUnits, distanceKm, bearing } from './propagation.js';
 import { elmer } from './elmer.js';
 import { ui as opUi, txState } from './operating.js';
 import { net } from './net.js';
+import { owns, maxPower } from './store.js';
 
 const R = () => S.radio;
 let wf, wfCtx, spec, meterCv, lcd, panel;
@@ -164,7 +165,7 @@ export function rxUpdate() {
   // AGC (fast attack, slow decay)
   const target = clamp(0.28 / maxRms, 0.02, 1);
   agc = target < agc ? target : agc + (target - agc) * 0.08;
-  audio.setNoise(noiseRms * agc);
+  audio.setNoise(noiseRms * agc * (r.nr && owns('dsp') ? 0.55 : 1));
   for (const s of sigs) {
     let rms = s.audible && open ? NREF * db2amp(s.snr) * agc : 0;
     if (r.mode === 'FM' && s.st.mode === 'FM') rms = open ? 0.25 : 0;
@@ -227,7 +228,7 @@ function updateDecoder(s) {
   let out = '';
   while (decState.idx < chars.length && chars[decState.idx].t <= el) {
     let c = chars[decState.idx].c;
-    const pErr = clamp((4 - s.snr) / 14, 0, 0.6);
+    const pErr = clamp((4 - s.snr - (R().nr && owns('dsp') ? 3 : 0)) / 14, 0, 0.6);
     if (c !== ' ' && Math.random() < pErr) c = 'ETIANMSURWDKGOH'[Math.floor(Math.random() * 15)];
     out += c.length > 1 ? `<${c}>` : c;
     decState.idx++;
@@ -275,7 +276,7 @@ export function initRadioUI(el) {
   };
   const filterSel = h('select', { class: 'rsel', id: 'filter-sel' });
   const fillFilters = () => {
-    const opts = { CW: [250, 400, 500, 800, 1200, 2400], USB: [1800, 2100, 2400, 2700, 3000], LSB: [1800, 2100, 2400, 2700, 3000], AM: [3000, 6000, 9000], FM: [12000] }[r.mode];
+    const opts = { CW: owns('cwfilter') ? [250, 400, 500, 800, 1200, 2400] : [500, 800, 1200, 2400], USB: [1800, 2100, 2400, 2700, 3000], LSB: [1800, 2100, 2400, 2700, 3000], AM: [3000, 6000, 9000], FM: [12000] }[r.mode];
     filterSel.innerHTML = '';
     for (const w of opts) filterSel.append(h('option', { value: w, selected: w === r.filter[r.mode] }, w >= 1000 ? `${w / 1000} kHz` : `${w} Hz`));
   };
@@ -312,9 +313,9 @@ export function initRadioUI(el) {
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'AUDIO'),
         slider('AF GAIN', 0, 1, 0.01, r.af, (v) => { r.af = v; }, (v) => Math.round(v * 100)),
         slider('SQL', 0, 1, 0.01, r.sql, (v) => { r.sql = v; }, (v) => Math.round(v * 100)),
-        h('div', { class: 'row' }, attBtn, ritBtn, ritSl)),
+        h('div', { class: 'row' }, attBtn, ritBtn, ritSl), owns('dsp') ? h('button', { class: `rbtn ${r.nr ? 'active' : ''}`, onclick: (e) => { r.nr = !r.nr; e.target.classList.toggle('active', r.nr); save(); } }, 'NR (DSP)') : null),
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'TRANSMIT'),
-        slider('POWER', 5, 100, 5, r.power, (v) => { r.power = v; if (v <= 25) elmer('power_min'); }, (v) => `${v} W`),
+        slider('POWER', 5, maxPower(), 5, Math.min(r.power, maxPower()), (v) => { r.power = v; if (v <= 25) elmer('power_min'); }, (v) => `${v} W`),
         h('div', { class: 'row' }, atuBtn, tuneBtn),
         h('div', { class: 'fm-only' }, h('label', { class: 'knobrow' }, h('span', {}, 'OFFSET'), rptSel), h('label', { class: 'knobrow' }, h('span', {}, 'CTCSS'), toneSel)),
         rotator, mtuner),
@@ -438,7 +439,7 @@ export function updateDisplay() {
   const rot = $('#rotator', panel);
   if (rot) {
     rot.innerHTML = '';
-    if (S.antenna.type === 'yagi' && S.antenna.built) {
+    if (S.antenna.type === 'yagi' && S.antenna.built && owns('rotator')) {
       const i = h('input', { type: 'range', min: 0, max: 359, value: S.antenna.heading });
       const v = h('span', { class: 'val' }, `${S.antenna.heading}°`);
       i.oninput = () => { S.antenna.heading = +i.value; v.textContent = `${i.value}°`; save(); };

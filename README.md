@@ -19,6 +19,8 @@ Then open http://localhost:8000. GitHub Pages works too. Use headphones. Chrome 
 | 📻 **Radio** | An HF/6 m/2 m transceiver with a VFO knob, band and mode buttons, IF filters, AGC, RIT, ATT, squelch, an internal ATU, a manual tuner, a rotator, an S/PO/SWR meter and a live waterfall. Listen to CW and SSB QSOs, NCDXF beacons, and the local 2 m repeater, which needs the correct offset and CTCSS tone. |
 | 🏆 **Contests** | Field Day, a DX contest in the style of CQ WW, and a State QSO Party. You can run pileups or search and pounce. The logger works like N1MM, with F-key macros and ESM (Enter Sends Message). After the contest, your log is checked for busted calls, NIL contacts and wrong exchanges. |
 | 🪪 **License** | Study cards and practice exams for Technician, General and Extra, plus a "VE exam" that grants your license and callsign. |
+| 🛠 **Workbench** | A real antenna design tool, described below. |
+| 🛒 **Hamfest** | Spend credits earned by operating on coax, masts and towers, a Yagi and rotator, CW filters, DSP noise reduction and amplifiers. Each upgrade changes the physics. |
 | 📒 **Logbook** | Confirmed QSOs, progress toward WAS, DXCC and WAC awards, and ADIF export. |
 
 ### Learning as you play
@@ -34,6 +36,17 @@ An in-game **Elmer** (mentor) steps in when you hit a situation the exams cover,
 - **Receiver:** band noise and QRN static crashes pass through real Web Audio IF filters (CW tones change pitch as you tune), AGC, FM quieting and squelch. Mistuned or wrong-sideband SSB sounds garbled.
 - **Rules:** FCC Part 97 privileges by license class and mode, plus the band-edge check for how much spectrum your signal occupies. Unlicensed players can only transmit into the dummy load.
 - **AI operators:** they call CQ, ragchew, run contests, answer only if they can actually hear you, send partial calls when your signal is weak, correct busted calls, slow down to your CW speed, and honor QRS.
+
+## 🛠 Antenna Workbench (a real design tool)
+- **Solver:** a thin-wire Method-of-Moments engine using the same physics as NEC-2: EFIE, Galerkin, triangle basis functions, reduced kernel. It handles free space, perfect ground and real ground (reflection-coefficient approximation for currents, Fresnel coefficients for patterns), copper and aluminium conductor loss, and lumped loads. It runs in a Web Worker.
+  - Checked against textbook values: half-wave dipole 80 + j44 Ω (thin wire), resonant at 0.486 λ with 73 Ω and 2.09 dBi; quarter-wave monopole over perfect ground 40 + j22 Ω and 5.13 dBi.
+- **Templates:** dipole, inverted-V, ground-mounted vertical (with a radial-loss model), elevated ground plane, end-fed half-wave with a 1:N transformer, 3-element Yagi and quad loop. Auto-tune scales a design to resonate at a target frequency. You can export and import NEC-2 decks to cross-check in 4nec2 or EZNEC.
+- **Results:** SWR, R/X and Smith-chart plots, azimuth and elevation patterns, take-off angle, front-to-back ratio, 2:1 bandwidth, a rotatable 3D view of the current distribution, and a cut list.
+- **Measurements:** import Touchstone `.s1p` or CSV files, or read a NanoVNA live over Web Serial. The tool can mathematically remove the coax between the analyzer and the antenna, then gives trim advice calibrated to your site.
+- **Matching:** every L-network solution, with real component values, efficiency at a given coil Q and the matched bandwidth. Also single-stub matches, quarter-wave transformers and unun/balun suggestions.
+- **Accuracy:** expect about 1–3% on resonance in the model. A real site adds a few % (insulation, trees, house wiring). Measure, then trim.
+
+The game's own antennas use the same solver, with a 3% insulated-wire correction.
 
 ## Disclaimer
 The exam questions are original practice questions on the official topics. They are not the NCVEC pool, so study the current official pool before a real exam. Callsigns are randomly generated.

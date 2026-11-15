@@ -6,6 +6,8 @@
   <title>Ham Shack Simulator</title>
   <meta name="description" content="A realistic in-browser amateur (ham) radio simulator: wire your shack, build antennas, tune the bands, earn your license and compete in contests.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📻</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Share+Tech+Mono&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body data-tab="radio">
@@ -20,14 +22,17 @@
   <main>
     <section id="tab-shack" class="tab" hidden></section>
     <section id="tab-antenna" class="tab" hidden></section>
+    <section id="tab-workbench" class="tab" hidden></section>
     <section id="tab-radio" class="tab" hidden>
       <div id="radio-panel"></div>
+      <div id="map-panel"></div>
       <div id="operating"></div>
       <div id="net-panel"></div>
     </section>
     <section id="tab-contest" class="tab" hidden></section>
     <section id="tab-license" class="tab" hidden></section>
     <section id="tab-logbook" class="tab" hidden></section>
+    <section id="tab-store" class="tab" hidden></section>
     <section id="tab-help" class="tab" hidden></section>
   </main>
   <div id="toasts"></div>
