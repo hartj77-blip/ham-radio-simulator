@@ -5,6 +5,7 @@ import { POOL, EXAM } from './data/questions.js';
 import { newLicenseeCall, STATES } from './data/world.js';
 import { BANDS, privilegeMap } from './data/bandplan.js';
 import { elmer } from './elmer.js';
+import { earn } from './store.js';
 
 let root;
 const ORDER = ['T', 'G', 'E'];
@@ -156,6 +157,7 @@ function grantLicense(el, box) {
     msg = `The FCC has issued your callsign: <b>${S.call}</b>`;
   } else msg = `Upgrade to ${licName(el)} is in the FCC database. You may sign "${S.call}/A${el === 'E' ? 'E' : 'G'}" until it appears… (in the sim it\'s instant).`;
   addXp({ T: 100, G: 150, E: 250 }[el], 'license');
+  earn(100, 'license');
   save();
   box.append(h('div', { class: 'good-box' }, h('div', { html: `🎉 ${msg}` }),
     el === 'E' ? h('button', { class: 'btn', onclick: (e) => { S.call = newLicenseeCall(S.op.state, 'E'); save(); e.target.textContent = `New vanity call: ${S.call}`; bus.emit('license'); } }, 'Apply for a short Extra-class (Group A) callsign') : null));

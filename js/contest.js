@@ -6,6 +6,7 @@ import { world } from './world.js';
 import { setContestBar } from './operating.js';
 import { bandOf } from './data/bandplan.js';
 import { elmer } from './elmer.js';
+import { earn } from './store.js';
 
 let root;
 let setup = { id: 'fd', mode: 'MIXED', mins: 15, cls: '1D' };
@@ -136,6 +137,7 @@ export function endContest() {
   S.scores[c.def.id].sort((a, b) => b.score - a.score);
   S.scores[c.def.id] = S.scores[c.def.id].slice(0, 10);
   addXp(Math.min(300, 10 + sc.final), 'contest');
+  earn(Math.round(sc.final / 5), 'contest');
   save();
   render();
   setContestBar('');
