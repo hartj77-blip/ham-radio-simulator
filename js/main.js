@@ -12,7 +12,7 @@ import { initOperatingUI, txState } from './operating.js';
 import { initContestUI, contestTick } from './contest.js';
 import { initExamUI, sandboxLicense } from './exam.js';
 import { initLogbookUI } from './logbook.js';
-import { initNetUI, net } from './net.js';
+import { initNetUI, net, autoOnline } from './net.js';
 import { initWorkbenchUI } from './workbench.js';
 import { initStoreUI, money, earn } from './store.js';
 import { initMapUI, drawMap } from './map.js';
@@ -98,7 +98,7 @@ function helpTab(el) {
       h('label', {}, 'QTH (your state) ', qth),
       h('label', {}, live, ' Real UTC time'), h('label', {}, 'Time warp ', hour, ' ', hourLbl),
       h('p', { class: 'muted tiny' }, 'Propagation follows the sun: low bands open at night, high bands by day.'),
-      h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { SUN.randomize(); world.repopulate(); solarBanner(); toast(`New space weather: SFI ${SUN.sfi}, K ${SUN.k}`, 'info'); } }, '☀ New space weather')),
+      h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { if (net.online) return toast('Online, everyone shares the real space weather — go offline to experiment.', 'warn'); SUN.randomize(); world.repopulate(); solarBanner(); toast(`Practice space weather: SFI ${SUN.sfi}, K ${SUN.k}`, 'info'); } }, '☀ Practice: random space weather'), h('button', { class: 'btn', onclick: () => { SUN.override = false; SUN.key = null; SUN.shared(); world.repopulate(); solarBanner(); } }, '↺ Shared (today\'s) conditions')),
       h('label', {}, 'AI voice speed ', rate),
       h('hr'),
       h('p', { class: 'small' }, h('b', {}, 'Sandbox: '), 'skip the exams and grant yourself a license (for jumping straight into contests).'),
@@ -162,7 +162,7 @@ function init() {
 
   setInterval(() => { world.tick(); rxUpdate(); }, 100);
   setInterval(() => { clock(); contestTick(); $('#operating')?.classList.toggle('is-cw', S.radio.mode === 'CW'); }, 1000);
-  setInterval(solarBanner, 60000);
+  setInterval(() => { if (SUN.shared()) { solarBanner(); world.bandCache = {}; } solarBanner(); }, 60000);
   let last = 0;
   let lastMap = 0;
   const loop = (t) => { if (t - last > 60) { last = t; drawFrame(); } if (t - lastMap > 250) { lastMap = t; drawMap(); shackTick(txState); } requestAnimationFrame(loop); };
@@ -170,6 +170,7 @@ function init() {
 
   if (!S.started) onboarding();
   else if (S.license && !S.tips.includes('welcome')) elmer('welcome');
+  if (S.started) setTimeout(autoOnline, 1500);
 }
 
 init();
