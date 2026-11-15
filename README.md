@@ -28,7 +28,7 @@ An in-game **Elmer** (mentor) steps in when you hit a situation the exams cover,
 
 ### Voice, like the voice chat in other games
 - **Push-to-talk:** hold **Space**, or the PTT button. Speech recognition turns what you say ("Kilo Delta Nine X-ray…, five nine") into text, and the AI stations reply out loud.
-- **Online:** connect to friends peer-to-peer over WebRTC through PeerJS. The difference from normal game chat is that you only hear another player when you're both on the same frequency and mode **and** propagation supports the path between your two states. Their audio goes through your receiver's filter and noise. CW you send reaches them too.
+- **Online:** press **Go online** to see every player who's on: their callsign, state, frequency and mode, who's talking right now, and an estimate of whether the band is open between you. Press **Join** to tune to them and link audio, then hold Space to talk. Discovery needs no server of our own. The first player online keeps a shared lobby on the free PeerJS broker, and if they leave, another player takes over automatically. Audio is peer-to-peer WebRTC and goes through your receiver's filter and noise, so you only hear each other on the same frequency and mode, with propagation between your QTHs. Players also appear on the propagation map, and you can click one to join.
 
 ### The realism underneath
 - **Ionosphere:** a sun-position model that drives foF2/MUF, D-layer absorption, skip zones, multi-hop paths, K-index and auroral loss, and sporadic-E on 6 m.
