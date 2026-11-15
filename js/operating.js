@@ -13,6 +13,7 @@ import { voice, normalizeSpeech } from './voice.js';
 import { elmer } from './elmer.js';
 import { net } from './net.js';
 import { distanceKm, bearing } from './propagation.js';
+import { powerLimit } from './store.js';
 
 const R = () => S.radio;
 
@@ -74,6 +75,12 @@ function prepare(modeOverride, quiet) {
   }
   const swr = effectiveSwr(txf);
   if (via === 'rf' && !S.antenna.built) { elmer('no_antenna', true); toast('The feedline goes outside but there\'s no antenna on it! Build one in the Antenna tab.', 'bad'); return null; }
+  if (via === 'rf' && S.license && r.power > powerLimit(S.license, txf)) {
+    S.stats.violations++; save();
+    toast(`🚫 <b>Transmission blocked.</b> ${r.power} W exceeds the ${powerLimit(S.license, txf)} W PEP limit for ${S.license === 'T' ? 'Technicians on HF' : 'this band (30 m)'}. Turn the power down.`, 'bad', 9000);
+    elmer('power_min');
+    return null;
+  }
   const fb = foldback(swr);
   const watts = Math.max(0.5, r.power * fb);
   if (swr > 2.0 && !quiet) {
