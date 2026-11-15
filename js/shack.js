@@ -52,6 +52,7 @@ function compatible(a, b) {
 
 const partners = (id) => S.shack.conn.filter((c) => c.includes(id)).map((c) => (c[0] === id ? c[1] : c[0]));
 const connected = (a, b) => S.shack.conn.some((c) => c.includes(a) && c.includes(b));
+export const isConnected = connected;
 const toBus = (id) => partners(id).some((p) => p.startsWith('gb')) || partners(id).some((p) => p !== id && P[p].t === 'gnd' && partners(p).some((q) => q.startsWith('gb')));
 
 export function rigStatus() {
@@ -113,6 +114,7 @@ function checkPowerUp() {
     audio.beep(120, 0.15, 0.4);
     toast('💥 <b>POP!</b> The radio\'s inline fuse blew. Reverse polarity!', 'bad');
     elmer('fuse_blown', true);
+    bus.emit('helper-mistake', 'fuse');
   } else if (st.powered) {
     audio.beep(1200, 0.05, 0.1);
     if (!S.tips.includes('shack_on')) { S.tips.push('shack_on'); addXp(15, 'station on the air'); }
@@ -151,10 +153,11 @@ function clickPort(id) {
   if (sel === id) { sel = null; draw(); return; }
   const a = P[sel], b = p;
   const err = compatible(a, b);
-  if (err) { toast(err, 'warn'); sel = null; draw(); return; }
+  if (err) { toast(err, 'warn'); bus.emit('helper-mistake', 'connector', err); sel = null; draw(); return; }
   const busy = [a, b].find((x) => partners(x.id).length && !x.id.startsWith('gb'));
   if (busy) { toast(`${DEV[busy.dev].label} ${busy.label} already has a cable. Unplug it first.`, 'warn'); sel = null; draw(); return; }
   S.shack.conn.push([a.id, b.id]);
+  { const pr = [a.id, b.id]; if ((pr.includes('rig_red') && pr.includes('psu_neg')) || (pr.includes('rig_blk') && pr.includes('psu_pos'))) bus.emit('helper-mistake', 'polarity'); }
   sel = null; save(); audio.click();
   // lessons
   const pair = [a.id, b.id];
@@ -187,7 +190,7 @@ function draw() {
   }
   // rig front panel details
   const st = rigStatus();
-  const rigOnBtn = s('g', { class: 'btn-svg', style: 'cursor:pointer' });
+  const rigOnBtn = s('g', { class: 'btn-svg', style: 'cursor:pointer', 'data-ctl': 'rig-power' });
   rigOnBtn.append(s('circle', { cx: 268, cy: 250, r: 13, class: S.shack.rigOn ? 'pwr on' : 'pwr' }));
   rigOnBtn.append(s('text', { x: 284, y: 255, class: 'svgt small' }, 'POWER'));
   rigOnBtn.onclick = () => { S.shack.rigOn = !S.shack.rigOn; save(); checkPowerUp(); draw(); bus.emit('shack'); };
@@ -196,7 +199,7 @@ function draw() {
   svg.append(s('text', { x: 350, y: 270, class: 'lcdtxt' }, st.powered ? (S.radio.freq / 1e6).toFixed(3) + ' ' + S.radio.mode : ''));
   svg.append(s('circle', { cx: 530, cy: 270, r: 26, class: 'knob' }));
   // psu switch + meter
-  const sw = s('g', { style: 'cursor:pointer' });
+  const sw = s('g', { style: 'cursor:pointer', 'data-ctl': 'psu-switch' });
   sw.append(s('rect', { x: 45, y: 345, width: 40, height: 24, rx: 4, class: S.shack.psuOn ? 'sw on' : 'sw' }));
   sw.append(s('text', { x: 92, y: 362, class: 'svgt small' }, S.shack.psuOn ? 'ON' : 'OFF'));
   sw.onclick = () => { S.shack.psuOn = !S.shack.psuOn; save(); checkPowerUp(); draw(); bus.emit('shack'); };
@@ -234,7 +237,7 @@ function draw() {
   }
   for (const p of PORTS) {
     const used = partners(p.id).length > 0;
-    const g = s('g', { class: `port t-${p.t}${sel === p.id ? ' sel' : ''}${used ? ' used' : ''}`, style: 'cursor:pointer' });
+    const g = s('g', { class: `port t-${p.t}${sel === p.id ? ' sel' : ''}${used ? ' used' : ''}`, style: 'cursor:pointer', 'data-port': p.id });
     g.append(s('circle', { cx: p.x, cy: p.y, r: p.t === 'gbus' ? 7 : 9 }));
     if (p.pol) g.append(s('text', { x: p.x, y: p.y + 4, 'text-anchor': 'middle', class: 'pol' }, p.pol === '+' ? '+' : '−'));
     if (p.label) g.append(s('text', { x: p.x, y: p.y + (p.y > 400 && p.dev !== 'dl' ? 24 : -14), 'text-anchor': 'middle', class: 'plabel' }, p.label));

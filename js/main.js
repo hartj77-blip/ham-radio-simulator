@@ -18,6 +18,7 @@ import { initStoreUI, money, earn } from './store.js';
 import { initMapUI, drawMap } from './map.js';
 import { openStation, applySetup, setGameMode, applyLook, loadSlot } from './setups.js';
 import { initGuide, initExplain, initFinder } from './guide.js';
+import { initHelper } from './helper.js';
 import { rig } from './rigs.js';
 import { initHT, showHT, isPhone, phoneStart } from './htview.js';
 import { startRealWorld, RW } from './realworld.js';
@@ -138,6 +139,7 @@ function init() {
     h('button', { class: `btn small ${S.settings.explain ? 'active' : ''}`, id: 'explain-btn', title: 'Hover any control to learn what it does', onclick: (e) => { S.settings.explain = !S.settings.explain; save(); e.currentTarget.classList.toggle('active', S.settings.explain); toast(S.settings.explain ? '❓ Explain mode on — hover over any control.' : 'Explain mode off.', 'info', 2500); } }, '❓ Explain'));
   $('#topbar').append(tools);
   initGuide($('#guide-bar'));
+  const elmerEl = h('div', { id: 'elmer' }); document.body.append(elmerEl); initHelper(elmerEl);
   initExplain();
   initFinder($('#finder'));
   initHT($('#ht-panel'));
