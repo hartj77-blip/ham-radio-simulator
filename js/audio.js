@@ -176,12 +176,23 @@ class AudioEngine {
   click() { this.beep(2400, 0.008, 0.2); }
 
   // Network voice: MediaStream -> gain -> receiver input.
+  // A real player's voice entering the receiver. `dry` is the correctly-tuned path; `wet`
+  // ring-modulates the audio (frequency shift / spectrum inversion) to imitate a mistuned or
+  // wrong-sideband SSB signal.
   streamIn(stream) {
+    const ctx = this.ctx;
     const el = new Audio(); el.muted = true; el.srcObject = stream; el.play().catch(() => { });
-    const src = this.ctx.createMediaStreamSource(stream);
-    const g = this.ctx.createGain(); g.gain.value = 0;
-    src.connect(g); g.connect(this.rxIn);
-    return { gain: g, el, src };
+    const src = ctx.createMediaStreamSource(stream);
+    const out = ctx.createGain(); out.gain.value = 0;
+    const dry = ctx.createGain(); dry.gain.value = 1;
+    const rm = ctx.createGain(); rm.gain.value = 0;
+    const osc = ctx.createOscillator(); osc.frequency.value = 800; osc.connect(rm.gain); osc.start();
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2800;
+    const wet = ctx.createGain(); wet.gain.value = 0;
+    src.connect(dry); dry.connect(out);
+    src.connect(rm); rm.connect(lp); lp.connect(wet); wet.connect(out);
+    out.connect(this.rxIn);
+    return { gain: out, dry, wet, osc, el, src };
   }
 
   // ---- speech synthesis ----
