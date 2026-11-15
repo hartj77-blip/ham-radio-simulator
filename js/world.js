@@ -8,6 +8,7 @@ import { path as propPath, bearing, distanceKm, bandNoiseDbm, simDate } from './
 import { schedule, cut } from './morse.js';
 import { netGain, system } from './antenna.js';
 import { rigStatus } from './shack.js';
+import { serviceOf, stationsFor, serviceBehave } from './services.js';
 
 let NEXT_ID = 1;
 export const activeContest = () => (world.contest && !['30m', '17m', '12m', '2m'].includes(world.band) ? world.contest : null);
@@ -60,6 +61,7 @@ export class Station {
 }
 
 // ------------------------------------------------------------------ world
+bus.on('realworld', () => world.refreshService());
 export const world = {
   stations: [],
   bandCache: {},
@@ -72,7 +74,7 @@ export const world = {
   bandFor(hz) { return bandOf(hz); },
 
   setFreq(hz) {
-    const b = bandOf(hz);
+    const b = bandOf(hz) || serviceOf(hz);
     const name = b ? b.name : null;
     if (name === this.band) return;
     const cid = this.contest ? this.contest.id : null;
@@ -81,7 +83,8 @@ export const world = {
     const peers = this.stations.filter((s) => s.role === 'peer');
     this.band = name;
     const c = name && this.bandCache[name];
-    if (c && c.slot === slot && c.contest === cid && (cid || now() - c.t < 1800)) this.stations = c.stations;
+    if (b && b.mode && !bandOf(hz)) this.stations = stationsFor(b); // non-ham service region
+    else if (c && c.slot === slot && c.contest === cid && (cid || now() - c.t < 1800)) this.stations = c.stations;
     else this.stations = name ? populateShared(b, this.contest) : [];
     this.slot = slot;
     for (const p of peers) if (p.band === name) this.stations.push(p);
@@ -89,6 +92,14 @@ export const world = {
   },
 
   // Every 30 minutes (UTC) the shared band population turns over, the same for every player.
+  // real-world data arrived: rebuild the service region you're listening to
+  refreshService() {
+    const sv = serviceOf(S.radio.freq);
+    if (!sv) return;
+    const peers = this.stations.filter((s) => s.role === 'peer');
+    this.stations = [...stationsFor(sv), ...peers];
+  },
+
   refreshSlot() {
     const slot = worldSlot();
     if (slot === this.slot || !this.band || this.contest) return;
@@ -106,13 +117,13 @@ export const world = {
   rxDbm(st, fHz = st.freq) {
     const me = player();
     if (!st.path || now() - st.path.t > 15 || st.path.f !== Math.round(fHz / 1e5)) {
-      const p = propPath(st.op, me, fHz / 1e6);
+      const p = st.txHeight && fHz >= 30e6 ? losPath(st.op, me, fHz / 1e6, st.txHeight) : propPath(st.op, me, fHz / 1e6);
       st.path = { loss: p.loss, mode: p.mode, dist: p.dist, brg: bearing(me, st.op), t: now(), f: Math.round(fHz / 1e5) };
     }
     const g = rxAntGain(fHz, st.path.brg, st.path.dist, st.mode === 'FM' ? 'FM' : 'SSB');
     const q = st.qsb, t = now();
     const fade = q.depth * (0.5 + 0.5 * Math.sin(t * 2 * Math.PI / q.per + q.ph)) * (0.6 + 0.4 * Math.sin(t * 0.37 + q.ph * 2));
-    return st.powerDbm + st.antGain + g - st.path.loss - fade;
+    return st.powerDbm + st.antGain + g - st.path.loss - fade + (st.elevBoost || 0);
   },
 
   // Player's signal-to-noise at a station (dB, in that station's filter BW).
@@ -158,10 +169,22 @@ export const world = {
   findRecord(call, band, mode) { return this.records.get(`${call}|${band}|${mode === 'CW' ? 'CW' : 'PH'}`); },
 };
 
+// VHF/UHF line-of-sight with real antenna heights: radio horizon d = 4.12(√h1 + √h2) km,
+// gentle diffraction/tropo loss beyond it (~0.3 dB/km at 100 MHz).
+function losPath(a, b, fMHz, hTx, hRx = 10) {
+  const dist = Math.max(0.5, distanceKm(a, b));
+  const fspl = 32.45 + 20 * Math.log10(dist) + 20 * Math.log10(fMHz);
+  const horizon = 4.12 * (Math.sqrt(hTx) + Math.sqrt(hRx));
+  const beyond = Math.max(0, dist - horizon);
+  const loss = fspl + 6 + beyond * (0.22 + 0.0012 * fMHz) + (beyond > 0 ? 8 : 0);
+  return { loss, dist, mode: beyond > 0 ? 'diffraction/tropo' : 'LOS' };
+}
+
 function rxAntGain(fHz, brg, dist, mode) {
   const rs = rigStatus();
   if (rs.end === 'dummy') return -70;
   if (rs.end !== 'antenna' || !S.antenna.built) return -45;
+  if (!bandOf(fHz)) return fHz < 1.7e6 ? -14 : fHz < 30e6 ? -8 : -4; // general coverage: non-resonant antenna
   const g = netGain(fHz, brg, dist, mode);
   return g == null ? -45 : g;
 }
@@ -378,6 +401,7 @@ function behave(st, t) {
     case 'beacon': return behaveBeacon(st, t);
     case 'repeater': return behaveRepeater(st, t);
     case 'simplex': return behaveSimplex(st, t);
+    default: return serviceBehave(st, t);
   }
 }
 
