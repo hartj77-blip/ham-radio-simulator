@@ -12,6 +12,7 @@ import { ui as opUi, txState } from './operating.js';
 import { net } from './net.js';
 import { owns, maxPower } from './store.js';
 import { serviceOf, SERVICE_REGIONS } from './services.js';
+import { rig } from './rigs.js';
 import { RW, WX_CHANNELS, HEAR } from './realworld.js';
 import { hashStr } from './util.js';
 const regionOf = (hz) => bandOf(hz) || serviceOf(hz);
@@ -27,7 +28,10 @@ export const dialHz = () => R().freq + (R().ritOn ? R().rit : 0);
 export function setFreq(hz, opts = {}) {
   const r = R();
   const old = bandOf(r.freq), oldReg = regionOf(r.freq);
-  r.freq = Math.round(clamp(hz, 0.5e6, 470e6));
+  const [rxLo, rxHi] = rig().rx;
+  if (hz < rxLo || hz > rxHi) toast(`Your ${rig().name} receives ${(rxLo / 1e6).toFixed(1)}–${rxHi / 1e6} MHz.`, 'warn', 3500);
+  r.freq = Math.round(clamp(hz, rxLo, rxHi));
+  if (Math.abs(r.freq - 10e6) < 3000 || Math.abs(r.freq - 15e6) < 3000 || Math.abs(r.freq - 5e6) < 3000) (S.flags ||= {}).wwv = 1;
   const nb = bandOf(r.freq);
   const nr = regionOf(r.freq);
   if (!nb && nr && (!oldReg || oldReg.name !== nr.name)) {
@@ -55,6 +59,7 @@ let prevFreq = R().freq;
 function hzOld(b) { return prevFreq >= b.lo && prevFreq <= b.hi ? prevFreq : b.def; }
 
 export function setMode(m) {
+  if (!rig().modes.includes(m)) { toast(`The ${rig().name} doesn't do ${m}.`, 'warn', 3000); m = rig().modes[0]; }
   R().mode = m;
   applyMode();
   if ((m === 'USB' || m === 'LSB') && m !== SIDEBAND_FOR(R().freq)) elmer('sideband');
@@ -126,7 +131,7 @@ export function rxUpdate() {
   let nf = -132;
   if (rs.antennaOk && sys) nf = Math.max(-132, bandNoiseDbm(f, player()) + sys.effDb - sys.totalLoss);
   nf -= att;
-  nf = Math.max(nf, -132);
+  nf = Math.max(nf, -132 - (rig().quietRx || 0));
   const bw = r.mode === 'CW' ? r.filter.CW : r.mode === 'FM' ? 12000 : r.mode === 'WFM' ? 150000 : r.mode === 'AM' ? r.filter.AM / 2 : r.filter[r.mode];
   const nBW = nf + 10 * Math.log10(bw / 2400);
   rx.noiseDbm = nf;
@@ -195,7 +200,7 @@ export function rxUpdate() {
   // AGC (fast attack, slow decay)
   const target = clamp(0.28 / maxRms, 0.02, 1);
   agc = target < agc ? target : agc + (target - agc) * 0.08;
-  audio.setNoise(noiseRms * agc * (r.nr && owns('dsp') ? 0.55 : 1));
+  audio.setNoise(noiseRms * agc * (r.nr && (owns('dsp') || rig().dsp) ? 0.55 : 1));
   for (const s of sigs) {
     let rms = s.audible && open ? NREF * db2amp(s.snr) * agc : 0;
     if ((r.mode === 'FM' || r.mode === 'WFM') && (s.st.mode === 'FM' || s.st.mode === 'WFM') && s.audible) rms = open ? 0.25 : 0;
@@ -225,6 +230,7 @@ export function rxUpdate() {
   lastSmeter = sm > lastSmeter ? sm : lastSmeter + (sm - lastSmeter) * 0.25;
   rx.smeterDbm = lastSmeter;
   rx.strongest = strongest;
+  if (strongest && strongest.snr > 10 && !S.flags?.heard) { (S.flags ||= {}).heard = 1; save(); }
   updateDecoder(strongest);
 }
 
@@ -316,7 +322,7 @@ export function initRadioUI(el) {
   };
   const filterSel = h('select', { class: 'rsel', id: 'filter-sel' });
   const fillFilters = () => {
-    const opts = { CW: owns('cwfilter') ? [250, 400, 500, 800, 1200, 2400] : [500, 800, 1200, 2400], USB: [1800, 2100, 2400, 2700, 3000], LSB: [1800, 2100, 2400, 2700, 3000], AM: [3000, 6000, 9000], FM: [12000], WFM: [150000] }[r.mode];
+    const opts = { CW: owns('cwfilter') || rig().narrowCw ? [250, 400, 500, 800, 1200, 2400] : [500, 800, 1200, 2400], USB: [1800, 2100, 2400, 2700, 3000], LSB: [1800, 2100, 2400, 2700, 3000], AM: [3000, 6000, 9000], FM: [12000], WFM: [150000] }[r.mode];
     filterSel.innerHTML = '';
     for (const w of opts) filterSel.append(h('option', { value: w, selected: w === r.filter[r.mode] }, w >= 1000 ? `${w / 1000} kHz` : `${w} Hz`));
   };
@@ -346,7 +352,7 @@ export function initRadioUI(el) {
       lcd,
       h('div', { class: 'rig-right' }, knob, h('div', { class: 'row center' }, stepSel, freqIn)),
     ),
-    h('div', { class: 'rig-mid' }, h('div', { class: 'wf-wrap' }, wf)),
+    h('div', { class: 'rig-mid' }, h('div', { class: 'wf-wrap' }, wf, h('div', { class: 'no-scope-msg' }, `📻 The ${rig().name} has no spectrum scope — tune by ear, like the old days. (Watch the S-meter!)`))),
     h('div', { class: 'rig-controls' },
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'HAM BANDS'), bandBtns,
         h('div', { class: 'ctl-title', style: { marginTop: '8px' } }, 'GENERAL COVERAGE (RX)'), serviceButtons()),
@@ -354,16 +360,19 @@ export function initRadioUI(el) {
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'AUDIO'),
         slider('AF GAIN', 0, 1, 0.01, r.af, (v) => { r.af = v; }, (v) => Math.round(v * 100)),
         slider('SQL', 0, 1, 0.01, r.sql, (v) => { r.sql = v; }, (v) => Math.round(v * 100)),
-        h('div', { class: 'row' }, attBtn, ritBtn, ritSl), owns('dsp') ? h('button', { class: `rbtn ${r.nr ? 'active' : ''}`, onclick: (e) => { r.nr = !r.nr; e.target.classList.toggle('active', r.nr); save(); } }, 'NR (DSP)') : null),
+        h('div', { class: 'row' }, attBtn, ritBtn, ritSl), owns('dsp') || rig().dsp ? h('button', { class: `rbtn ${r.nr ? 'active' : ''}`, onclick: (e) => { r.nr = !r.nr; e.target.classList.toggle('active', r.nr); save(); } }, 'NR (DSP)') : null),
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'TRANSMIT'),
         slider('POWER', 5, maxPower(), 5, Math.min(r.power, maxPower()), (v) => { r.power = v; if (v <= 25) elmer('power_min'); }, (v) => `${v} W`),
         h('div', { class: 'row' }, atuBtn, tuneBtn),
         h('div', { class: 'fm-only' }, h('label', { class: 'knobrow' }, h('span', {}, 'OFFSET'), rptSel), h('label', { class: 'knobrow' }, h('span', {}, 'CTCSS'), toneSel)),
-        rotator, mtuner),
+        rotator, mtuner, h('div', { id: 'antswitch' })),
     ),
   ));
   fillFilters();
   updateDisplay();
+  if (radioListeners) return;
+  radioListeners = true;
+  bus.on('rig', () => { const r2 = R(); if (!rig().modes.includes(r2.mode)) r2.mode = rig().modes[0]; if (r2.power > maxPower()) r2.power = maxPower(); initRadioUI(panel); applyMode(); world.setFreq(r2.freq); });
   bus.on('antenna', updateDisplay);
   bus.on('shack', updateDisplay);
   bus.on('license', updateDisplay);
@@ -383,7 +392,7 @@ function serviceButtons() {
   return h('div', { class: 'btn-grid bands' }, ...P.map(([l, fn, t]) => h('button', { class: 'rbtn svc', title: t, onclick: fn }, l)));
 }
 
-let knobRot = 0;
+let knobRot = 0, radioListeners = false;
 const angle = (e, el) => { const b = el.getBoundingClientRect(); return Math.atan2(e.clientY - (b.top + b.height / 2), e.clientX - (b.left + b.width / 2)) * 180 / Math.PI; };
 
 export function tuneBy(n) {
@@ -493,6 +502,19 @@ export function updateDisplay() {
   panel.classList.toggle('mode-fm', r.mode === 'FM');
   panel.fillFilters && panel.fillFilters();
   // rotator & manual tuner widgets
+  if (rs.powered && rs.antennaOk && swr > 0 && swr < 2 && bandOf(r.freq) && !S.flags?.lowSwr) { (S.flags ||= {}).lowSwr = 1; save(); }
+  // rig capabilities & antenna switch
+  const rg = rig();
+  $$('.rbtn[data-mode]', panel).forEach((b) => { b.disabled = !rg.modes.includes(b.dataset.mode); });
+  $('#atu-btn', panel)?.toggleAttribute('hidden', !rg.atu);
+  panel.querySelector('.warnb')?.toggleAttribute('hidden', !rg.atu);
+  panel.classList.toggle('no-scope', !rg.scope);
+  const asw = $('#antswitch', panel);
+  if (asw) {
+    asw.innerHTML = '';
+    const slots = S.antSlots || [];
+    if (owns('antswitch') && slots.some(Boolean)) asw.append(h('div', { class: 'ctl-title' }, 'ANTENNA'), h('div', { class: 'row' }, ...slots.map((sl, i) => sl ? h('button', { class: `rbtn ${S.antIdx === i ? 'active' : ''}`, title: `${sl.type} ${sl.length} ft`, onclick: () => bus.emit('ant-slot', i) }, `ANT ${i + 1}`) : null)));
+  }
   const rot = $('#rotator', panel);
   if (rot) {
     rot.innerHTML = '';
@@ -617,6 +639,13 @@ export function drawFrame() {
   for (let f = Math.ceil(f0 / tick) * tick; f < f0 + span; f += tick) {
     const x = xOf(f); wfCtx.fillRect(x, specH - 12, 1, 4);
     wfCtx.fillText(f >= 30e6 ? (f / 1e6).toFixed(tick >= 100000 ? 1 : 2) : (f / 1000).toFixed(0), x - 18, specH - 14);
+  }
+  if (S.settings.lab && rs.powered) {
+    const s = rx.strongest;
+    wfCtx.font = '11px ui-monospace, monospace'; wfCtx.fillStyle = 'rgba(0,0,0,0.6)'; wfCtx.fillRect(4, 4, 560, 30);
+    wfCtx.fillStyle = '#9dffb9';
+    wfCtx.fillText(`Noise ${rx.noiseDbm.toFixed(1)} dBm  S-meter ${rx.smeterDbm.toFixed(1)} dBm${s ? `  Sig ${s.dbm.toFixed(1)} dBm  SNR ${s.snr.toFixed(1)} dB` : ''}`, 10, 16);
+    if (s) { const p = s.st.path || {}; wfCtx.fillText(`${s.st.call}  ${s.st.op.qth || ''}  ${p.dist ? Math.round(p.dist) + ' km' : ''}  brg ${p.brg != null ? Math.round(p.brg) + '°' : '?'}  path ${p.mode || '?'}  loss ${p.loss ? p.loss.toFixed(1) + ' dB' : '?'}  off ${(s.off >= 0 ? '+' : '') + Math.round(s.off)} Hz`, 10, 29); }
   }
   if (!rs.powered) { wfCtx.fillStyle = '#ffd166'; wfCtx.font = '16px sans-serif'; wfCtx.fillText('Radio is off — finish wiring in the Shack tab', W / 2 - 170, specH / 2); }
   drawMeter(rs);

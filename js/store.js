@@ -1,8 +1,11 @@
 // Hamfest: earn credits by operating, buy upgrades that change the physics of your station.
 import { S, save } from './state.js';
 import { h, toast, bus } from './util.js';
+import { RIGS, rig } from './rigs.js';
 
 export const ITEMS = [
+  ...Object.entries(RIGS).filter(([, r]) => r.price).map(([id, r]) => ({ id: `rig-${id}`, cat: 'Radios', name: r.name, price: r.price, icon: id === 'ht' ? '📟' : id === 'sdrrx' ? '📡' : '📻', desc: `${r.cls}. ${r.blurb}` })),
+  { id: 'antswitch', cat: 'Antennas', name: 'Antenna switch (3-way)', price: 80, icon: '🔀', desc: 'Keep up to three antennas up at once and switch between them from the radio.' },
   { id: 'rg213', cat: 'Feedline', name: 'RG-213 coax (100 ft)', price: 60, icon: '🧵', desc: 'Thick, low-loss coax. About half the loss of RG-8X on 10 m.' },
   { id: 'lmr400', cat: 'Feedline', name: 'LMR-400 coax (100 ft)', price: 120, icon: '🧵', desc: 'Foam low-loss cable. The VHF favourite.' },
   { id: 'mast50', cat: 'Supports', name: '50 ft telescoping mast', price: 150, icon: '🗼', desc: 'Get wires above the trees. Raises your max antenna height to 50 ft.' },
@@ -18,13 +21,15 @@ export const ITEMS = [
 ];
 
 export const money = () => S.money ?? (S.money = 100);
-export const owns = (id) => (S.owned || []).includes(id);
+export const freePlay = () => S.gameMode === 'free' || S.gameMode === 'listener';
+export const owns = (id) => freePlay() || id === 'rig-allmode' || (S.owned || []).includes(id);
 export function earn(n, why) {
   S.money = money() + n; save();
   bus.emit('money', n, why);
 }
 export const maxHeight = () => (owns('tower100') ? 100 : owns('tower70') ? 70 : owns('mast50') ? 50 : 35);
-export const maxPower = () => (owns('amp1500') ? 1500 : owns('amp500') ? 500 : 100);
+// Amplifiers need ~50–100 W of drive, so they only help with a full-power radio.
+export const maxPower = () => { const r = rig(); if (r.maxW >= 50) return owns('amp1500') ? 1500 : owns('amp500') ? 500 : r.maxW; return r.maxW; };
 export const feedOwned = (f) => f === 'RG-58' || f === 'RG-8X' || (f === 'RG-213' && owns('rg213')) || (f === 'LMR-400' && owns('lmr400'));
 export const antOwned = (t) => (t === 'yagi' ? owns('yagi') : t === 'efhw' ? owns('unun') : true);
 
@@ -43,7 +48,7 @@ function buy(it) {
   if (it.needs && !owns(it.needs)) return toast(`You need the ${ITEMS.find((x) => x.id === it.needs).name} first.`, 'warn');
   if (money() < it.price) return toast(`Not enough credits — operate more! (${money()} / ${it.price})`, 'warn');
   S.money -= it.price; (S.owned ||= []).push(it.id); save();
-  toast(`🛒 Bought: ${it.name}`, 'good');
+  toast(`🛒 Bought: ${it.name}${it.id.startsWith('rig-') ? ' — switch to it in 🎛 Station → Radio model.' : it.id === 'antswitch' ? ' — save antennas in 🎛 Station → Saved antennas.' : ''}`, 'good');
   bus.emit('money', 0); bus.emit('store'); bus.emit('antenna-rebuild');
 }
 

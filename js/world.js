@@ -890,6 +890,7 @@ function repeaterInput(msg, a) {
     }
     world.rptAttempts = 0;
     bus.emit('rpt', { opened: true });
+    (S.flags ||= {}).rpt = 1;
     bus.emit('elmer', 'repeater');
     // courtesy tone after you unkey
     rpt.later(0.6, () => bus.emit('courtesy'));

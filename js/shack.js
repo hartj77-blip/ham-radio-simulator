@@ -137,11 +137,12 @@ function render() {
   draw();
 }
 
+export function wireStation() { autoWire(); }
 function autoWire() {
   S.shack.conn = [['rig_red', 'psu_pos'], ['rig_blk', 'psu_neg'], ['rig_ant', 'swr_tx'], ['swr_ant', 'atu_in'], ['atu_out', 'arr_in'],
     ['rig_gnd', 'gb0'], ['atu_gnd', 'gb3'], ['arr_gnd', 'gb5'], ['psu_gnd', 'gb1'], ['rig_mic', 'mic_plug'], ['rig_key', 'key_plug']];
   S.shack.psuOn = true; S.shack.rigOn = true; S.shack.fuseBlown = false; S.shack.autoWired = true;
-  save(); draw(); bus.emit('shack');
+  save(); if (svg) draw(); bus.emit('shack');
 }
 
 function clickPort(id) {
