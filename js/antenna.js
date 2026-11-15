@@ -3,6 +3,12 @@ import { S, save, addXp } from './state.js';
 import { h, $, clamp, toast, bus } from './util.js';
 import { BANDS, bandOf, bandByName } from './data/bandplan.js';
 import { elmer } from './elmer.js';
+import { buildModel, segment } from './em/models.js';
+import { dayFactor, simDate } from './propagation.js';
+import { stateBy } from './data/world.js';
+const STATE_POS = () => stateBy(S.op.state) || stateBy('KS');
+import { runSolver } from './em/client.js';
+import { antOwned, feedOwned, maxHeight, owns } from './store.js';
 
 export const ANT_TYPES = {
   dipole: { label: 'Half-wave dipole (center-fed)', k: 468, harm: 'odd', Q: 13, gain: 2.15, formula: 'L(ft) ≈ 468 ÷ f(MHz)  (total length, both legs)', polar: 'H',
@@ -42,9 +48,63 @@ const RADIAL_LOSS = { 0: 40, 4: 18, 8: 10, 16: 6, 32: 3, 60: 1 };
 export const heightWl = (ant, fMHz) => (ant.height * 0.3048) / (300 / fMHz);
 
 // Feed-point impedance. Returns {R, X, f0, m, Rrad}
+// ---- Method-of-Moments impedance table for the game antenna (computed in a worker).
+let mom = { sig: null, blocks: [], busy: false, pendingSig: null };
+export const momSig = (a) => `${a.type}|${a.length}|${a.height}|${a.radials}|${a.type === 'yagi' ? 0 : a.axis}`;
+export const momReady = (a = S.antenna) => mom.sig === momSig(a);
+function gameModel(a) {
+  const L = a.length;
+  switch (a.type) {
+    case 'dipole': return buildModel('dipole', { len: L, h: a.height, axis: a.axis });
+    case 'invv': return buildModel('invv', { len: L, h: a.height, droop: 40, axis: a.axis });
+    case 'vertical': return buildModel('vertical', { len: L, radials: a.radials });
+    case 'efhw': return buildModel('efhw', { len: L, h: a.height, cp: 3, ratio: 49 });
+    case 'yagi': { const lam = 983.6 / (445 / L); return buildModel('yagi3', { drv: L, refl: L * 1.056, dir: L * 0.95, s1: 0.12 * lam, s2: 0.12 * lam, h: a.height, heading: 0 }, { cond: '½″ aluminium tube' }); }
+  }
+  return null;
+}
+export async function requestMom(a = S.antenna) {
+  if (!a.length) return;
+  const sig = momSig(a);
+  if (mom.sig === sig || mom.pendingSig === sig) return;
+  mom.pendingSig = sig;
+  const blocks = [];
+  const wireFt = a.length;
+  const bands = BANDS.filter((b) => b.name !== '2m' || wireFt < 10);
+  try {
+    for (const b of bands) {
+      if (mom.pendingSig !== sig) return; // superseded
+      const span = b.hi - b.lo, lo = b.lo - span * 0.6, hi = b.hi + span * 0.6;
+      const freqs = Array.from({ length: 25 }, (_, i) => lo + (hi - lo) * i / 24);
+      const m = segment(gameModel(a), hi);
+      // Game wire antennas use insulated #14 wire, which resonates ~3% lower than bare wire.
+      const ins = ['dipole', 'invv', 'efhw'].includes(a.type) ? 1.03 : 1;
+      const r = await runSolver({ model: m, freqs: freqs.map((f) => f * ins), fMesh: hi * ins });
+      blocks.push({ lo, hi, pts: r.sweep.map((p, i) => ({ f: freqs[i], R: p.Z[0], X: p.Z[1] })) });
+    }
+    if (mom.pendingSig !== sig) return;
+    mom = { sig, blocks, busy: false, pendingSig: null };
+    bus.emit('antenna');
+  } catch (e) { console.warn('MoM failed, using approximate model', e); mom.pendingSig = null; }
+}
+function momZ(a, fHz) {
+  if (mom.sig !== momSig(a)) return null;
+  const b = mom.blocks.find((x) => fHz >= x.lo && fHz <= x.hi);
+  if (!b) return null;
+  const p = b.pts;
+  const t = (fHz - p[0].f) / (p[1].f - p[0].f);
+  const i = Math.min(p.length - 2, Math.max(0, Math.floor(t)));
+  const u = (fHz - p[i].f) / (p[i + 1].f - p[i].f);
+  const R = Math.max(0.5, p[i].R + (p[i + 1].R - p[i].R) * u), X = p[i].X + (p[i + 1].X - p[i].X) * u;
+  const loss = a.type === 'vertical' ? (RADIAL_LOSS[a.radials] ?? 18) : 0;
+  return { R, X, Rrad: Math.max(0.5, R - loss), mom: true };
+}
+
 export function feedZ(ant, fHz) {
   const T = ANT_TYPES[ant.type];
   if (!ant.length || !T) return null;
+  const mz = momZ(ant, fHz);
+  if (mz) { const f0 = T.k / ant.length; const n = fHz / 1e6 / f0; return { ...mz, f0, m: Math.max(1, Math.round(n)) }; }
   const f = fHz / 1e6, f0 = T.k / ant.length, n = f / f0;
   const cands = T.harm === 'odd' ? [1, 3, 5, 7, 9] : T.harm === 'all' ? [1, 2, 3, 4, 5, 6, 7, 8] : [1];
   let m = 1, best = Infinity;
@@ -137,14 +197,16 @@ export function initAntennaUI(el) {
   root = el;
   analyzer.band = bandOf(S.radio.freq)?.name || '20m';
   render();
-  bus.on('antenna', renderInfo);
+  bus.on('antenna', () => { renderInfo(); requestMom(); });
+  bus.on('antenna-rebuild', render);
+  requestMom();
 }
 
 function render() {
   const a = S.antenna;
   const T = ANT_TYPES[a.type];
   root.innerHTML = '';
-  const typeSel = h('select', { id: 'ant-type', disabled: a.built }, ...Object.entries(ANT_TYPES).map(([k, t]) => h('option', { value: k, selected: k === a.type }, t.label)));
+  const typeSel = h('select', { id: 'ant-type', disabled: a.built }, ...Object.entries(ANT_TYPES).map(([k, t]) => h('option', { value: k, selected: k === a.type, disabled: !antOwned(k) }, t.label + (antOwned(k) ? '' : ' 🔒 (Hamfest)'))));
   typeSel.onchange = () => { a.type = typeSel.value; a.length = 0; save(); render(); };
 
   const cut = !!a.length;
@@ -166,7 +228,8 @@ function render() {
     toast('You soldered on a foot of wire. It works, but measure twice, cut once!', 'info');
   };
 
-  const height = h('input', { type: 'range', min: 3, max: 120, value: a.height, disabled: a.built || a.type === 'vertical' });
+  if (a.height > maxHeight()) a.height = maxHeight();
+  const height = h('input', { type: 'range', min: 3, max: maxHeight(), value: a.height, disabled: a.built || a.type === 'vertical' });
   const hLbl = h('span', {}, `${a.height} ft`);
   height.oninput = () => { a.height = +height.value; hLbl.textContent = `${a.height} ft`; save(); renderInfo(); };
 
@@ -174,11 +237,11 @@ function render() {
   axis.onchange = () => { a.axis = +axis.value; save(); renderInfo(); };
   const radials = h('select', { disabled: a.built }, ...Object.keys(RADIAL_LOSS).map((n) => h('option', { value: n, selected: +n === a.radials }, `${n} radials`)));
   radials.onchange = () => { a.radials = +radials.value; save(); renderInfo(); };
-  const heading = h('input', { type: 'range', min: 0, max: 359, value: a.heading });
+  const heading = h('input', { type: 'range', min: 0, max: 359, value: a.heading, disabled: a.built && !owns('rotator'), title: a.built && !owns('rotator') ? 'Buy a rotator to turn the beam while it is up' : '' });
   const headLbl = h('span', {}, `${a.heading}°`);
   heading.oninput = () => { a.heading = +heading.value; headLbl.textContent = `${a.heading}°`; save(); renderInfo(); bus.emit('antenna'); };
 
-  const feed = h('select', { disabled: a.built }, ...Object.entries(FEEDS).map(([k, v]) => h('option', { value: k, selected: k === a.feed }, `${k} — ${v[2]}`)));
+  const feed = h('select', { disabled: a.built }, ...Object.entries(FEEDS).map(([k, v]) => h('option', { value: k, selected: k === a.feed, disabled: !feedOwned(k) }, `${k} — ${v[2]}${feedOwned(k) ? '' : ' 🔒'}`)));
   feed.onchange = () => { a.feed = feed.value; save(); renderInfo(); };
   const feedLen = h('input', { type: 'number', min: 10, max: 400, step: 5, value: a.feedLen, disabled: a.built });
   feedLen.onchange = () => { a.feedLen = clamp(+feedLen.value || 50, 3, 500); save(); renderInfo(); };
@@ -250,8 +313,12 @@ function sweep() {
 }
 
 function drawAnalyzer() {
+  const dpr = window.devicePixelRatio || 1;
+  const cw = canvas.clientWidth || 640;
+  if (canvas.width !== Math.round(cw * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(220 * dpr); }
   const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = cw, H = 220;
   const css = getComputedStyle(document.documentElement);
   ctx.fillStyle = css.getPropertyValue('--lcd-bg') || '#0b1a12'; ctx.fillRect(0, 0, W, H);
   const { band, lo, hi, pts } = sweep();
@@ -291,58 +358,106 @@ function drawAnalyzer() {
       <div><span>Height</span><b>${heightWl(ant, mk.f / 1e6).toFixed(2)} λ</b></div>
     </div>
     <p class="advice">${advice}</p>
+    <p class="tiny ${momReady() ? 'ok' : 'muted'}">${momReady() ? `✓ Impedance from the Method-of-Moments solver (same engine as the Workbench)${['dipole', 'invv', 'efhw'].includes(ant.type) ? ', insulated #14 wire' : ''}.` : '⏳ Running the Method-of-Moments solver… (showing a quick estimate meanwhile)'}</p>
     ${analyzer.atRig ? '<p class="muted small">Measuring at the rig end: coax loss makes SWR look better than it really is at the antenna. Untick to see the true feed-point SWR.</p>' : ''}`;
 }
 
 function drawSvg() {
   const a = S.antenna;
-  const W = 520, H = 260, gy = 230;
-  const px = (ft) => gy - clamp(ft, 0, 120) * 1.7;
+  const W = 760, H = 330, gy = 285;
+  const me = (() => { const st = STATE_POS(); return st; })();
+  const df = dayFactor(me);
+  const d = simDate();
+  const solarH = ((d.getUTCHours() + d.getUTCMinutes() / 60 + me.lon / 15) % 24 + 24) % 24;
+  const mix = (c1, c2, t) => c1.map((v, i) => Math.round(v + (c2[i] - v) * t));
+  const rgb = (c) => `rgb(${c.join(',')})`;
+  const dusk = Math.max(0, 1 - Math.abs(df - 0.25) / 0.25) * (df < 0.6 ? 1 : 0);
+  const skyTop = mix([8, 12, 32], [52, 120, 200], df), skyBot = mix(mix([20, 30, 60], [150, 200, 240], df), [240, 140, 80], dusk * 0.7);
+  const px = (ft) => gy - clamp(ft, 0, 110) * 2.1;
+  const sc = 2.4; // px per ft horizontally
   const ay = px(a.type === 'vertical' ? 0 : a.height);
-  const lenPx = clamp((a.length || 30) * 2.2, 40, 440);
-  const wire = '#d9a441';
+  const lenPx = clamp((a.length || 30) * sc, 40, 600);
+  const wire = '#e0b04a';
+  // sun / moon on an arc
+  const arcT = ((solarH - 6) / 12);
+  const celX = 40 + arcT * (W - 80), celY = 40 + (1 - Math.sin(Math.PI * clamp(arcT, 0, 1))) * 150;
+  const isDay = df > 0.15;
+  const moonT = (((solarH + 6) % 24) / 12);
+  const mX = 40 + moonT * (W - 80), mY = 40 + (1 - Math.sin(Math.PI * clamp(moonT, 0, 1))) * 150;
+  let stars = '';
+  if (df < 0.5) { let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280; for (let i = 0; i < 70; i++) stars += `<circle cx="${(rnd() * W).toFixed(0)}" cy="${(rnd() * (gy - 80)).toFixed(0)}" r="${(rnd() * 1.2 + 0.3).toFixed(1)}" fill="#fff" opacity="${((1 - df * 2) * (0.4 + rnd() * 0.6)).toFixed(2)}"/>`; }
+  const cloud = (x, y, s) => `<g opacity="${(0.25 + df * 0.6).toFixed(2)}" fill="${df > 0.3 ? '#fff' : '#8090b0'}"><ellipse cx="${x}" cy="${y}" rx="${30 * s}" ry="${11 * s}"/><ellipse cx="${x + 22 * s}" cy="${y - 7 * s}" rx="${22 * s}" ry="${12 * s}"/><ellipse cx="${x - 20 * s}" cy="${y - 4 * s}" rx="${16 * s}" ry="${9 * s}"/></g>`;
+  const tree = (x, topY, k = 1) => `<g><rect x="${x - 5 * k}" y="${topY + 25 * k}" width="${10 * k}" height="${gy - topY - 25 * k}" fill="#5b3d26"/>
+    <circle cx="${x}" cy="${topY + 20 * k}" r="${30 * k}" fill="url(#leaf)"/><circle cx="${x - 18 * k}" cy="${topY + 38 * k}" r="${22 * k}" fill="url(#leaf)"/><circle cx="${x + 20 * k}" cy="${topY + 36 * k}" r="${24 * k}" fill="url(#leaf)"/></g>`;
+  const mast = (x, topY) => {
+    if (a.height > 50) { // lattice tower
+      let lat = '';
+      for (let y = gy; y > topY; y -= 14) lat += `<line x1="${x - 6}" y1="${y}" x2="${x + 6}" y2="${y - 14}" stroke="#9aa4ad" stroke-width="1"/><line x1="${x + 6}" y1="${y}" x2="${x - 6}" y2="${y - 14}" stroke="#9aa4ad" stroke-width="1"/>`;
+      return `<g><line x1="${x - 6}" y1="${gy}" x2="${x - 6}" y2="${topY}" stroke="#b9c2ca" stroke-width="2"/><line x1="${x + 6}" y1="${gy}" x2="${x + 6}" y2="${topY}" stroke="#b9c2ca" stroke-width="2"/>${lat}</g>`;
+    }
+    return `<g><line x1="${x}" y1="${gy}" x2="${x}" y2="${topY}" stroke="#aeb6bd" stroke-width="4"/><line x1="${x}" y1="${topY + 10}" x2="${x - 40}" y2="${gy}" stroke="#ddd" stroke-width="0.6" opacity="0.6"/><line x1="${x}" y1="${topY + 10}" x2="${x + 40}" y2="${gy}" stroke="#ddd" stroke-width="0.6" opacity="0.6"/></g>`;
+  };
+  const supportTall = a.height > 35;
+  const insul = (x, y) => `<rect x="${x - 4}" y="${y - 3}" width="8" height="6" rx="2" fill="#f2f2f2" stroke="#999" stroke-width="0.5"/>`;
+  const coaxTo = (x, y) => `<path d="M${x} ${y + 5} C ${x} ${(y + gy) / 2 + 20}, 220 ${gy - 30}, 128 ${gy - 52}" stroke="#151515" stroke-width="3" fill="none"/>`;
   let ant = '';
-  const label = a.length ? fmtLen(a.length) : 'uncut wire';
+  const cx = W / 2 + 60;
   if (a.type === 'dipole' || a.type === 'efhw') {
-    const x0 = W / 2 - lenPx / 2, x1 = W / 2 + lenPx / 2;
-    const feedX = a.type === 'efhw' ? x0 : W / 2;
-    ant = `<line x1="${x0 - 30}" y1="${ay}" x2="${x0 - 30}" y2="${gy}" stroke="#7b5b3a" stroke-width="7"/><circle cx="${x0 - 30}" cy="${ay - 10}" r="24" fill="#2f7d45"/>
-      <line x1="${x1 + 30}" y1="${ay}" x2="${x1 + 30}" y2="${gy}" stroke="#7b5b3a" stroke-width="7"/><circle cx="${x1 + 30}" cy="${ay - 10}" r="24" fill="#2f7d45"/>
-      <line x1="${x0 - 30}" y1="${ay}" x2="${x1 + 30}" y2="${ay}" stroke="#aaa" stroke-dasharray="2 4"/>
-      <line x1="${x0}" y1="${ay}" x2="${x1}" y2="${ay}" stroke="${wire}" stroke-width="3"/>
-      ${a.type === 'dipole' ? `<rect x="${feedX - 5}" y="${ay - 5}" width="10" height="10" fill="#555"/>` : `<rect x="${feedX - 8}" y="${ay - 2}" width="16" height="14" fill="#333" stroke="#999"/><text x="${feedX - 6}" y="${ay + 24}" class="svgt">49:1</text>`}
-      <path d="M${feedX} ${ay + 5} Q ${feedX + 20} ${(ay + gy) / 2} 40 ${gy - 20}" stroke="#222" stroke-width="3" fill="none"/>`;
+    const x0 = cx - lenPx / 2, x1 = cx + lenPx / 2;
+    const feedX = a.type === 'efhw' ? x0 : cx;
+    const sup = (x) => (supportTall ? mast(x, ay - 6) : tree(x, ay - 25));
+    const sag = Math.min(18, lenPx * 0.03);
+    ant = `${sup(x0 - 26)}${sup(x1 + 26)}
+      <path d="M${x0 - 26} ${ay} L ${x0} ${ay}" stroke="#bbb" stroke-width="0.8" stroke-dasharray="2 2"/><path d="M${x1} ${ay} L ${x1 + 26} ${ay}" stroke="#bbb" stroke-width="0.8" stroke-dasharray="2 2"/>
+      <path d="M${x0} ${ay} Q ${(x0 + feedX) / 2 || x0} ${ay + sag} ${feedX} ${ay}${a.type === 'dipole' ? ` Q ${(feedX + x1) / 2} ${ay + sag} ${x1} ${ay}` : ` Q ${(x0 + x1) / 2} ${ay + sag * 1.5} ${x1} ${ay}`}" stroke="${wire}" stroke-width="2.5" fill="none"/>
+      ${insul(x0, ay)}${insul(x1, ay)}
+      ${a.type === 'dipole' ? `<rect x="${feedX - 6}" y="${ay - 5}" width="12" height="11" rx="2" fill="#333" stroke="#888"/>` : `<rect x="${feedX - 9}" y="${ay - 3}" width="18" height="15" rx="2" fill="#2b2b2b" stroke="#aaa"/><text x="${feedX - 8}" y="${ay + 26}" class="svgt small">49:1</text>`}
+      ${coaxTo(feedX, ay)}`;
   } else if (a.type === 'invv') {
-    const half = lenPx / 2 * 0.85;
-    ant = `<line x1="${W / 2}" y1="${ay}" x2="${W / 2}" y2="${gy}" stroke="#888" stroke-width="5"/>
-      <line x1="${W / 2}" y1="${ay}" x2="${W / 2 - half}" y2="${Math.min(gy - 10, ay + half * 0.7)}" stroke="${wire}" stroke-width="3"/>
-      <line x1="${W / 2}" y1="${ay}" x2="${W / 2 + half}" y2="${Math.min(gy - 10, ay + half * 0.7)}" stroke="${wire}" stroke-width="3"/>
-      <path d="M${W / 2} ${ay + 6} L ${W / 2} ${gy - 20} Q ${W / 2} ${gy - 10} 40 ${gy - 20}" stroke="#222" stroke-width="3" fill="none"/>`;
+    const half = lenPx / 2;
+    const dx = half * Math.cos(0.7), dy = half * Math.sin(0.7);
+    ant = `${mast(cx, ay - 4)}
+      <line x1="${cx}" y1="${ay}" x2="${cx - dx}" y2="${Math.min(gy - 6, ay + dy)}" stroke="${wire}" stroke-width="2.5"/>
+      <line x1="${cx}" y1="${ay}" x2="${cx + dx}" y2="${Math.min(gy - 6, ay + dy)}" stroke="${wire}" stroke-width="2.5"/>
+      ${insul(cx - dx, Math.min(gy - 6, ay + dy))}${insul(cx + dx, Math.min(gy - 6, ay + dy))}
+      <rect x="${cx - 6}" y="${ay - 2}" width="12" height="11" rx="2" fill="#333" stroke="#888"/>${coaxTo(cx, ay)}`;
   } else if (a.type === 'vertical') {
-    const top = gy - clamp(lenPx, 30, 200);
+    const top = gy - clamp(a.length * sc * 1.2, 30, 230);
     let rad = '';
-    const n = Math.min(a.radials, 16);
-    for (let i = 0; i < n; i++) { const dx = (i - (n - 1) / 2) * (180 / Math.max(n, 1)); rad += `<line x1="${W / 2}" y1="${gy}" x2="${W / 2 + dx * 1.3}" y2="${gy + 18}" stroke="${wire}" stroke-width="1.2"/>`; }
-    ant = `<line x1="${W / 2}" y1="${gy}" x2="${W / 2}" y2="${top}" stroke="#c0c0c0" stroke-width="5"/>${rad}
-      <path d="M${W / 2} ${gy - 4} L 40 ${gy - 20}" stroke="#222" stroke-width="3" fill="none"/>`;
+    const n = Math.min(a.radials, 24);
+    for (let i = 0; i < n; i++) { const dx2 = (i - (n - 1) / 2) * (260 / Math.max(n, 1)); rad += `<line x1="${cx}" y1="${gy + 2}" x2="${cx + dx2}" y2="${gy + 26}" stroke="${wire}" stroke-width="1" opacity="0.8"/>`; }
+    ant = `${rad}<line x1="${cx}" y1="${gy}" x2="${cx}" y2="${top}" stroke="url(#alu)" stroke-width="6" stroke-linecap="round"/><rect x="${cx - 9}" y="${gy - 12}" width="18" height="12" fill="#444"/>
+      <path d="M${cx} ${gy - 6} C ${cx - 100} ${gy - 4}, 200 ${gy - 10}, 128 ${gy - 52}" stroke="#151515" stroke-width="3" fill="none"/>`;
   } else if (a.type === 'yagi') {
-    const cx = W / 2, l = clamp(lenPx * 0.5, 30, 140);
-    ant = `<line x1="${cx}" y1="${ay}" x2="${cx}" y2="${gy}" stroke="#999" stroke-width="6"/>
-      <g transform="rotate(${(a.heading % 180) - 90} ${cx} ${ay})">
-      <line x1="${cx - 60}" y1="${ay}" x2="${cx + 60}" y2="${ay}" stroke="#aaa" stroke-width="4"/>
-      <line x1="${cx - 55}" y1="${ay - l * 0.55}" x2="${cx - 55}" y2="${ay + l * 0.55}" stroke="#aaa" stroke-width="3"/>
-      <line x1="${cx}" y1="${ay - l * 0.5}" x2="${cx}" y2="${ay + l * 0.5}" stroke="${wire}" stroke-width="3"/>
-      <line x1="${cx + 55}" y1="${ay - l * 0.46}" x2="${cx + 55}" y2="${ay + l * 0.46}" stroke="#aaa" stroke-width="3"/></g>
-      <text x="${cx + 70}" y="${ay - 40}" class="svgt">→ ${a.heading}°</text>
-      <path d="M${cx} ${ay + 8} L ${cx} ${gy - 20} Q ${cx} ${gy - 10} 40 ${gy - 20}" stroke="#222" stroke-width="3" fill="none"/>`;
+    const l = clamp(a.length * sc * 0.75, 40, 200);
+    const hd = ((a.heading % 360) + 360) % 360;
+    const persp = Math.sin(hd * Math.PI / 180); // boom left/right projection
+    const bx = 70 * persp, el = (o, k) => { const x = cx + o * persp; const L = l * k * (0.35 + 0.65 * Math.abs(Math.cos(hd * Math.PI / 180))); return `<line x1="${x - L / 2}" y1="${ay - o * 0.08}" x2="${x + L / 2}" y2="${ay - o * 0.08}" stroke="${k === 1 ? wire : 'url(#alu)'}" stroke-width="3" stroke-linecap="round"/>`; };
+    ant = `${mast(cx, ay)}<line x1="${cx - bx}" y1="${ay + 5.6}" x2="${cx + bx}" y2="${ay - 5.6}" stroke="#aaa" stroke-width="4"/>
+      ${el(-70, 1.056)}${el(0, 1)}${el(70, 0.95)}
+      <text x="${cx + 90}" y="${ay - 28}" class="svgt">↗ ${hd}°</text>${coaxTo(cx, ay)}`;
   }
-  svgBox.innerHTML = `<svg viewBox="0 0 ${W} ${H + 30}" class="ant-drawing">
-    <defs><linearGradient id="sky" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1d3557"/><stop offset="1" stop-color="#457b9d"/></linearGradient></defs>
-    <rect width="${W}" height="${gy}" fill="url(#sky)"/><rect y="${gy}" width="${W}" height="${H + 30 - gy}" fill="#3a5a2c"/>
-    <rect x="8" y="${gy - 46}" width="64" height="46" fill="#8d6e63"/><polygon points="4,${gy - 46} 40,${gy - 74} 76,${gy - 46}" fill="#5d4037"/>
-    <text x="14" y="${gy - 20}" class="svgt">SHACK</text>
-    ${a.built || true ? ant : ''}
-    <text x="10" y="18" class="svgt">${ANT_TYPES[a.type].label} — ${label}${a.type !== 'vertical' ? `, ${a.height} ft up` : `, ${a.radials} radials`}</text>
-    <text x="10" y="36" class="svgt">${a.built ? '✅ installed' : '🔧 on the ground (not installed)'} · ${a.feedLen} ft ${a.feed}</text>
+  const win = (x, y) => `<rect x="${x}" y="${y}" width="16" height="14" fill="${df < 0.3 ? '#ffd27a' : '#9cc6e6'}" stroke="#4a3426"/>`;
+  svgBox.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="ant-drawing">
+    <defs>
+      <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${rgb(skyTop)}"/><stop offset="1" stop-color="${rgb(skyBot)}"/></linearGradient>
+      <linearGradient id="grass" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${rgb(mix([20, 50, 25], [70, 130, 60], df))}"/><stop offset="1" stop-color="${rgb(mix([10, 25, 12], [40, 85, 35], df))}"/></linearGradient>
+      <radialGradient id="leaf" cx="0.35" cy="0.3"><stop offset="0" stop-color="${rgb(mix([30, 70, 40], [90, 170, 80], df))}"/><stop offset="1" stop-color="${rgb(mix([10, 30, 15], [30, 90, 40], df))}"/></radialGradient>
+      <linearGradient id="alu" x1="0" x2="1"><stop offset="0" stop-color="#8a949c"/><stop offset="0.5" stop-color="#e8eef2"/><stop offset="1" stop-color="#7d868d"/></linearGradient>
+      <radialGradient id="sunG"><stop offset="0" stop-color="#fff6c0"/><stop offset="0.4" stop-color="#ffd24a"/><stop offset="1" stop-color="rgba(255,200,60,0)"/></radialGradient>
+    </defs>
+    <rect width="${W}" height="${gy}" fill="url(#sky)"/>${stars}
+    ${isDay ? `<circle cx="${celX}" cy="${celY}" r="30" fill="url(#sunG)"/>` : `<circle cx="${mX}" cy="${mY}" r="11" fill="#e9edf5"/><circle cx="${mX + 5}" cy="${mY - 3}" r="10" fill="${rgb(skyTop)}" opacity="0.85"/>`}
+    ${cloud(150, 60, 1)}${cloud(560, 40, 1.3)}${cloud(380, 85, 0.8)}
+    <path d="M0 ${gy - 40} Q 120 ${gy - 90} 260 ${gy - 45} T 520 ${gy - 55} T ${W} ${gy - 35} V ${gy} H 0 Z" fill="${rgb(mix([15, 30, 35], [80, 120, 110], df))}" opacity="0.6"/>
+    <path d="M0 ${gy - 20} Q 200 ${gy - 55} 380 ${gy - 25} T ${W} ${gy - 30} V ${gy} H 0 Z" fill="${rgb(mix([18, 40, 25], [60, 110, 60], df))}" opacity="0.85"/>
+    <rect y="${gy}" width="${W}" height="${H - gy}" fill="url(#grass)"/>
+    <g><rect x="22" y="${gy - 62}" width="110" height="62" fill="#a07856"/><polygon points="14,${gy - 62} 77,${gy - 104} 140,${gy - 62}" fill="#5d3b2c"/>
+      <rect x="104" y="${gy - 100}" width="12" height="26" fill="#6d4a36"/>${win(36, gy - 48)}${win(96, gy - 48)}<rect x="62" y="${gy - 34}" width="20" height="34" fill="#4a3426"/>
+      <text x="40" y="${gy - 68}" class="svgt small">SHACK</text><rect x="122" y="${gy - 56}" width="8" height="10" fill="#777"/></g>
+    ${ant}
+    <rect x="0" y="0" width="${W}" height="46" fill="rgba(0,0,0,0.35)"/>
+    <text x="12" y="19" class="svgt">${ANT_TYPES[a.type].label} — ${a.length ? fmtLen(a.length) : 'uncut wire'}${a.type !== 'vertical' ? ` · ${a.height} ft up${a.height > 35 ? (a.height > 50 ? ' (tower)' : ' (mast)') : ' (trees)'}` : ` · ${a.radials} radials`}</text>
+    <text x="12" y="37" class="svgt">${a.built ? '✅ installed' : '🔧 on the ground (not installed)'} · ${a.feedLen} ft ${a.feed} · local time ${Math.floor(solarH)}:${String(Math.floor((solarH % 1) * 60)).padStart(2, '0')}</text>
   </svg>`;
 }

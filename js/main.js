@@ -5,22 +5,25 @@ import { STATES, stateBy } from './data/world.js';
 import { audio } from './audio.js';
 import { world } from './world.js';
 import { SUN, bandConditions, simDate, grid } from './propagation.js';
-import { initShackUI, rigStatus } from './shack.js';
+import { initShackUI, rigStatus, shackTick } from './shack.js';
 import { initAntennaUI } from './antenna.js';
 import { initRadioUI, rxUpdate, drawFrame, tuneBy, setFreq, setMode, updateDisplay } from './radio.js';
-import { initOperatingUI } from './operating.js';
+import { initOperatingUI, txState } from './operating.js';
 import { initContestUI, contestTick } from './contest.js';
 import { initExamUI, sandboxLicense } from './exam.js';
 import { initLogbookUI } from './logbook.js';
 import { initNetUI } from './net.js';
+import { initWorkbenchUI } from './workbench.js';
+import { initStoreUI, money, earn } from './store.js';
+import { initMapUI, drawMap } from './map.js';
 import { elmer } from './elmer.js';
 
-const TABS = [['shack', '🔌 Shack'], ['antenna', '📡 Antenna'], ['radio', '📻 Radio'], ['contest', '🏆 Contests'], ['license', '🪪 License'], ['logbook', '📒 Logbook'], ['help', '❔ Help']];
+const TABS = [['shack', '🔌 Shack'], ['antenna', '📡 Antenna'], ['workbench', '🛠 Workbench'], ['radio', '📻 Radio'], ['contest', '🏆 Contests'], ['license', '🪪 License'], ['logbook', '📒 Logbook'], ['store', '🛒 Hamfest'], ['help', '❔ Help']];
 
 function header() {
   const st = stateBy(S.op.state);
   $('#station-id').innerHTML = `${S.call ? `<span class="callsign">${S.call}</span>` : '<span class="muted">SWL</span>'} <span class="badge lic-${S.license || 'none'}">${licName()}</span> <span class="muted small">${st ? st.name : ''} · ${st ? grid(st.lat, st.lon).slice(0, 4) : ''}</span>`;
-  $('#xp').innerHTML = `Lv ${level()} · ${S.xp} XP`;
+  $('#xp').innerHTML = `<span class="wallet-mini">₵ ${money()}</span> Lv ${level()} · ${S.xp} XP`;
 }
 
 function solarBanner() {
@@ -110,18 +113,29 @@ function init() {
   for (const [id, label] of TABS) nav.append(h('button', { 'data-tab': id, onclick: () => showTab(id) }, label));
   initShackUI($('#tab-shack'));
   initAntennaUI($('#tab-antenna'));
+  initWorkbenchUI($('#tab-workbench'));
   initRadioUI($('#radio-panel'));
+  initMapUI($('#map-panel'));
   initOperatingUI($('#operating'));
   initNetUI($('#net-panel'));
   initContestUI($('#tab-contest'));
   initExamUI($('#tab-license'));
   initLogbookUI($('#tab-logbook'));
+  initStoreUI($('#tab-store'));
   helpTab($('#tab-help'));
   header(); solarBanner(); clock();
   world.setFreq(S.radio.freq);
   showTab((location.hash || '').slice(1) || (S.started ? 'radio' : 'shack'));
 
   bus.on('xp', header);
+  bus.on('money', (n, why) => { header(); if (n > 0 && why) toast(`+₵${n} (${why})`, 'good', 2500); });
+  bus.on('logged', (q) => {
+    if (q.status !== 'confirmed' || q.contest) return;
+    const prev = S.log.slice(0, -1).filter((x) => x.status === 'confirmed');
+    const newDx = q.truth?.country && !prev.some((x) => x.truth?.country === q.truth.country);
+    const newSt = q.truth?.state && !prev.some((x) => x.truth?.state === q.truth.state);
+    earn(5 + (newDx ? 15 : 0) + (newSt ? 5 : 0), 'QSO');
+  });
   bus.on('license', () => { header(); });
   bus.on('goto', showTab);
   bus.on('elmer', (id) => elmer(id));
@@ -146,7 +160,8 @@ function init() {
   setInterval(() => { clock(); contestTick(); $('#operating')?.classList.toggle('is-cw', S.radio.mode === 'CW'); }, 1000);
   setInterval(solarBanner, 60000);
   let last = 0;
-  const loop = (t) => { if (t - last > 60) { last = t; drawFrame(); } requestAnimationFrame(loop); };
+  let lastMap = 0;
+  const loop = (t) => { if (t - last > 60) { last = t; drawFrame(); } if (t - lastMap > 250) { lastMap = t; drawMap(); shackTick(txState); } requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
 
   if (!S.started) onboarding();

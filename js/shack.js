@@ -204,6 +204,19 @@ function draw() {
   svg.append(s('text', { x: 795, y: 300, class: 'svgt small' }, 'TUNE    LOAD'));
   svg.append(s('circle', { cx: 808, cy: 320, r: 14, class: 'knob' })); svg.append(s('circle', { cx: 870, cy: 320, r: 14, class: 'knob' }));
   svg.append(s('path', { d: 'M620 330 A 45 45 0 0 1 710 330', class: 'meter-arc' }));
+  svg.append(s('line', { id: 'swr-needle', x1: 665, y1: 335, x2: 628, y2: 305, stroke: '#ff5252', 'stroke-width': 2 }));
+  svg.append(s('text', { id: 'swr-read', x: 640, y: 345, class: 'svgt small' }, ''));
+  // window on the wall + ON AIR sign
+  svg.append(s('rect', { x: 620, y: 40, width: 150, height: 110, rx: 4, fill: '#0f2236', stroke: '#6b5a48', 'stroke-width': 6 }));
+  svg.append(s('line', { x1: 695, y1: 40, x2: 695, y2: 150, stroke: '#6b5a48', 'stroke-width': 4 }));
+  svg.append(s('path', { d: 'M625 140 Q 660 110 700 128 T 765 118 L 765 145 L 625 145 Z', fill: '#1d3a28' }));
+  svg.append(s('line', { x1: 640, y1: 132, x2: 750, y2: 70, stroke: '#d9a441', 'stroke-width': 1.2 }));
+  const oa = s('g', { id: 'onair', class: 'onair' });
+  oa.append(s('rect', { x: 380, y: 40, width: 120, height: 34, rx: 6 }));
+  oa.append(s('text', { x: 400, y: 63 }, 'ON THE AIR'));
+  svg.append(oa);
+  // desk lamp glow
+  svg.append(s('circle', { cx: 160, cy: 230, r: 60, fill: 'rgba(255,210,120,0.06)' }));
   // fuse holder on red lead
   svg.append(s('rect', { x: 255, y: 440, width: 22, height: 10, rx: 3, class: S.shack.fuseBlown ? 'fuse blown' : 'fuse' }));
   svg.append(s('text', { x: 252, y: 465, class: 'svgt small' }, S.shack.fuseBlown ? 'FUSE ✗' : 'fuse'));
@@ -254,4 +267,17 @@ function renderStatus() {
       S.shack.fuseBlown = false; save(); toast('Fuse replaced with the same 25 A rating. 👍', 'good'); draw();
     } }, '🔧 Replace fuse') : null,
   ].filter(Boolean));
+}
+
+// Live meters / ON AIR light (called from the main loop).
+export function shackTick(tx, effSwr) {
+  const oa = document.getElementById('onair');
+  if (!oa || !oa.isConnected) return;
+  oa.classList.toggle('on', !!tx.active);
+  const n = document.getElementById('swr-needle'), rd = document.getElementById('swr-read');
+  const frac = tx.active ? Math.min(1, Math.sqrt((tx.keyed ? tx.watts : 0) / 100)) : 0;
+  const a = Math.PI * (1 - frac);
+  n.setAttribute('x2', (665 + Math.cos(a) * 40).toFixed(1));
+  n.setAttribute('y2', (335 - Math.sin(a) * 40).toFixed(1));
+  rd.textContent = tx.active ? `${Math.round(tx.watts)}W  SWR ${tx.swr > 50 ? '∞' : tx.swr.toFixed(1)}` : '';
 }
