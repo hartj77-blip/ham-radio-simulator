@@ -412,3 +412,31 @@ body[data-lcd="blue"] .ht-lcd { background: radial-gradient(ellipse at 50% 30%, 
   #toasts .toast:nth-last-child(n+3) { display: none; }
   .elmer-ic { font-size: 1.2rem; }
 }
+
+/* ===================== Elmer mentor panel ===================== */
+#elmer { position: fixed; left: 14px; bottom: 14px; z-index: 95; }
+body.ht-view #elmer { display: none; }
+body.tutorial-on #guide-bar { display: none; }
+.elmer-card { width: 340px; max-height: 70vh; display: flex; flex-direction: column; background: linear-gradient(180deg, #2a2418, #1f1b14); border: 1px solid #6b4b1c; border-radius: 14px; box-shadow: 0 12px 34px #000b; padding: 10px 12px; font-size: 0.86rem; }
+.elmer-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.elmer-av { font-size: 1.5rem; }
+.elmer-head .link { font-size: 1rem; }
+.elmer-step { background: rgba(0,0,0,0.25); border-radius: 10px; padding: 8px; margin-bottom: 6px; }
+.e-prog { height: 4px; background: #121921; border-radius: 2px; margin: 4px 0 6px; overflow: hidden; } .e-prog span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--ok)); }
+.e-title { font-weight: 800; font-size: 0.98rem; color: #ffd9a0; margin-bottom: 3px; }
+.e-text { margin-bottom: 6px; line-height: 1.35; }
+.elmer-feed { overflow-y: auto; max-height: 30vh; display: flex; flex-direction: column; gap: 5px; margin-bottom: 6px; }
+.ef { padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,0.05); line-height: 1.35; }
+.ef-good { background: rgba(60,160,90,0.22); border-left: 3px solid var(--ok); animation: efpop 0.4s ease-out; }
+.ef-warn { background: rgba(200,120,40,0.2); border-left: 3px solid var(--warn); }
+.ef-you { background: rgba(79,195,247,0.12); align-self: flex-end; }
+.ef-answer { border-left: 3px solid var(--accent); }
+@keyframes efpop { from { transform: scale(0.96); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.elmer-askrow { flex-wrap: nowrap; } .elmer-ask { flex: 1; min-width: 0; }
+.elmer-chips { margin-top: 6px; gap: 4px; } .elmer-chips .ht-chip { font-size: 0.74rem; padding: 3px 8px; }
+.elmer-fab { position: relative; width: 56px; height: 56px; border-radius: 50%; font-size: 1.8rem; background: radial-gradient(circle at 35% 30%, #5a4426, #2a1f12); border: 2px solid #c08a3c; cursor: pointer; box-shadow: 0 6px 18px #000a; }
+.elmer-badge { position: absolute; top: -4px; right: -4px; background: var(--ok); color: #000; border-radius: 50%; width: 20px; height: 20px; font-size: 0.75rem; font-weight: 800; }
+.pulse-hl circle, .pulse-hl rect { stroke: #ffd166 !important; stroke-width: 5 !important; }
+@media (max-width: 760px) { .elmer-card { width: calc(100vw - 28px); } }
+#elmer { left: auto; right: 14px; }
+#toasts { top: 64px; bottom: auto; }

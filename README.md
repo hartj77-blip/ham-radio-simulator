@@ -67,6 +67,15 @@ An in-game **Elmer** (mentor) steps in when you hit a situation the exams cover,
 - **Add-ons:** a 3-way antenna switch with saved antennas (ANT 1/2/3 on the radio), plus all the earlier Hamfest gear.
 - **Pro tools:** Lab readouts on the scope (signal and noise dBm, SNR, path mode, loss, distance, bearing and tuning offset), faceplate themes (graphite, black, silver, retro wood), display colours (green, amber, blue, white), and Radio tab panels you can show or hide.
 
+## 🧓 Elmer, your mentor
+In Career mode Elmer (ham slang for a mentor) walks you through everything, one small step at a time. There are 30 steps in 5 chapters: wire the shack, build an antenna, listen, get licensed, and make your first contact.
+
+- **Each step** says exactly what to do. **▶ Show me** jumps to the right tab and highlights the exact connector or button, **❓ Why?** explains the reason, and **🛠 How?** gives detailed instructions.
+- **He notices when you get it right**, detecting each step automatically and praising you with the reason it matters.
+- **He catches mistakes kindly:** reversed polarity, a wrong connector, a blown fuse, a blocked transmission (with the reason), or a wire cut to the wrong length.
+- **Ask Elmer anything** ("why do I need a ground?", "how do I use a repeater?"). A built-in knowledge base of 30+ topics answers *why* or *how* depending on your question, with Show me links.
+- **One voice:** the exam-topic lessons appear in his panel instead of pop-ups. You can minimize him, turn step-by-step off, restart the tutorial or hide him (⚙).
+
 ## 📟 Handheld mode (phones)
 On a phone the app opens to a **handheld radio**, and on desktop you can switch with the 📟 Handheld button.
 
