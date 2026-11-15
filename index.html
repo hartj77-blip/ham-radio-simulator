@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ham Shack Simulator</title>
+  <meta name="description" content="A realistic in-browser amateur (ham) radio simulator: wire your shack, build antennas, tune the bands, earn your license and compete in contests.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📻</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-tab="radio">
+  <header id="topbar">
+    <div class="brand">📻 <b>Ham Shack</b> Simulator</div>
+    <div id="station-id"></div>
+    <div id="solar"></div>
+    <div id="clock"></div>
+    <div id="xp"></div>
+  </header>
+  <nav id="tabs"></nav>
+  <main>
+    <section id="tab-shack" class="tab" hidden></section>
+    <section id="tab-antenna" class="tab" hidden></section>
+    <section id="tab-radio" class="tab" hidden>
+      <div id="radio-panel"></div>
+      <div id="operating"></div>
+      <div id="net-panel"></div>
+    </section>
+    <section id="tab-contest" class="tab" hidden></section>
+    <section id="tab-license" class="tab" hidden></section>
+    <section id="tab-logbook" class="tab" hidden></section>
+    <section id="tab-help" class="tab" hidden></section>
+  </main>
+  <div id="toasts"></div>
+  <div id="modal" hidden></div>
+  <noscript>This game needs JavaScript.</noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
