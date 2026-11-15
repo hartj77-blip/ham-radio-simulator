@@ -11,6 +11,10 @@ import { elmer } from './elmer.js';
 import { ui as opUi, txState } from './operating.js';
 import { net } from './net.js';
 import { owns, maxPower } from './store.js';
+import { serviceOf, SERVICE_REGIONS } from './services.js';
+import { RW, WX_CHANNELS, HEAR } from './realworld.js';
+import { hashStr } from './util.js';
+const regionOf = (hz) => bandOf(hz) || serviceOf(hz);
 
 const R = () => S.radio;
 let wf, wfCtx, spec, meterCv, lcd, panel;
@@ -22,9 +26,17 @@ export const dialHz = () => R().freq + (R().ritOn ? R().rit : 0);
 
 export function setFreq(hz, opts = {}) {
   const r = R();
-  const old = bandOf(r.freq);
-  r.freq = Math.round(clamp(hz, 1.7e6, 148e6));
+  const old = bandOf(r.freq), oldReg = regionOf(r.freq);
+  r.freq = Math.round(clamp(hz, 0.5e6, 470e6));
   const nb = bandOf(r.freq);
+  const nr = regionOf(r.freq);
+  if (!nb && nr && (!oldReg || oldReg.name !== nr.name)) {
+    // entering a non-ham service region: pick its natural mode and tuning step
+    if (oldReg) r.lastByBand[oldReg.name] = { f: prevFreq, mode: r.mode };
+    if (opts.mode) r.mode = opts.mode; else if (!opts.keepMode) r.mode = nr.mode;
+    r.step = nr.step;
+    applyMode();
+  }
   if (nb && (!old || old.name !== nb.name)) {
     if (old) r.lastByBand[old.name] = { f: hzOld(old), mode: r.mode };
     if (!opts.keepMode) {
@@ -59,12 +71,12 @@ bus.on('station-tx', (st) => {
   if (!audio.ready || !rigStatus().powered) return;
   if (st.band !== world.band) return;
   const off = st.freq - dialHz();
-  const span = R().mode === 'FM' || st.mode === 'FM' ? 15000 : 6000;
+  const span = R().mode === 'WFM' || st.mode === 'WFM' ? 150000 : R().mode === 'FM' || st.mode === 'FM' ? 15000 : 6000;
   if (Math.abs(off) > span) return;
   const tx = st.tx;
-  if (tx.kind === 'peervoice') return;
+  if (tx.kind === 'peervoice' || tx.kind === 'stream') return;
   const start = audio.t + Math.max(0, tx.start - now());
-  if (tx.kind === 'cw' || tx.kind === 'cwtone') audio.cw(st.id, tx.sch.segs, start, toneFor(st));
+  if (tx.kind === 'cw' || tx.kind === 'cwtone' || tx.kind === 'amtone' || tx.kind === 'fmtone') audio.cw(st.id, tx.sch.segs, start, Math.max(20, toneFor(st)));
   else audio.babble(st.id, start, tx.end - tx.start, 700);
   tx.heard = false;
 });
@@ -72,6 +84,11 @@ bus.on('station-tx', (st) => {
 function toneFor(st) {
   const r = R(), d = dialHz();
   if (st.tx && st.tx.kind === 'cwtone') return r.mode === 'FM' ? 1000 : -1;
+  if (st.tx && st.tx.kind === 'fmtone') return (r.mode === 'FM' || r.mode === 'WFM') && Math.abs(st.freq - d) < 7000 ? st.tx.tone : -1;
+  if (st.tx && st.tx.kind === 'amtone') {
+    const tn = st.tx.tone, off = st.freq - d;
+    return r.mode === 'AM' ? (Math.abs(off) < 4000 ? tn : -1) : r.mode === 'USB' ? tn + off : r.mode === 'LSB' ? tn - off : r.mode === 'CW' ? r.pitch + off : -1;
+  }
   switch (r.mode) {
     case 'CW': return r.pitch + (st.freq - d);
     case 'USB': return st.freq - d;
@@ -96,6 +113,7 @@ export function rxUpdate() {
   const transmitting = txState.active;
   if (!rs.powered || transmitting) {
     audio.setNoise(0);
+    audio.muteStreams();
     for (const [id] of audio.voices) audio.setVoice(id, { rms: 0 });
     if (net.peerGains) for (const p of net.peerGains()) p.gain.gain.setTargetAtTime(0, audio.t, 0.02);
     rx.smeterDbm = -127;
@@ -109,7 +127,7 @@ export function rxUpdate() {
   if (rs.antennaOk && sys) nf = Math.max(-132, bandNoiseDbm(f, player()) + sys.effDb - sys.totalLoss);
   nf -= att;
   nf = Math.max(nf, -132);
-  const bw = r.mode === 'CW' ? r.filter.CW : r.mode === 'FM' ? 12000 : r.mode === 'AM' ? r.filter.AM / 2 : r.filter[r.mode];
+  const bw = r.mode === 'CW' ? r.filter.CW : r.mode === 'FM' ? 12000 : r.mode === 'WFM' ? 150000 : r.mode === 'AM' ? r.filter.AM / 2 : r.filter[r.mode];
   const nBW = nf + 10 * Math.log10(bw / 2400);
   rx.noiseDbm = nf;
   const NREF = 0.1;
@@ -121,13 +139,25 @@ export function rxUpdate() {
     const dbm = world.rxDbm(st) - att;
     const off = st.freq - d;
     let tone = toneFor(st), audible = false, intelligible = false;
-    if (st.mode === 'CW' || st.tx.kind === 'cwtone') {
+    const ao = Math.abs(off), fmRx = r.mode === 'FM' || r.mode === 'WFM';
+    if (st.tx.kind === 'stream') {
+      // real broadcast audio: AM needs AM (or SSB, tuned close); WFM needs a wide FM receiver
+      if (st.mode === 'AM') { audible = !fmRx && ao < (r.mode === 'AM' ? r.filter.AM / 2 + 800 : 3200); intelligible = r.mode === 'AM' ? ao < 2500 : ao < 150; }
+      else { audible = (r.mode === 'WFM' && ao < 110000) || (r.mode === 'FM' && ao < 60000); intelligible = r.mode === 'WFM' && ao < 70000; }
+    } else if (st.tx.kind === 'amtone' || st.tx.kind === 'fmtone') {
+      audible = tone > 0 && (r.mode === 'CW' ? inPassband(tone) : tone < 3500);
+      audio.setVoice(st.id, { tone });
+    } else if (st.mode === 'AM') {
+      audible = !fmRx && ao < 6000;
+      intelligible = (r.mode === 'AM' && ao < 2500) || ((r.mode === 'USB' || r.mode === 'LSB') && ao < 300);
+      audio.setVoice(st.id, { tone: 700 + off / 8 });
+    } else if (st.mode === 'CW' || st.tx.kind === 'cwtone') {
       audible = tone > 0 && inPassband(tone);
       if (st.tx.kind === 'cwtone') audible = r.mode === 'FM' && Math.abs(off) < 7000;
       audio.setVoice(st.id, { tone });
     } else if (st.mode === 'FM') {
-      audible = r.mode === 'FM' ? Math.abs(off) < 9000 : Math.abs(off) < 8000;
-      intelligible = r.mode === 'FM' && Math.abs(off) < 4000;
+      audible = fmRx ? ao < 9000 : ao < 8000;
+      intelligible = fmRx && ao < 4000;
       audio.setVoice(st.id, { tone: 700 + off / 10 });
     } else {
       // SSB voice: audio is shifted by the tuning error; wrong sideband = inverted garble
@@ -154,12 +184,12 @@ export function rxUpdate() {
   // FM squelch & limiter quieting
   let noiseRms = NREF;
   let open = true;
-  if (r.mode === 'FM') {
+  if (r.mode === 'FM' || r.mode === 'WFM') {
     const thr = -6 + r.sql * 26;
     const best = strongest ? strongest.snr : -50;
     const peerBest = Math.max(-50, ...peerSigs.filter((p) => p.audible).map((p) => p.snr));
     const b = Math.max(best, peerBest);
-    open = r.sql < 0.02 || b > thr;
+    open = r.mode === 'WFM' || r.sql < 0.02 || b > thr;
     noiseRms = open ? 0.22 * clamp(db2amp(-Math.max(0, b) * 0.9), 0.01, 1) : 0;
   }
   // AGC (fast attack, slow decay)
@@ -168,7 +198,15 @@ export function rxUpdate() {
   audio.setNoise(noiseRms * agc * (r.nr && owns('dsp') ? 0.55 : 1));
   for (const s of sigs) {
     let rms = s.audible && open ? NREF * db2amp(s.snr) * agc : 0;
-    if (r.mode === 'FM' && s.st.mode === 'FM') rms = open ? 0.25 : 0;
+    if ((r.mode === 'FM' || r.mode === 'WFM') && (s.st.mode === 'FM' || s.st.mode === 'WFM') && s.audible) rms = open ? 0.25 : 0;
+    if (s.st.tx.kind === 'stream') {
+      const lvl = s.audible && open ? clamp((s.intelligible ? 1 : 0.35) * (s.st.mode === 'WFM' ? clamp((s.snr - 3) / 12, 0, 1) * 1.2 : NREF * db2amp(s.snr) * agc / 0.12), 0, 1.5) : 0;
+      if (lvl > 0.01 && !s.st.dead) { const rec = audio.stream(s.st.id, s.st.url); if (rec.dead) s.st.dead = true; }
+      audio.streamLevel(s.st.id, lvl, r.af);
+      if (lvl > 0.01 && S.settings.subtitles && s.st.lastSub !== s.st.id) { s.st.lastSub = s.st.id; opUi.transcript(s.st.op.call, `📻 ${s.st.op.name} — live${s.st.dead ? ' (stream unavailable)' : ''}`, 'rx'); }
+      s.st.rxSnrRecent = s.snr;
+      continue;
+    }
     if (s.intelligible && s.snr > -1 && s.st.tx.kind === 'voice') {
       rms *= 0.06; // the TTS voice carries the intelligible audio
       speakIfNeeded(s, open ? (r.mode === 'FM' ? 0.9 : clamp(db2amp(s.snr) * agc * 0.35, 0.05, 1)) : 0);
@@ -178,8 +216,10 @@ export function rxUpdate() {
   }
   for (const p of peerSigs) p.node.gain.setTargetAtTime(p.audible && open ? clamp(db2amp(p.snr) * agc * 0.3, 0, 1.4) : 0, audio.t, 0.05);
   // QRN static crashes on the low bands
-  const qrn = f < 2.5 ? 0.08 : f < 5 ? 0.05 : f < 8 ? 0.025 : f < 15 ? 0.006 : 0;
-  if (rs.antennaOk && r.mode !== 'FM' && chance(qrn)) audio.crash(NREF * agc * rand(2, 8));
+  // (real thunderstorms nearby — from the live weather — make it much worse)
+  const qrn = (f < 2.5 ? 0.08 : f < 5 ? 0.05 : f < 8 ? 0.025 : f < 15 ? 0.006 : 0) * (RW.wx?.storm ? 4 : 1);
+  if (rs.antennaOk && r.mode !== 'FM' && r.mode !== 'WFM' && chance(qrn)) audio.crash(NREF * agc * rand(2, 8));
+  audio.streamGC();
   // S-meter
   const sm = Math.max(nf, strongDbm);
   lastSmeter = sm > lastSmeter ? sm : lastSmeter + (sm - lastSmeter) * 0.25;
@@ -262,7 +302,7 @@ export function initRadioUI(el) {
   knob.addEventListener('wheel', (e) => { e.preventDefault(); const n = -Math.sign(e.deltaY); tuneBy(n); knobRot += n * 12; knob.style.transform = `rotate(${knobRot}deg)`; }, { passive: false });
 
   const bandBtns = h('div', { class: 'btn-grid bands' }, ...BANDS.map((b) => h('button', { class: 'rbtn', 'data-band': b.name, onclick: () => { prevFreq = R().freq; const last = R().lastByBand[b.name]; setFreq(last ? last.f : b.def, { fromBand: true }); } }, b.name)));
-  const modeBtns = h('div', { class: 'btn-grid modes' }, ...['LSB', 'USB', 'CW', 'AM', 'FM'].map((m) => h('button', { class: 'rbtn', 'data-mode': m, onclick: () => setMode(m) }, m)));
+  const modeBtns = h('div', { class: 'btn-grid modes' }, ...['LSB', 'USB', 'CW', 'AM', 'FM', 'WFM'].map((m) => h('button', { class: 'rbtn', 'data-mode': m, onclick: () => setMode(m) }, m)));
   const stepSel = h('select', { class: 'rsel', title: 'Tuning step' }, ...[10, 50, 100, 500, 1000, 5000, 10000].map((s) => h('option', { value: s, selected: s === r.step }, s >= 1000 ? `${s / 1000} kHz` : `${s} Hz`)));
   stepSel.onchange = () => { r.step = +stepSel.value; save(); };
   const freqIn = h('input', { class: 'rsel', placeholder: 'kHz ↵', size: 9, title: 'Type a frequency in kHz and press Enter' });
@@ -276,7 +316,7 @@ export function initRadioUI(el) {
   };
   const filterSel = h('select', { class: 'rsel', id: 'filter-sel' });
   const fillFilters = () => {
-    const opts = { CW: owns('cwfilter') ? [250, 400, 500, 800, 1200, 2400] : [500, 800, 1200, 2400], USB: [1800, 2100, 2400, 2700, 3000], LSB: [1800, 2100, 2400, 2700, 3000], AM: [3000, 6000, 9000], FM: [12000] }[r.mode];
+    const opts = { CW: owns('cwfilter') ? [250, 400, 500, 800, 1200, 2400] : [500, 800, 1200, 2400], USB: [1800, 2100, 2400, 2700, 3000], LSB: [1800, 2100, 2400, 2700, 3000], AM: [3000, 6000, 9000], FM: [12000], WFM: [150000] }[r.mode];
     filterSel.innerHTML = '';
     for (const w of opts) filterSel.append(h('option', { value: w, selected: w === r.filter[r.mode] }, w >= 1000 ? `${w / 1000} kHz` : `${w} Hz`));
   };
@@ -308,7 +348,8 @@ export function initRadioUI(el) {
     ),
     h('div', { class: 'rig-mid' }, h('div', { class: 'wf-wrap' }, wf)),
     h('div', { class: 'rig-controls' },
-      h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'BAND'), bandBtns),
+      h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'HAM BANDS'), bandBtns,
+        h('div', { class: 'ctl-title', style: { marginTop: '8px' } }, 'GENERAL COVERAGE (RX)'), serviceButtons()),
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'MODE'), modeBtns, h('label', { class: 'knobrow' }, h('span', {}, 'FILTER'), filterSel)),
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'AUDIO'),
         slider('AF GAIN', 0, 1, 0.01, r.af, (v) => { r.af = v; }, (v) => Math.round(v * 100)),
@@ -327,13 +368,29 @@ export function initRadioUI(el) {
   bus.on('shack', updateDisplay);
   bus.on('license', updateDisplay);
 }
+// One-touch presets for the non-ham services (receive only).
+function serviceButtons() {
+  const go = (f, m) => { prevFreq = R().freq; setFreq(f, { mode: m }); setMode(m); };
+  const lastIn = (name, def) => R().lastByBand[name]?.f || def;
+  const P = [
+    ['AM BC', () => go(lastIn('MW', 1000e3), 'AM'), 'AM broadcast 530–1700 kHz (real stations)'],
+    ['WWV', () => go(10e6, 'AM'), 'WWV/WWVH time signals on 10 MHz'],
+    ['FM BC', () => go(lastIn('FM', 98.1e6), 'WFM'), 'FM broadcast 88–108 MHz (real stations)'],
+    ['AIR', () => { const ap = RW.airports[0]; const tw = ap?.freqs.find((x) => /TWR/i.test(x.type)) || ap?.freqs[0]; go(tw ? Math.round(tw.mhz * 1e6) : 121.5e6, 'AM'); }, 'Airband: nearest airport tower'],
+    ['NOAA WX', () => go(WX_CHANNELS[hashStr(RW.nws?.office || 'NWS') % 7], 'FM'), 'NOAA Weather Radio'],
+    ['EMS', () => go(HEAR, 'FM'), 'HEAR ambulance ↔ hospital (155.340)'],
+  ];
+  return h('div', { class: 'btn-grid bands' }, ...P.map(([l, fn, t]) => h('button', { class: 'rbtn svc', title: t, onclick: fn }, l)));
+}
+
 let knobRot = 0;
 const angle = (e, el) => { const b = el.getBoundingClientRect(); return Math.atan2(e.clientY - (b.top + b.height / 2), e.clientX - (b.left + b.width / 2)) * 180 / Math.PI; };
 
 export function tuneBy(n) {
   const r = R();
   prevFreq = r.freq;
-  const step = r.mode === 'FM' && r.step < 5000 ? 5000 : r.step;
+  const sv = serviceOf(r.freq);
+  const step = sv ? Math.max(r.step, sv.mode === 'WFM' ? 100000 : sv.name === 'AIR' ? 5000 : 1000) : r.mode === 'FM' && r.step < 5000 ? 5000 : r.step;
   setFreq(Math.round((r.freq + n * step) / step) * step);
   if (!S.tips.includes('first_listen')) elmer('first_listen');
 }
@@ -344,18 +401,18 @@ function onWfClick(e) {
   const x = e.offsetX / wf.clientWidth;
   let f = r.freq - span / 2 + x * span;
   // snap to a nearby signal
-  let best = null, bd = r.mode === 'CW' ? 400 : 1500;
+  let best = null, bd = r.mode === 'CW' ? 400 : r.mode === 'WFM' ? 120000 : serviceOf(f) ? 6000 : 1500;
   for (const st of world.stations) {
     const d = Math.abs(st.freq - f);
     if (d < bd && st.role !== 'caller') { bd = d; best = st; }
   }
-  if (best && (r.mode === 'CW') === (best.mode === 'CW')) f = best.freq;
+  if (best && ((r.mode === 'CW') === (best.mode === 'CW') || serviceOf(f))) f = best.freq;
   else f = Math.round(f / (r.mode === 'CW' ? 10 : r.mode === 'FM' ? 5000 : 100)) * (r.mode === 'CW' ? 10 : r.mode === 'FM' ? 5000 : 100);
   prevFreq = r.freq;
   setFreq(f);
 }
 
-const spanHz = () => (R().mode === 'FM' || world.band === '2m' ? 200000 : 24000);
+const spanHz = () => { const sv = serviceOf(R().freq); if (sv) return sv.span; return R().mode === 'FM' || world.band === '2m' ? 200000 : 24000; };
 
 // ------------------------------------------------------------------ ATU
 function atuTune() {
@@ -419,7 +476,7 @@ export function updateDisplay() {
   const swr = rs.powered ? effectiveSwr(r.freq) : 0;
   lcd.className = 'lcd-panel' + (rs.powered ? ' on' : '');
   lcd.innerHTML = rs.powered ? `
-    <div class="lcd-row small"><span>VFO-A</span><span>${band ? band.name : 'GEN'}</span><span class="${r.atuOn ? 'hl' : 'dim'}">ATU${r.atuOn && r.atuTunedFreq && Math.abs(r.freq - r.atuTunedFreq) < Math.max(8000, r.freq * 0.005) ? '✓' : ''}</span><span class="${r.rfAtt ? 'hl' : 'dim'}">ATT</span><span>${r.power}W</span><span id="lcd-tx" class="dim">TX</span></div>
+    <div class="lcd-row small"><span>VFO-A</span><span>${band ? band.name : serviceOf(r.freq)?.label || 'GEN'}</span><span class="${r.atuOn ? 'hl' : 'dim'}">ATU${r.atuOn && r.atuTunedFreq && Math.abs(r.freq - r.atuTunedFreq) < Math.max(8000, r.freq * 0.005) ? '✓' : ''}</span><span class="${r.rfAtt ? 'hl' : 'dim'}">ATT</span><span>${r.power}W</span><span id="lcd-tx" class="dim">TX</span></div>
     <div class="lcd-freq">${fmtFreq(r.freq)}<span class="unit">MHz</span></div>
     <div class="lcd-row"><span class="mode">${r.mode}</span><span>FIL ${r.filter[r.mode] >= 1000 ? (r.filter[r.mode] / 1000) + 'k' : r.filter[r.mode]}</span>
       <span class="${r.ritOn ? 'hl' : 'dim'}">RIT ${r.rit >= 0 ? '+' : ''}${(r.rit / 1000).toFixed(2)}</span>
@@ -491,6 +548,8 @@ export function drawFrame() {
     const hzPerBin = span / W;
     let lo, hi;
     if (kind === 'cw') { lo = fc - 20; hi = fc + 20; }
+    else if (kind === 'wfm') { lo = fc - 90000; hi = fc + 90000; }
+    else if (kind === 'am') { lo = fc - 4500; hi = fc + 4500; }
     else if (kind === 'fm') { lo = fc - 7000; hi = fc + 7000; }
     else if (sb === 'LSB') { lo = fc - 2800; hi = fc - 200; } else { lo = fc + 200; hi = fc + 2800; }
     const a = Math.floor((lo - f0) / hzPerBin), b = Math.ceil((hi - f0) / hzPerBin);
@@ -506,7 +565,8 @@ export function drawFrame() {
       const dbm = world.rxDbm(st) - r.rfAtt + 10 * Math.log10(2400 / 50) * (st.mode === 'CW' ? 0.3 : 0);
       let keyed = true;
       if (st.tx.sch) { const el = t - st.tx.start; keyed = st.tx.sch.segs.some((s) => el >= s.t0 && el <= s.t1); }
-      addSig(st.freq, dbm, st.mode === 'CW' || st.tx.kind === 'cwtone' ? 'cw' : st.mode === 'FM' ? 'fm' : 'voice', st.sb, keyed);
+      const kind = st.mode === 'WFM' ? 'wfm' : st.mode === 'AM' && st.tx.kind !== 'amtone' ? 'am' : st.mode === 'CW' || st.tx.kind === 'cwtone' || st.tx.kind === 'amtone' ? 'cw' : st.mode === 'FM' ? 'fm' : 'voice';
+      addSig(st.freq, dbm, kind, st.sb, keyed || kind === 'am' || kind === 'wfm');
     }
     if (net.waterfall) for (const p of net.waterfall()) addSig(p.freq, p.dbm, p.kind, p.sb, true);
     if (txState.active) addSig(txState.freq, -40, txState.mode === 'CW' ? 'cw' : txState.mode === 'FM' ? 'fm' : 'voice', txState.mode, txState.keyed);
@@ -553,10 +613,10 @@ export function drawFrame() {
   wfCtx.strokeStyle = '#ff4d4d'; wfCtx.beginPath(); wfCtx.moveTo(W / 2 + 0.5, 0); wfCtx.lineTo(W / 2 + 0.5, specH); wfCtx.stroke();
   // scale
   wfCtx.fillStyle = '#9fb3c8'; wfCtx.font = '10px monospace';
-  const tick = span > 100000 ? 20000 : 2000;
+  const tick = span > 2e6 ? 200000 : span > 1e6 ? 100000 : span > 300000 ? 50000 : span > 100000 ? 20000 : span > 30000 ? 10000 : 2000;
   for (let f = Math.ceil(f0 / tick) * tick; f < f0 + span; f += tick) {
     const x = xOf(f); wfCtx.fillRect(x, specH - 12, 1, 4);
-    wfCtx.fillText((f / 1000).toFixed(span > 100000 ? 0 : 0), x - 18, specH - 14);
+    wfCtx.fillText(f >= 30e6 ? (f / 1e6).toFixed(tick >= 100000 ? 1 : 2) : (f / 1000).toFixed(0), x - 18, specH - 14);
   }
   if (!rs.powered) { wfCtx.fillStyle = '#ffd166'; wfCtx.font = '16px sans-serif'; wfCtx.fillText('Radio is off — finish wiring in the Shack tab', W / 2 - 170, specH / 2); }
   drawMeter(rs);

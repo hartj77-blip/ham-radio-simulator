@@ -37,7 +37,7 @@ export const SUN = {
   // Shared space weather: a pure function of the UTC date (SFI, Es) and 3-hour block (K),
   // so every player experiences the same band conditions at the same moment.
   shared(d = simDate()) {
-    if (this.override) return;
+    if (this.override || this.live) return; // live NOAA data wins when available
     const day = d.toISOString().slice(0, 10), blk = Math.floor(d.getUTCHours() / 3);
     const key = `${day}|${blk}`;
     if (this.key === key) return;
@@ -117,13 +117,13 @@ export function path(a, b, fMHz, d = simDate()) {
   // polar/aurora
   const maxLat = Math.max(...[0.25, 0.5, 0.75].map((f) => Math.abs(interp(a, b, f).lat)));
   const kLoss = SUN.k * 1.2 + (maxLat > 55 ? SUN.k * 4 : 0);
-  const sky = fspl + absorb + over + (hops - 1) * 4 + kLoss + 8;
+  const sky = fspl + absorb + over + (hops - 1) * 4 + kLoss + 8 + (fMHz < 3 ? 22 : 0); // MW skywave: lossy ground reflections, polarization
   const loss = Math.min(sky, ground);
   return { loss, muf, dist, mode: ground < sky ? 'ground' : `${hops}F2` };
 }
 
 // Band noise in dBm (2.4 kHz bandwidth) at the player's location.
-const NOISE_S = { 1.8: [5, 7], 3.5: [4, 6.5], 7: [4, 5.5], 10: [3, 3.5], 14: [3, 2.5], 18: [2, 1.5], 21: [2, 1.5], 24: [1, 1], 28: [1, 0.5], 50: [0, 0], 144: [-1, -1] };
+const NOISE_S = { 0.5: [6, 8], 1.8: [5, 7], 3.5: [4, 6.5], 7: [4, 5.5], 10: [3, 3.5], 14: [3, 2.5], 18: [2, 1.5], 21: [2, 1.5], 24: [1, 1], 28: [1, 0.5], 50: [0, 0], 144: [-1, -1] };
 export function bandNoiseDbm(fMHz, where) {
   const keys = Object.keys(NOISE_S).map(Number).sort((a, b) => a - b);
   let k = keys[0];
