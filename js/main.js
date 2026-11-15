@@ -12,7 +12,7 @@ import { initOperatingUI, txState } from './operating.js';
 import { initContestUI, contestTick } from './contest.js';
 import { initExamUI, sandboxLicense } from './exam.js';
 import { initLogbookUI } from './logbook.js';
-import { initNetUI } from './net.js';
+import { initNetUI, net } from './net.js';
 import { initWorkbenchUI } from './workbench.js';
 import { initStoreUI, money, earn } from './store.js';
 import { initMapUI, drawMap } from './map.js';
@@ -23,7 +23,10 @@ const TABS = [['shack', '🔌 Shack'], ['antenna', '📡 Antenna'], ['workbench'
 function header() {
   const st = stateBy(S.op.state);
   $('#station-id').innerHTML = `${S.call ? `<span class="callsign">${S.call}</span>` : '<span class="muted">SWL</span>'} <span class="badge lic-${S.license || 'none'}">${licName()}</span> <span class="muted small">${st ? st.name : ''} · ${st ? grid(st.lat, st.lon).slice(0, 4) : ''}</span>`;
-  $('#xp').innerHTML = `<span class="wallet-mini">₵ ${money()}</span> Lv ${level()} · ${S.xp} XP`;
+  const on = net.online ? net.roster.length : null;
+  $('#xp').innerHTML = `${on != null ? `<button class="net-badge" id="net-badge" title="Players online">🌐 ${on} on air${net.roster.some((e) => e.tx) ? ' <span class="onair-dot">●</span>' : ''}</button>` : ''}<span class="wallet-mini">₵ ${money()}</span> Lv ${level()} · ${S.xp} XP`;
+  const nb = document.getElementById('net-badge');
+  if (nb) nb.onclick = () => { showTab('radio'); document.getElementById('net-card')?.scrollIntoView({ behavior: 'smooth' }); };
 }
 
 function solarBanner() {
@@ -128,6 +131,7 @@ function init() {
   showTab((location.hash || '').slice(1) || (S.started ? 'radio' : 'shack'));
 
   bus.on('xp', header);
+  bus.on('roster', header);
   bus.on('money', (n, why) => { header(); if (n > 0 && why) toast(`+₵${n} (${why})`, 'good', 2500); });
   bus.on('logged', (q) => {
     if (q.status !== 'confirmed' || q.contest) return;
@@ -173,4 +177,4 @@ init();
 // debug handle for automated tests / curious players
 import * as _radio from './radio.js';
 import * as _op from './operating.js';
-window.__sim = { S, world, radio: _radio, op: _op, SUN };
+window.__sim = { S, world, radio: _radio, op: _op, SUN, net };
