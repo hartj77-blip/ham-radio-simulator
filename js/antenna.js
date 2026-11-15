@@ -6,6 +6,7 @@ import { elmer } from './elmer.js';
 import { buildModel, segment } from './em/models.js';
 import { dayFactor, simDate } from './propagation.js';
 import { stateBy } from './data/world.js';
+import { RW } from './realworld.js';
 const STATE_POS = () => stateBy(S.op.state) || stateBy('KS');
 import { runSolver } from './em/client.js';
 import { antOwned, feedOwned, maxHeight, owns } from './store.js';
@@ -199,6 +200,7 @@ export function initAntennaUI(el) {
   render();
   bus.on('antenna', () => { renderInfo(); requestMom(); });
   bus.on('antenna-rebuild', render);
+  bus.on('realworld', (k) => { if (k === 'wx') renderInfo(); });
   requestMom();
 }
 
@@ -362,6 +364,27 @@ function drawAnalyzer() {
     ${analyzer.atRig ? '<p class="muted small">Measuring at the rig end: coax loss makes SWR look better than it really is at the antenna. Untick to see the true feed-point SWR.</p>' : ''}`;
 }
 
+// Sky & precipitation from the live local weather (NWS / Open-Meteo).
+function wxSky(W, gy, cloud) {
+  const w = RW.wx;
+  const cover = w ? w.cloud : 0.3;
+  const n = Math.round(1 + cover * 9);
+  let out = '';
+  for (let i = 0; i < n; i++) out += cloud(((i * 137) % (W - 80)) + 40, 30 + ((i * 53) % 90), 0.8 + ((i * 7) % 5) / 6);
+  if (cover > 0.75) out += `<rect width="${W}" height="${gy}" fill="rgba(70,80,95,${(cover - 0.6).toFixed(2)})"/>`;
+  return out;
+}
+function wxPrecip(W, H) {
+  const w = RW.wx;
+  if (!w) return '';
+  let out = '';
+  if (w.rain || w.storm) for (let i = 0; i < 90; i++) { const x = (i * 97) % W, y = (i * 61) % H; out += `<line x1="${x}" y1="${y}" x2="${x - 4}" y2="${y + 12}" stroke="#9fc3ff" stroke-width="1" opacity="0.55"/>`; }
+  if (w.snow) for (let i = 0; i < 80; i++) out += `<circle cx="${(i * 89) % W}" cy="${(i * 47) % H}" r="${1 + (i % 3) * 0.6}" fill="#fff" opacity="0.85"/>`;
+  if (w.fog) out += `<rect width="${W}" height="${H}" fill="rgba(200,205,215,0.35)"/>`;
+  if (w.storm && Math.random() < 0.5) out += `<polyline points="${W * 0.7},20 ${W * 0.68},80 ${W * 0.72},90 ${W * 0.66},170" stroke="#fff6a8" stroke-width="3" fill="none" opacity="0.9"/>`;
+  return out;
+}
+
 function drawSvg() {
   const a = S.antenna;
   const W = 760, H = 330, gy = 285;
@@ -448,7 +471,7 @@ function drawSvg() {
     </defs>
     <rect width="${W}" height="${gy}" fill="url(#sky)"/>${stars}
     ${isDay ? `<circle cx="${celX}" cy="${celY}" r="30" fill="url(#sunG)"/>` : `<circle cx="${mX}" cy="${mY}" r="11" fill="#e9edf5"/><circle cx="${mX + 5}" cy="${mY - 3}" r="10" fill="${rgb(skyTop)}" opacity="0.85"/>`}
-    ${cloud(150, 60, 1)}${cloud(560, 40, 1.3)}${cloud(380, 85, 0.8)}
+    ${wxSky(W, gy, cloud)}
     <path d="M0 ${gy - 40} Q 120 ${gy - 90} 260 ${gy - 45} T 520 ${gy - 55} T ${W} ${gy - 35} V ${gy} H 0 Z" fill="${rgb(mix([15, 30, 35], [80, 120, 110], df))}" opacity="0.6"/>
     <path d="M0 ${gy - 20} Q 200 ${gy - 55} 380 ${gy - 25} T ${W} ${gy - 30} V ${gy} H 0 Z" fill="${rgb(mix([18, 40, 25], [60, 110, 60], df))}" opacity="0.85"/>
     <rect y="${gy}" width="${W}" height="${H - gy}" fill="url(#grass)"/>
@@ -456,8 +479,9 @@ function drawSvg() {
       <rect x="104" y="${gy - 100}" width="12" height="26" fill="#6d4a36"/>${win(36, gy - 48)}${win(96, gy - 48)}<rect x="62" y="${gy - 34}" width="20" height="34" fill="#4a3426"/>
       <text x="40" y="${gy - 68}" class="svgt small">SHACK</text><rect x="122" y="${gy - 56}" width="8" height="10" fill="#777"/></g>
     ${ant}
+    ${wxPrecip(W, H)}
     <rect x="0" y="0" width="${W}" height="46" fill="rgba(0,0,0,0.35)"/>
     <text x="12" y="19" class="svgt">${ANT_TYPES[a.type].label} — ${a.length ? fmtLen(a.length) : 'uncut wire'}${a.type !== 'vertical' ? ` · ${a.height} ft up${a.height > 35 ? (a.height > 50 ? ' (tower)' : ' (mast)') : ' (trees)'}` : ` · ${a.radials} radials`}</text>
-    <text x="12" y="37" class="svgt">${a.built ? '✅ installed' : '🔧 on the ground (not installed)'} · ${a.feedLen} ft ${a.feed} · local time ${Math.floor(solarH)}:${String(Math.floor((solarH % 1) * 60)).padStart(2, '0')}</text>
+    <text x="12" y="37" class="svgt">${a.built ? '✅ installed' : '🔧 on the ground (not installed)'} · ${a.feedLen} ft ${a.feed} · local time ${Math.floor(solarH)}:${String(Math.floor((solarH % 1) * 60)).padStart(2, '0')}${RW.wx ? ` · live weather: ${RW.wx.desc}, ${RW.wx.tempF}°F${RW.wx.windKt != null ? `, wind ${RW.wx.windKt} kt` : ''}` : ''}</text>
   </svg>`;
 }

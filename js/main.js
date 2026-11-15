@@ -16,6 +16,8 @@ import { initNetUI, net, autoOnline } from './net.js';
 import { initWorkbenchUI } from './workbench.js';
 import { initStoreUI, money, earn } from './store.js';
 import { initMapUI, drawMap } from './map.js';
+import { startRealWorld, RW } from './realworld.js';
+import { initScannerUI } from './services.js';
 import { elmer } from './elmer.js';
 
 const TABS = [['shack', '🔌 Shack'], ['antenna', '📡 Antenna'], ['workbench', '🛠 Workbench'], ['radio', '📻 Radio'], ['contest', '🏆 Contests'], ['license', '🪪 License'], ['logbook', '📒 Logbook'], ['store', '🛒 Hamfest'], ['help', '❔ Help']];
@@ -33,14 +35,15 @@ function solarBanner() {
   const st = stateBy(S.op.state);
   const bc = bandConditions(st);
   const cls = (c) => `bc-${c.toLowerCase()}`;
-  $('#solar').innerHTML = `<span title="Solar Flux Index (10.7 cm)">SFI <b>${SUN.sfi}</b></span> <span title="A-index (daily geomagnetic)">A <b>${SUN.a}</b></span> <span title="K-index (3-hour geomagnetic)">K <b class="${SUN.k >= 5 ? 'bad' : SUN.k >= 4 ? 'warn' : ''}">${SUN.k}</b></span>`
+  $('#solar').innerHTML = `${SUN.live ? '<span class="live-dot" title="Live data from NOAA Space Weather Prediction Center">● LIVE</span>' : ''}<span title="Solar Flux Index (10.7 cm)">SFI <b>${SUN.sfi}</b></span> <span title="A-index (daily geomagnetic)">A <b>${SUN.a}</b></span> <span title="K-index (3-hour geomagnetic)">K <b class="${SUN.k >= 5 ? 'bad' : SUN.k >= 4 ? 'warn' : ''}">${SUN.k}</b></span>`
     + bc.map((b) => `<span class="bc" title="day ${b.day} / night ${b.night}">${b.name} <b class="${cls(b.now)}">${b.now}</b></span>`).join('')
     + (SUN.es ? ' <span class="bc" title="Sporadic-E is likely today on 6 m and 10 m">Es <b class="bc-good">likely</b></span>' : '');
 }
 
 function clock() {
   const d = simDate();
-  $('#clock').innerHTML = `${S.settings.hour != null ? '⏩ ' : ''}${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}<small>Z</small>`;
+  const w = RW.wx;
+  $('#clock').innerHTML = `${w ? `<span class="wx-mini" title="Live weather: ${w.desc} (${w.source}${w.station ? ', ' + w.station : ''})">${w.storm ? '⛈' : w.snow ? '🌨' : w.rain ? '🌧' : w.fog ? '🌫' : w.cloud > 0.6 ? '☁' : w.cloud > 0.25 ? '⛅' : '☀'} ${w.tempF ?? ''}°F</span> ` : ''}${S.settings.hour != null ? '⏩ ' : ''}${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}<small>Z</small>`;
 }
 
 function showTab(t) {
@@ -77,7 +80,7 @@ function helpTab(el) {
   hour.oninput = () => { live.checked = false; applyHour(); };
   live.onchange = applyHour;
   const qth = h('select', {}, ...STATES.map((s) => h('option', { value: s.abbr, selected: s.abbr === S.op.state }, s.name)));
-  qth.onchange = () => { S.op.state = qth.value; save(); header(); solarBanner(); world.repopulate(); };
+  qth.onchange = () => { S.op.state = qth.value; save(); header(); solarBanner(); bus.emit('qth'); world.repopulate(); };
   const rate = h('input', { type: 'range', min: 0.7, max: 1.5, step: 0.05, value: S.settings.ttsRate });
   rate.oninput = () => { S.settings.ttsRate = +rate.value; save(); };
   el.append(h('div', { class: 'help-grid' },
@@ -119,6 +122,9 @@ function init() {
   initWorkbenchUI($('#tab-workbench'));
   initRadioUI($('#radio-panel'));
   initMapUI($('#map-panel'));
+  initScannerUI($('#scanner-panel'));
+  startRealWorld();
+  bus.on('realworld', (k) => { if (k === 'sun') { solarBanner(); world.bandCache = {}; } if (k === 'wx') clock(); });
   initOperatingUI($('#operating'));
   initNetUI($('#net-panel'));
   initContestUI($('#tab-contest'));
@@ -178,4 +184,4 @@ init();
 // debug handle for automated tests / curious players
 import * as _radio from './radio.js';
 import * as _op from './operating.js';
-window.__sim = { S, world, radio: _radio, op: _op, SUN, net };
+window.__sim = { S, world, radio: _radio, op: _op, SUN, net, audio, RW };
