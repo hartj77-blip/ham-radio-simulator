@@ -26,8 +26,8 @@ export const RIGS = {
   },
   ht: {
     name: 'HT-5 dual-band handheld', cls: '2 m FM handheld, 5 W', price: 60, maxW: 5,
-    tx: ['2m'], rx: [88e6, 470e6], modes: ['FM', 'WFM'], atu: false, scope: false, dsp: false, narrowCw: false, face: 'black',
-    blurb: 'Pocket radio for repeaters and simplex, plus FM broadcast, NOAA weather and airband (FM only).',
+    tx: ['2m'], rx: [88e6, 470e6], modes: ['FM', 'WFM', 'AM'], atu: false, scope: false, dsp: false, narrowCw: false, face: 'black',
+    blurb: 'Pocket radio for repeaters and simplex, plus FM broadcast, NOAA weather and airband (AM receive).',
   },
   sdrrx: {
     name: 'WB-SDR wideband receiver', cls: 'Receive-only SDR, 0.5–470 MHz', price: 100, maxW: 0,

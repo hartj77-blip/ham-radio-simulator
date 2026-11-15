@@ -19,6 +19,7 @@ import { initMapUI, drawMap } from './map.js';
 import { openStation, applySetup, setGameMode, applyLook, loadSlot } from './setups.js';
 import { initGuide, initExplain, initFinder } from './guide.js';
 import { rig } from './rigs.js';
+import { initHT, showHT, isPhone, phoneStart } from './htview.js';
 import { startRealWorld, RW } from './realworld.js';
 import { initScannerUI } from './services.js';
 import { elmer } from './elmer.js';
@@ -50,6 +51,7 @@ function clock() {
 }
 
 function showTab(t) {
+  if (document.body.classList.contains('ht-view')) showHT(false);
   document.body.dataset.tab = t;
   $$('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
   $$('.tab').forEach((s) => { s.hidden = s.id !== `tab-${t}`; });
@@ -66,7 +68,8 @@ function onboarding() {
     audio.init(); close(); header(); solarBanner(); bus.emit('qth'); world.repopulate();
     if (mode === 'career') { setGameMode('career'); elmer('welcome'); showTab('shack'); }
     else if (mode === 'listener') { setGameMode('listener'); applySetup('listener', { quiet: true }); toast('🎧 Listener mode: a wideband receiver and a long wire are set up. Use the FIND bar or "What\'s on the air near you".', 'good', 9000); }
-    else { setGameMode('free'); openStation('setups'); }
+    else { setGameMode('free'); if (!isPhone()) openStation('setups'); }
+    if (isPhone()) { phoneStart(); showHT(true); }
     applyLook();
   };
   const card = (mode, icon, title, text) => h('button', { class: 'mode-card', onclick: () => finish(mode) }, h('div', { class: 'su-icon' }, icon), h('b', {}, title), h('span', { class: 'small' }, text));
@@ -131,11 +134,13 @@ function init() {
   for (const [id, label] of TABS) nav.append(h('button', { 'data-tab': id, onclick: () => showTab(id) }, label));
   const tools = h('div', { class: 'top-tools' },
     h('button', { class: 'btn small', id: 'station-btn', title: 'Game mode, radio model, one-click setups, saved antennas, appearance', onclick: () => openStation() }, '🎛 Station'),
+    h('button', { class: 'btn small', id: 'ht-btn', title: 'Switch between the handheld radio and the full station', onclick: () => showHT(!document.body.classList.contains('ht-view')) }, '📟 Handheld'),
     h('button', { class: `btn small ${S.settings.explain ? 'active' : ''}`, id: 'explain-btn', title: 'Hover any control to learn what it does', onclick: (e) => { S.settings.explain = !S.settings.explain; save(); e.currentTarget.classList.toggle('active', S.settings.explain); toast(S.settings.explain ? '❓ Explain mode on — hover over any control.' : 'Explain mode off.', 'info', 2500); } }, '❓ Explain'));
   $('#topbar').append(tools);
   initGuide($('#guide-bar'));
   initExplain();
   initFinder($('#finder'));
+  initHT($('#ht-panel'));
   initShackUI($('#tab-shack'));
   initAntennaUI($('#tab-antenna'));
   initWorkbenchUI($('#tab-workbench'));
@@ -200,6 +205,8 @@ function init() {
   if (!S.started) onboarding();
   else if (S.license && !S.tips.includes('welcome')) elmer('welcome');
   if (S.started) setTimeout(autoOnline, 1500);
+  bus.on('view', (v) => { const b = $('#ht-btn'); if (b) b.textContent = v === 'ht' ? '🏠 Full station' : '📟 Handheld'; });
+  if (S.started && (S.settings.view === 'ht' || (isPhone() && S.settings.view !== 'station'))) { if (isPhone()) phoneStart(); showHT(true); }
 }
 
 init();

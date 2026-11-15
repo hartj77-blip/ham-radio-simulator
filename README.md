@@ -67,6 +67,14 @@ An in-game **Elmer** (mentor) steps in when you hit a situation the exams cover,
 - **Add-ons:** a 3-way antenna switch with saved antennas (ANT 1/2/3 on the radio), plus all the earlier Hamfest gear.
 - **Pro tools:** Lab readouts on the scope (signal and noise dBm, SNR, path mode, loss, distance, bearing and tuning offset), faceplate themes (graphite, black, silver, retro wood), display colours (green, amber, blue, white), and Radio tab panels you can show or hide.
 
+## 📟 Handheld mode (phones)
+On a phone the app opens to a **handheld radio**, and on desktop you can switch with the 📟 Handheld button.
+
+- **The faceplate:** LCD with channel name, frequency, S-meter, TX/RX and offset/tone indicators; keypad frequency entry; channel up/down; MODE, SHIFT and TONE buttons; and a SCAN that stops on activity.
+- **Built-in memory channels** for what's really around you: local repeater (offset and tone set), 2 m simplex, NOAA Weather Radio, HEAR, the nearest airport tower and ATIS, aviation guard and nearby FM stations. You can save your own too.
+- **Talking:** a big push-to-talk button, plus quick phrases for when you have no microphone.
+- **Getting started:** phone players are handed an HT (5 W, 2 m FM, receive 88–470 MHz including airband AM) on their first launch. The ☰ menu reaches the full station, license study and logbook.
+
 ## 🌎 The real world around your radio
 The radio is a general-coverage receiver from 0.5 to 470 MHz (it can transmit only in the ham bands). The world it hears is built from live public data. All sources are free, need no API key, and allow browser access (CORS).
 
