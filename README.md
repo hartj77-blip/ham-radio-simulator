@@ -28,7 +28,12 @@ An in-game **Elmer** (mentor) steps in when you hit a situation the exams cover,
 
 ### Voice, like the voice chat in other games
 - **Push-to-talk:** hold **Space**, or the PTT button. Speech recognition turns what you say ("Kilo Delta Nine X-ray…, five nine") into text, and the AI stations reply out loud.
-- **Online:** press **Go online** to see every player who's on: their callsign, state, frequency and mode, who's talking right now, and an estimate of whether the band is open between you. Press **Join** to tune to them and link audio, then hold Space to talk. Discovery needs no server of our own. The first player online keeps a shared lobby on the free PeerJS broker, and if they leave, another player takes over automatically. Audio is peer-to-peer WebRTC and goes through your receiver's filter and noise, so you only hear each other on the same frequency and mode, with propagation between your QTHs. Players also appear on the propagation map, and you can click one to join.
+- **Online: one shared, real-time band.** Press **Go on the air** once and you stay on the air each time you open the game (you can turn that off). Like a real receiver, you hear *any* player who transmits on the frequency you're tuned to, if propagation between your two states supports it. There's no need to "join" anyone first.
+  - **Automatic links:** you link with every player on your current band, and links to players on other bands drop after 30 s.
+  - **Realistic tuning:** voices pass through your filter, AGC and noise. Off-tune SSB sounds shifted and garbled, and the wrong sideband sounds inverted ("Donald Duck").
+  - **The same world for everyone:** all players share the same AI stations on the same frequencies (generated from the band and the UTC half-hour), the same space weather (from the UTC date and K-index block) and real UTC time.
+  - **Roster:** shows every player's call, frequency, mode, who's talking now and whether the band is open between you. **Join** tunes you straight to them.
+  - **No server of our own:** the first player online keeps a lobby on the free PeerJS broker, with automatic takeover if they leave. Audio is peer-to-peer WebRTC.
 
 ### The realism underneath
 - **Ionosphere:** a sun-position model that drives foF2/MUF, D-layer absorption, skip zones, multi-hop paths, K-index and auroral loss, and sporadic-E on 6 m.

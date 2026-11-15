@@ -1,7 +1,7 @@
 // The simulated ham bands: AI operators who call CQ, ragchew, run contests,
 // answer your CQ in pileups, plus NCDXF beacons and a local 2 m repeater.
 import { S, save } from './state.js';
-import { rand, randi, pick, chance, poisson, weighted, lev, bus, now, clamp } from './util.js';
+import { rand, randi, pick, chance, poisson, weighted, lev, bus, now, clamp, seeded } from './util.js';
 import { BANDS, bandOf } from './data/bandplan.js';
 import { randomOp, isCallsign, phonetic, digitsSpoken, stateBy, STATE_NAME_TO_ABBR, usCall } from './data/world.js';
 import { path as propPath, bearing, distanceKm, bandNoiseDbm, simDate } from './propagation.js';
@@ -76,13 +76,28 @@ export const world = {
     const name = b ? b.name : null;
     if (name === this.band) return;
     const cid = this.contest ? this.contest.id : null;
-    if (this.band) this.bandCache[this.band] = { stations: this.stations.filter((s) => s.role !== 'caller' && s.role !== 'peer'), t: now(), contest: cid };
+    const slot = worldSlot();
+    if (this.band) this.bandCache[this.band] = { stations: this.stations.filter((s) => s.role !== 'caller' && s.role !== 'peer'), t: now(), contest: cid, slot: this.slot };
+    const peers = this.stations.filter((s) => s.role === 'peer');
     this.band = name;
     const c = name && this.bandCache[name];
-    const warc = ['30m', '17m', '12m'].includes(name);
-    if (c && now() - c.t < 600 && c.contest === cid) this.stations = c.stations;
-    else this.stations = name ? populate(b, warc ? null : this.contest) : [];
+    if (c && c.slot === slot && c.contest === cid && (cid || now() - c.t < 1800)) this.stations = c.stations;
+    else this.stations = name ? populateShared(b, this.contest) : [];
+    this.slot = slot;
+    for (const p of peers) if (p.band === name) this.stations.push(p);
     bus.emit('band', name);
+  },
+
+  // Every 30 minutes (UTC) the shared band population turns over, the same for every player.
+  refreshSlot() {
+    const slot = worldSlot();
+    if (slot === this.slot || !this.band || this.contest) return;
+    const b = bandOf(S.radio.freq);
+    if (!b || b.name !== this.band) return;
+    const keep = this.stations.filter((s) => s.role === 'peer' || s.role === 'caller' || s.pq);
+    this.stations = [...populateShared(b, null), ...keep];
+    this.slot = slot;
+    this.bandCache = {};
   },
 
   repopulate() { this.bandCache = {}; const b = bandOf(S.radio.freq); this.band = null; this.setFreq(S.radio.freq); },
@@ -123,8 +138,9 @@ export const world = {
       if (st.tx && !st.tx.done) { st.tx.done = true; onTxEnd(st); }
       behave(st, t);
     }
-    // gentle churn: stations come and go
-    if (t - (this.lastChurn || 0) > 25 && this.band) {
+    if (t - (this.lastSlotCheck || 0) > 10) { this.lastSlotCheck = t; this.refreshSlot(); }
+    // gentle churn during (single-player) contests: stations come and go
+    if (this.contest && t - (this.lastChurn || 0) > 25 && this.band) {
       this.lastChurn = t;
       const b = bandOf(S.radio.freq);
       if (b && b.name === this.band && b.name !== '2m') churn(b, this.contest);
@@ -226,12 +242,22 @@ function newStation(band, contest, list, opts = {}) {
   return st;
 }
 
-function populate(band, contest) {
+// The shared world: band population is a pure function of (band, 30-min UTC slot), so
+// every player online sees the same stations on the same frequencies at the same time.
+export const worldSlot = () => Math.floor(simDate().getTime() / 1800000);
+function populateShared(band, contest) {
+  if (contest || band.name === '2m') return populate(band, contest);
+  return seeded(`band|${band.name}|${worldSlot()}`, () => populate(band, null, true));
+}
+
+// shared=true: the world's population independent of where *you* are (you hear the subset
+// that propagates to you); otherwise stations are picked to be audible from your QTH.
+function populate(band, contest, shared = false) {
   const list = [];
   if (band.name === '2m') return populate2m(band);
-  const n = contest ? 30 : CASUAL_N[band.name] || 10;
+  const n = contest ? 30 : Math.round((CASUAL_N[band.name] || 10) * (shared ? 2.2 : 1));
   for (let i = 0; i < n; i++) {
-    const st = newStation(band, contest, list);
+    const st = newStation(band, contest, list, shared ? { minSnr: -Infinity } : {});
     if (!st) continue;
     list.push(st);
     if (st.role === 'rag') {
@@ -273,13 +299,15 @@ function populate2m(band) {
   const me = player();
   const near = (km) => { const a = rand(0, 2 * Math.PI); return { lat: me.lat + Math.cos(a) * km / 111, lon: me.lon + Math.sin(a) * km / 85 }; };
   const st = stateBy(S.op.state) || stateBy('KS');
-  if (!S.local || S.local.state !== S.op.state) {
+  if (!S.local || S.local.state !== S.op.state || S.local.v !== 2) {
     const d = typeof st.dist === 'number' ? st.dist : 7;
-    S.local = {
+    // seeded by state, so players in the same state share the same local repeater and locals
+    S.local = seeded(`local|${S.op.state}`, () => ({
+      v: 2,
       state: S.op.state,
       rpt: pick(['W', 'K', 'N']) + d + pick(['RPT', 'ARC', 'MRA', 'EOC', 'VHF', 'SKY']),
       locals: Array.from({ length: 5 }, () => ({ call: usCall(st), name: pick(['Bob', 'Jim', 'Sue', 'Dave', 'Pat', 'Ken', 'Linda', 'Rick', 'Amy', 'Walt']) })),
-    };
+    }));
     save();
   }
   const rptPos = near(18);
