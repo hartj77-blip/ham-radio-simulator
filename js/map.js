@@ -5,6 +5,7 @@ import { h, bus, now } from './util.js';
 import { world, player } from './world.js';
 import { dayFactor, interp, simDate, distanceKm } from './propagation.js';
 import { stateBy } from './data/world.js';
+import { net } from './net.js';
 
 const LAND_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json';
 let land = null, landTried = false, cv, ctx, nightImg = null, nightAt = 0, hover = null, root;
@@ -41,12 +42,17 @@ export function initMapUI(el) {
   ctx = cv.getContext('2d');
   cv.addEventListener('mousemove', (e) => { hover = { x: e.offsetX, y: e.offsetY }; });
   cv.addEventListener('mouseleave', () => { hover = null; });
-  cv.addEventListener('click', (e) => { const st = pickAt(e.offsetX, e.offsetY); if (st) bus.emit('tune-to', st.freq, st.mode === 'CW' ? 'CW' : st.mode === 'FM' ? 'FM' : st.sb); });
+  cv.addEventListener('click', (e) => {
+    const r = pickRoster(e.offsetX, e.offsetY);
+    if (r) return bus.emit('net-join', r);
+    const st = pickAt(e.offsetX, e.offsetY); if (st) bus.emit('tune-to', st.freq, st.mode === 'CW' ? 'CW' : st.mode === 'FM' ? 'FM' : st.sb);
+  });
   loadLand();
 }
 
 const proj = (lat, lon, W, H) => [((lon + 180) / 360) * W, ((90 - lat) / 180) * H];
-let lastPts = [];
+let lastPts = [], rosterPts = [];
+function pickRoster(x, y) { let best = null, bd = 12; for (const p of rosterPts) { const d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; best = p.e; } } return best; }
 
 function pickAt(x, y) {
   let best = null, bd = 12;
@@ -139,6 +145,22 @@ export function drawMap() {
     ctx.fillStyle = 'rgba(10,16,24,0.85)'; ctx.fillRect(lx, ly - 14, w, 20);
     ctx.fillStyle = '#e3e9f0'; ctx.fillText(label, lx + 6, ly);
   }
+  // other players online (from the lobby roster)
+  rosterPts = [];
+  for (const e of net.roster || []) {
+    const st = stateBy(e.state);
+    if (!st) continue;
+    const jx = ((e.id.charCodeAt(e.id.length - 1) % 7) - 3) * 2, jy = ((e.id.charCodeAt(e.id.length - 2) % 7) - 3) * 2;
+    const [x, y] = proj(st.lat, st.lon, W, H);
+    rosterPts.push({ x: x + jx, y: y + jy, e });
+    ctx.strokeStyle = '#ff6bd5'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x + jx, y + jy, 6, 0, 7); ctx.stroke();
+    if (e.tx) { ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 8); ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(x + jx, y + jy, 4, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+    ctx.fillStyle = '#ffc2f0'; ctx.font = 'bold 10px system-ui'; ctx.fillText(`${e.call} ${(e.freq / 1e6).toFixed(3)}`, x + jx + 9, y + jy - 6);
+    ctx.lineWidth = 1;
+  }
+  const rh = hover ? pickRoster(hover.x, hover.y) : null;
+  if (rh) { ctx.font = '12px system-ui'; const lbl = `${rh.call} (${rh.state}) · ${(rh.freq / 1e6).toFixed(3)} ${rh.mode}${rh.tx ? ' · ON AIR' : ''} — click to join`; const w = ctx.measureText(lbl).width + 12; ctx.fillStyle = 'rgba(40,10,35,0.9)'; ctx.fillRect(Math.min(hover.x + 10, W - w - 4), hover.y - 24, w, 20); ctx.fillStyle = '#fff'; ctx.fillText(lbl, Math.min(hover.x + 10, W - w - 4) + 6, hover.y - 10); }
   // home QTH
   ctx.fillStyle = '#ff4d4d'; ctx.strokeStyle = '#fff';
   ctx.beginPath(); ctx.arc(mx, my, 5, 0, 7); ctx.fill(); ctx.stroke();
@@ -153,5 +175,5 @@ export function drawMap() {
   sg.addColorStop(0, 'rgba(255,240,150,1)'); sg.addColorStop(1, 'rgba(255,200,60,0)');
   ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, 14, 0, 7); ctx.fill();
   const leg = document.getElementById('map-legend');
-  if (leg) leg.innerHTML = `<span style="color:#ffd166">●</span> SSB <span style="color:#7fd3ff">●</span> CW <span style="color:#ff6bd5">●</span> players · bright = heard now · ${world.band || ''} ${land ? '' : '(coastlines need internet)'}`;
+  if (leg) leg.innerHTML = `<span style="color:#ffd166">●</span> SSB <span style="color:#7fd3ff">●</span> CW <span style="color:#ff6bd5">◯</span> real players (click to join) · bright = heard now · ${world.band || ''} ${land ? '' : '(coastlines need internet)'}`;
 }
