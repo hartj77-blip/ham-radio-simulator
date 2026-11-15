@@ -17,7 +17,7 @@ export const defaultState = () => ({
   },
   radio: {
     freq: 14250000, mode: 'USB', step: 100, af: 0.6, rfAtt: 0, sql: 0.15,
-    filter: { CW: 500, USB: 2400, LSB: 2400, AM: 6000, FM: 12000 },
+    filter: { CW: 500, USB: 2400, LSB: 2400, AM: 6000, FM: 12000, WFM: 150000 },
     power: 100, rit: 0, ritOn: false, pitch: 600,
     atuOn: false, atuTunedFreq: null, atuExtTunedFreq: null,
     rptOffset: 0, toneHz: 0, meter: 'S', nb: false, lastByBand: {},

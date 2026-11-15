@@ -63,6 +63,8 @@ class AudioEngine {
       const Q = clamp(pitch / width, 0.5, 30);
       set(a, 'bandpass', pitch, Q); set(b, 'bandpass', pitch, Q);
       set(c, 'lowpass', 3000, 0.7); set(d, 'highpass', 150, 0.7);
+    } else if (mode === 'WFM') {
+      set(a, 'highpass', 40, 0.7); set(b, 'highpass', 40, 0.7); set(c, 'lowpass', 15000, 0.7); set(d, 'lowpass', 15000, 0.7);
     } else if (mode === 'FM') {
       set(a, 'highpass', 300, 0.7); set(b, 'highpass', 300, 0.7); set(c, 'lowpass', 3000, 0.7); set(d, 'lowpass', 3000, 0.7);
     } else if (mode === 'AM') {
@@ -77,7 +79,7 @@ class AudioEngine {
   // RMS of white noise after the IF filter is ~0.577*sqrt(bw/nyquist); compensate so
   // that `rms` is the level actually heard.
   noiseComp() {
-    const bw = this.mode === 'CW' ? this.width * 1.2 : this.mode === 'FM' ? 2700 : this.mode === 'AM' ? this.width / 2 : this.width;
+    const bw = this.mode === 'CW' ? this.width * 1.2 : this.mode === 'FM' ? 2700 : this.mode === 'WFM' ? 15000 : this.mode === 'AM' ? this.width / 2 : this.width;
     return 1 / (0.577 * Math.sqrt(bw / (this.ctx.sampleRate / 2)));
   }
 
@@ -176,6 +178,49 @@ class AudioEngine {
   click() { this.beep(2400, 0.008, 0.2); }
 
   // Network voice: MediaStream -> gain -> receiver input.
+  // ---- live audio streams (real broadcast stations) ----
+  // Played through the receiver chain when the server allows CORS; otherwise played directly
+  // with the level set by the simulated signal strength.
+  stream(id, url) {
+    this.streams ||= new Map();
+    let rec = this.streams.get(id);
+    if (rec) { rec.seen = performance.now(); return rec; }
+    rec = { url, seen: performance.now(), direct: false, node: null, level: 0 };
+    const el = new Audio();
+    el.crossOrigin = 'anonymous'; el.preload = 'none'; el.src = url;
+    rec.el = el;
+    try {
+      const src = this.ctx.createMediaElementSource(el);
+      const g = this.ctx.createGain(); g.gain.value = 0;
+      src.connect(g); g.connect(this.rxIn); rec.node = g;
+    } catch (e) { rec.direct = true; }
+    el.addEventListener('error', () => {
+      if (rec.direct || rec.dead) { rec.dead = true; return; }
+      // CORS refused: fall back to direct playback (no receiver filtering)
+      rec.direct = true;
+      const e2 = new Audio(); e2.src = url; e2.volume = 0; rec.el = e2;
+      e2.addEventListener('error', () => { rec.dead = true; });
+      e2.play().catch(() => { rec.dead = true; });
+    });
+    el.play().catch(() => { });
+    this.streams.set(id, rec);
+    return rec;
+  }
+  streamLevel(id, level, af = 1) {
+    const rec = this.streams?.get(id);
+    if (!rec) return;
+    rec.level = level;
+    if (level > 0.001) rec.seen = performance.now();
+    if (rec.direct) rec.el.volume = clamp(level * af * af * 1.6, 0, 1);
+    else if (rec.node) rec.node.gain.setTargetAtTime(level, this.t, 0.08);
+  }
+  streamGC(keepMs = 15000) {
+    if (!this.streams) return;
+    const t = performance.now();
+    for (const [id, rec] of this.streams) if (t - rec.seen > keepMs) { try { rec.el.pause(); rec.el.removeAttribute('src'); rec.el.load(); } catch (e) { } this.streams.delete(id); }
+  }
+  muteStreams() { if (this.streams) for (const id of this.streams.keys()) this.streamLevel(id, 0); }
+
   // A real player's voice entering the receiver. `dry` is the correctly-tuned path; `wet`
   // ring-modulates the audio (frequency shift / spectrum inversion) to imitate a mistuned or
   // wrong-sideband SSB signal.

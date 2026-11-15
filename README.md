@@ -42,6 +42,21 @@ An in-game **Elmer** (mentor) steps in when you hit a situation the exams cover,
 - **Rules:** FCC Part 97 privileges by license class and mode, plus the band-edge check for how much spectrum your signal occupies. Unlicensed players can only transmit into the dummy load.
 - **AI operators:** they call CQ, ragchew, run contests, answer only if they can actually hear you, send partial calls when your signal is weak, correct busted calls, slow down to your CW speed, and honor QRS.
 
+## 🌎 The real world around your radio
+The radio is a general-coverage receiver from 0.5 to 470 MHz (it can transmit only in the ham bands). The world it hears is built from live public data. All sources are free, need no API key, and allow browser access (CORS).
+
+| What you hear | Real data | Simulated |
+|---|---|---|
+| **AM/FM broadcast** (530–1700 kHz, 88–108 MHz) | Real stations from [Radio Browser](https://www.radio-browser.info), with live audio streams, at their **real coordinates** and on the frequency in their name. Low-power FM ("-LP") is modelled at about 100 W. | Transmitter power and height (typical values); stations with unknown locations are left out |
+| **NOAA Weather Radio** (162.400–162.550 MHz) | The **real NWS forecast, current observation and active alerts** for your location (api.weather.gov), with the 1050 Hz alert tone | Which of the 7 WX channels your local transmitter uses |
+| **Airband** (108–137 MHz AM) | **Real airports near you** and their **published frequencies** (OurAirports); the ATIS reads **real wind, temperature and altimeter**, and the runway in use follows the real wind | The aircraft and controllers (no free live ADS-B feed allows browser access) |
+| **WWV / WWVH** (2.5–25 MHz) | Real locations, power, tick format and voice time announcements | – |
+| **Ambulances** (HEAR, 155.340 MHz) | The real nationwide hospital channel; your real nearby town | The call traffic (most real public-safety radio is digital/encrypted) |
+| **Space weather** | **Live** solar flux and Kp from NOAA SWPC | – |
+| **Local weather** | **Live** observation (NWS, or Open-Meteo outside the US). It draws the sky in the antenna scene, and **real thunderstorms add static crashes** on the low bands | – |
+
+Propagation applies to every station: MW groundwave by day and long-distance skywave at night, VHF line of sight using real antenna heights, and HF via the ionosphere model.
+
 ## 🛠 Antenna Workbench (a real design tool)
 - **Solver:** a thin-wire Method-of-Moments engine using the same physics as NEC-2: EFIE, Galerkin, triangle basis functions, reduced kernel. It handles free space, perfect ground and real ground (reflection-coefficient approximation for currents, Fresnel coefficients for patterns), copper and aluminium conductor loss, and lumped loads. It runs in a Web Worker.
   - Checked against textbook values: half-wave dipole 80 + j44 Ω (thin wire), resonant at 0.486 λ with 73 Ω and 2.09 dBi; quarter-wave monopole over perfect ground 40 + j22 Ω and 5.13 dBi.
