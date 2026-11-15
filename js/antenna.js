@@ -217,6 +217,7 @@ function render() {
     const v = parseFloat(lenIn.value);
     if (!(v > 0.3 && v < 600)) return toast('Enter a wire length in feet first (e.g. 33.0).', 'warn');
     a.length = Math.round(v * 100) / 100; save(); render(); elmer('cut_wire');
+    if (S.helper?.tutorial && (S.gameMode || 'career') === 'career' && a.type === 'dipole' && (a.length < 60 || a.length > 72) && !S.antenna.built) bus.emit('helper-mistake', 'cut-off', a.length);
   } }, '✂ Cut wire');
   const trim = (ft) => () => {
     if (a.built) return toast('Lower the antenna first — you can\'t trim it up in the tree!', 'warn');

@@ -70,6 +70,12 @@ export function elmer(id, force = false) {
 }
 function show(id) {
   const t = TIPS[id];
+  // When the Elmer panel is open, lessons go into its feed instead of a pop-up.
+  if (S.helper?.on !== false && !S.helper?.min && !document.body.classList.contains('ht-view') && document.getElementById('elmer')) {
+    bus.emit('helper-say', `📘 <b>${t[0]}</b> — ${t[1]} <span class="exam-ref">(exam topic ${t[2]})</span>`);
+    bus.emit('tip', id);
+    return;
+  }
   toast(`<div class="elmer"><span class="elmer-ic">🧓</span><div><b>Elmer: ${t[0]}</b><br>${t[1]}<div class="exam-ref">📘 Exam topic ${t[2]}</div></div></div>`, 'elmer', 14000);
   bus.emit('tip', id);
 }
