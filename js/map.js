@@ -138,7 +138,7 @@ export function drawMap() {
     }
     ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
     const [tx, ty] = proj(target.op.lat, target.op.lon, W, H);
-    const label = `${target.call} · ${target.op.qth}${target.op.country && target.op.country !== 'United States' ? ', ' + target.op.country : ''} · ${Math.round(distanceKm(me, target.op)).toLocaleString()} km · ${(target.freq / 1e6).toFixed(3)} ${target.mode}`;
+    const label = `${target.call} · ${target.op.qth}${target.op.country && target.op.country !== 'United States' && target.op.country !== target.op.qth ? ', ' + target.op.country : ''} · ${Math.round(distanceKm(me, target.op)).toLocaleString()} km · ${(target.freq / 1e6).toFixed(3)} ${target.mode}`;
     ctx.font = '12px system-ui, sans-serif';
     const w = ctx.measureText(label).width + 12;
     const lx = Math.min(Math.max(4, tx + 10), W - w - 4), ly = Math.max(18, ty - 10);

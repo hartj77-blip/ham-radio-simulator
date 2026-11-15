@@ -16,6 +16,9 @@ import { initNetUI, net, autoOnline } from './net.js';
 import { initWorkbenchUI } from './workbench.js';
 import { initStoreUI, money, earn } from './store.js';
 import { initMapUI, drawMap } from './map.js';
+import { openStation, applySetup, setGameMode, applyLook, loadSlot } from './setups.js';
+import { initGuide, initExplain, initFinder } from './guide.js';
+import { rig } from './rigs.js';
 import { startRealWorld, RW } from './realworld.js';
 import { initScannerUI } from './services.js';
 import { elmer } from './elmer.js';
@@ -24,7 +27,7 @@ const TABS = [['shack', '🔌 Shack'], ['antenna', '📡 Antenna'], ['workbench'
 
 function header() {
   const st = stateBy(S.op.state);
-  $('#station-id').innerHTML = `${S.call ? `<span class="callsign">${S.call}</span>` : '<span class="muted">SWL</span>'} <span class="badge lic-${S.license || 'none'}">${licName()}</span> <span class="muted small">${st ? st.name : ''} · ${st ? grid(st.lat, st.lon).slice(0, 4) : ''}</span>`;
+  $('#station-id').innerHTML = `${S.call ? `<span class="callsign">${S.call}</span>` : '<span class="muted">SWL</span>'} <span class="badge lic-${S.license || 'none'}">${licName()}</span> <span class="badge mode-badge">${{ free: '🧪 Free play', listener: '🎧 Listener' }[S.gameMode] || '🎓 Career'}</span> <span class="muted small">${st ? st.name : ''} · ${st ? grid(st.lat, st.lon).slice(0, 4) : ''}</span>`;
   const on = net.online ? net.roster.length : null;
   $('#xp').innerHTML = `${on != null ? `<button class="net-badge" id="net-badge" title="Players online">🌐 ${on} on air${net.roster.some((e) => e.tx) ? ' <span class="onair-dot">●</span>' : ''}</button>` : ''}<span class="wallet-mini">₵ ${money()}</span> Lv ${level()} · ${S.xp} XP`;
   const nb = document.getElementById('net-badge');
@@ -57,19 +60,27 @@ function showTab(t) {
 function onboarding() {
   const name = h('input', { value: S.op.name, placeholder: 'e.g. Jim', size: 14 });
   const sel = h('select', {}, ...STATES.map((s) => h('option', { value: s.abbr, selected: s.abbr === S.op.state }, s.name)));
-  const close = modal(h('div', { class: 'onboard' },
+  let close;
+  const finish = (mode) => {
+    S.op.name = name.value.trim(); S.op.state = sel.value; S.started = true; save();
+    audio.init(); close(); header(); solarBanner(); bus.emit('qth'); world.repopulate();
+    if (mode === 'career') { setGameMode('career'); elmer('welcome'); showTab('shack'); }
+    else if (mode === 'listener') { setGameMode('listener'); applySetup('listener', { quiet: true }); toast('🎧 Listener mode: a wideband receiver and a long wire are set up. Use the FIND bar or "What\'s on the air near you".', 'good', 9000); }
+    else { setGameMode('free'); openStation('setups'); }
+    applyLook();
+  };
+  const card = (mode, icon, title, text) => h('button', { class: 'mode-card', onclick: () => finish(mode) }, h('div', { class: 'su-icon' }, icon), h('b', {}, title), h('span', { class: 'small' }, text));
+  close = modal(h('div', { class: 'onboard' },
     h('h1', {}, '📻 Ham Shack Simulator'),
-    h('p', {}, 'Build a real amateur radio station from the wall plug to the antenna, learn what\'s on the license exams along the way, then get on the air and compete in contests.'),
-    h('ol', { class: 'steps' },
-      h('li', {}, h('b', {}, 'Shack:'), ' wire up power, coax, ground, mic and key.'),
-      h('li', {}, h('b', {}, 'Antenna:'), ' cut a wire to length, raise it, check SWR.'),
-      h('li', {}, h('b', {}, 'Radio:'), ' tune the bands — listen to CW, SSB, beacons, the local repeater.'),
-      h('li', {}, h('b', {}, 'License:'), ' pass the Technician exam to transmit and get your callsign.'),
-      h('li', {}, h('b', {}, 'Contests:'), ' run pileups, log accurately, beat your high score.')),
+    h('p', {}, 'A complete radio world in your browser: build and wire a real station, design antennas with an engineering-grade solver, learn the license material, and tune live broadcast, weather, airband and the ham bands — with real players on the air.'),
     h('div', { class: 'row wrap' }, h('label', {}, 'Your first name ', name), h('label', {}, 'Your QTH (state) ', sel)),
-    h('p', { class: 'muted small' }, '🔊 Use headphones. Voice works best in Chrome or Edge (speech recognition). Your progress saves in this browser.'),
-    h('button', { class: 'btn primary big', onclick: () => { S.op.name = name.value.trim(); S.op.state = sel.value; S.started = true; save(); audio.init(); close(); header(); solarBanner(); elmer('welcome'); world.repopulate(); } }, 'Start →'),
-  ), { onClose: () => { S.started = true; save(); audio.init(); } });
+    h('h3', {}, 'How do you want to start?'),
+    h('div', { class: 'mode-grid' },
+      card('career', '🎓', 'Career (recommended)', 'Start as a listener. Wire the shack, build an antenna, earn your license and credits, upgrade your gear. Guided step by step.'),
+      card('free', '🧪', 'Free play / Lab', 'Everything unlocked. Pick a ready-made station (home, apartment, DX tower, portable, VHF…) and go on the air now.'),
+      card('listener', '🎧', 'Just listen', 'No license needed. Scanner + shortwave receiver: broadcast, WWV, airband, NOAA weather and the ham bands.')),
+    h('p', { class: 'muted small' }, '🔊 Use headphones. Voice works best in Chrome or Edge. You can change mode, radio and setup any time from 🎛 Station. Progress saves in this browser.'),
+  ), { onClose: () => { if (!S.started) { S.started = true; save(); } audio.init(); } });
 }
 
 function helpTab(el) {
@@ -85,6 +96,7 @@ function helpTab(el) {
   rate.oninput = () => { S.settings.ttsRate = +rate.value; save(); };
   el.append(h('div', { class: 'help-grid' },
     h('div', { class: 'card' }, h('h3', {}, '🚀 Quick start'),
+      h('p', { class: 'small' }, h('b', {}, 'Fastest way on the air: '), 'press ', h('b', {}, '🎛 Station'), ' (top right) → Quick setups, pick a station, done. Follow the 🎯 goal bar for a guided path, turn on ', h('b', {}, '❓ Explain'), ' and hover anything, and use the ', h('b', {}, 'FIND'), ' bar above the radio to jump to something worth hearing.'),
       h('ol', { class: 'small' },
         h('li', {}, h('b', {}, 'Shack tab: '), 'connect the radio\'s red/black DC leads to + / − on the power supply, run coax from ANT through the SWR meter and tuner to the wall feedthrough, bond GND terminals to the ground bus, plug in mic and paddle, then switch on the supply and the radio.'),
         h('li', {}, h('b', {}, 'Antenna tab: '), 'pick a type and cut the wire (dipole ≈ 468 ÷ MHz feet). Raise it and sweep with the analyzer. Lower it to trim.'),
@@ -117,6 +129,13 @@ function helpTab(el) {
 function init() {
   const nav = $('#tabs');
   for (const [id, label] of TABS) nav.append(h('button', { 'data-tab': id, onclick: () => showTab(id) }, label));
+  const tools = h('div', { class: 'top-tools' },
+    h('button', { class: 'btn small', id: 'station-btn', title: 'Game mode, radio model, one-click setups, saved antennas, appearance', onclick: () => openStation() }, '🎛 Station'),
+    h('button', { class: `btn small ${S.settings.explain ? 'active' : ''}`, id: 'explain-btn', title: 'Hover any control to learn what it does', onclick: (e) => { S.settings.explain = !S.settings.explain; save(); e.currentTarget.classList.toggle('active', S.settings.explain); toast(S.settings.explain ? '❓ Explain mode on — hover over any control.' : 'Explain mode off.', 'info', 2500); } }, '❓ Explain'));
+  $('#topbar').append(tools);
+  initGuide($('#guide-bar'));
+  initExplain();
+  initFinder($('#finder'));
   initShackUI($('#tab-shack'));
   initAntennaUI($('#tab-antenna'));
   initWorkbenchUI($('#tab-workbench'));
@@ -150,7 +169,11 @@ function init() {
   bus.on('goto', showTab);
   bus.on('elmer', (id) => elmer(id));
   bus.on('tune', (n) => tuneBy(n));
-  bus.on('tune-to', (f, m) => { setFreq(f); if (m) setMode(m); showTab('radio'); });
+  bus.on('tune-to', (f, m) => { setFreq(f, { mode: m }); if (m) setMode(m); showTab('radio'); });
+  bus.on('ant-slot', (i) => loadSlot(i));
+  bus.on('rig', () => { applyLook(); header(); });
+  bus.on('explain', () => $('#explain-btn')?.classList.toggle('active', !!S.settings.explain));
+  applyLook();
   bus.on('band', (b) => {
     if (!b) return;
     if (['80m', '160m'].includes(b)) elmer('propagation_day');
