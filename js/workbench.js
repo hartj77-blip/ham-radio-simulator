@@ -146,6 +146,7 @@ async function simulate() {
   try {
     const r = await runSolver({ model: m, freqs: freqs(), patternF: w.fT * 1e6 }, (p) => { const b = $('#wb-prog'); if (b) b.style.width = `${p * 100}%`; });
     result = { ...r, model: m };
+    (S.flags ||= {}).wb = 1; save();
   } catch (e) { toast(`Solver error: ${e.message}`, 'bad'); }
   running = false; render();
 }

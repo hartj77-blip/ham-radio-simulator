@@ -42,6 +42,31 @@ An in-game **Elmer** (mentor) steps in when you hit a situation the exams cover,
 - **Rules:** FCC Part 97 privileges by license class and mode, plus the band-edge check for how much spectrum your signal occupies. Unlicensed players can only transmit into the dummy load.
 - **AI operators:** they call CQ, ragchew, run contests, answer only if they can actually hear you, send partial calls when your signal is weak, correct busted calls, slow down to your CW speed, and honor QRS.
 
+## 🎛 Easy setup, guidance & customization
+- **Three ways to play** (switch any time in 🎛 Station → Game mode):
+  - 🎓 **Career:** learn and build everything, earn your license and credits, buy gear.
+  - 🧪 **Free play / Lab:** everything unlocked, for testing setups and just operating.
+  - 🎧 **Listener:** receive-only and no license needed.
+- **One-click station setups:** classic home HF, apartment/stealth, backyard vertical, POTA/Field Day portable, DX tower, contest super-station, VHF/repeater, handheld and scanner listener. Each wires the shack, cuts and raises the antenna and tunes the radio. In Career mode, a setup lists the gear it still needs.
+- **Radio models with real limits:**
+
+  | Model | Covers |
+  |---|---|
+  | All-mode | HF + 6 m + 2 m |
+  | Compact SDR | HF + 6 m, narrow filters, DSP |
+  | QRP | 10 W portable, no scope |
+  | Contest-grade | quietest receiver |
+  | Handheld | 2 m FM only |
+  | Wideband SDR receiver | receive-only |
+
+  Power, bands, modes, tuner, scope and filters all follow the model.
+- **Guidance:**
+  - **🎯 Goal bar**, with *Show me* jumping to and highlighting the control.
+  - **❓ Explain** mode: hover any control.
+  - **FIND bar:** best band now (from propagation *and* your antenna's SWR), a voice or CW CQ to answer, beacons, the local repeater (offset and tone set), WWV, weather and FM broadcast.
+- **Add-ons:** a 3-way antenna switch with saved antennas (ANT 1/2/3 on the radio), plus all the earlier Hamfest gear.
+- **Pro tools:** Lab readouts on the scope (signal and noise dBm, SNR, path mode, loss, distance, bearing and tuning offset), faceplate themes (graphite, black, silver, retro wood), display colours (green, amber, blue, white), and Radio tab panels you can show or hide.
+
 ## 🌎 The real world around your radio
 The radio is a general-coverage receiver from 0.5 to 470 MHz (it can transmit only in the ham bands). The world it hears is built from live public data. All sources are free, need no API key, and allow browser access (CORS).
 

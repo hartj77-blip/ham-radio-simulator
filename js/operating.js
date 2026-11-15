@@ -14,6 +14,7 @@ import { elmer } from './elmer.js';
 import { net } from './net.js';
 import { distanceKm, bearing } from './propagation.js';
 import { powerLimit } from './store.js';
+import { rig, rigCanTx, rigMaxW } from './rigs.js';
 
 const R = () => S.radio;
 
@@ -61,6 +62,8 @@ function prepare(modeOverride, quiet) {
     if (mode === 'CW' && !rs.key) { toast('Plug the CW paddle into the radio (Shack tab).', 'warn'); return null; }
     if (mode !== 'CW' && !rs.mic) { toast('Plug the microphone into the radio (Shack tab).', 'warn'); return null; }
   }
+  if (!rig().tx.length) { toast(`📡 The ${rig().name} is receive-only. Choose a transceiver in 🎛 Station → Radio model.`, 'warn'); return null; }
+  { const bn = bandOf(txf)?.name; if (bn && !rigCanTx(bn)) { toast(`📻 Your ${rig().name} can't transmit on ${bn} (it covers ${rig().tx.join(', ')}).`, 'warn'); return null; } }
   if (rs.end === 'open') { elmer('no_antenna', true); toast('⚠ Nothing connected to the ANT jack! The rig\'s SWR protection shut down the transmitter.', 'bad'); return null; }
   const via = rs.end === 'dummy' ? 'dummy' : 'rf';
   if (via === 'rf') {
@@ -82,7 +85,7 @@ function prepare(modeOverride, quiet) {
     return null;
   }
   const fb = foldback(swr);
-  const watts = Math.max(0.5, r.power * fb);
+  const watts = Math.max(0.5, Math.min(r.power, rigMaxW(txf) >= 50 ? r.power : rigMaxW(txf)) * fb);
   if (swr > 2.0 && !quiet) {
     toast(`High SWR (${swr > 50 ? '∞' : swr.toFixed(1)}:1) — the rig folded back to ${watts.toFixed(0)} W. Tune the ATU or fix the antenna.`, 'warn');
     elmer('swr_high');
@@ -103,9 +106,18 @@ function trackId(text) {
   }
 }
 
+// Type-ahead: a message sent while transmitting goes out right after (like real contest loggers).
+let pendingTx = null;
+function queueTx(fn, label) {
+  pendingTx = fn;
+  ui.transcript('sys', `⏳ queued: ${label}`, 'sys');
+}
+function runPending() { const fn = pendingTx; pendingTx = null; if (fn) setTimeout(fn, 150); }
+
 function finishTx(p, text, mode) {
   txState.active = false;
   txState.sch = null;
+  runPending();
   trackId(text);
   if (p.via !== 'rf') return;
   const r = R();
@@ -115,7 +127,8 @@ function finishTx(p, text, mode) {
 
 export function sendCW(text) {
   text = String(text).toUpperCase().trim();
-  if (!text || txState.active) return;
+  if (!text) return;
+  if (txState.active) return queueTx(() => sendCW(text), text);
   if (R().mode !== 'CW') { toast('Switch the radio to CW mode to send Morse.', 'warn'); return; }
   const p = prepare('CW');
   if (!p) return;
@@ -131,7 +144,7 @@ export function sendCW(text) {
 }
 
 export function sendVoice(tpl) {
-  if (txState.active) return;
+  if (txState.active) return queueTx(() => sendVoice(tpl), phone(tpl).show);
   if (R().mode === 'CW') { toast('Switch to a voice mode (USB/LSB/FM/AM) for phone.', 'warn'); return; }
   const p = prepare();
   if (!p) return;
@@ -205,9 +218,9 @@ function contestDef() { const c = activeContest(); return c ? CONTESTS[c.def.id]
 export function initOperatingUI(el) {
   root = el;
   render();
-  bus.on('contest', render);
-  bus.on('license', render);
-  bus.on('band', render);
+  bus.on('contest', maybeRender);
+  bus.on('license', maybeRender);
+  bus.on('band', maybeRender);
   document.addEventListener('keydown', onKey, true);
   document.addEventListener('keyup', onKeyUp, true);
   bus.on('qso-complete', (st) => {
@@ -215,8 +228,14 @@ export function initOperatingUI(el) {
   });
 }
 
+let layoutKey = null;
+// Re-render only when the logger layout really changes; never lose what was typed.
+function maybeRender() { const k = `${contestDef()?.id || 'casual'}|${S.license}|${S.call}`; if (k !== layoutKey) render(); }
 function render() {
   if (!root) return;
+  const keep = Object.fromEntries(Object.entries(fields).map(([k, i]) => [k, i.value]));
+  const hadFocus = document.activeElement && document.activeElement.classList.contains('lf') ? document.activeElement.dataset.k : null;
+  layoutKey = `${contestDef()?.id || 'casual'}|${S.license}|${S.call}`;
   root.innerHTML = '';
   const cd = contestDef();
   fields = {};
@@ -276,6 +295,8 @@ function render() {
   );
   renderMacros();
   root.classList.toggle('is-cw', R().mode === 'CW');
+  for (const [k, v] of Object.entries(keep)) if (fields[k] && v) fields[k].value = v;
+  if (hadFocus && fields[hadFocus]) fields[hadFocus].focus();
 }
 
 function focusNext(i) {
@@ -442,7 +463,7 @@ function onKey(e) {
   const tag = (e.target.tagName || '').toLowerCase();
   const typing = tag === 'input' || tag === 'textarea' || tag === 'select';
   if (/^F[1-8]$/.test(e.key)) { e.preventDefault(); fireMacro(+e.key.slice(1)); return; }
-  if (e.key === 'Escape') { e.preventDefault(); if (txState.active && txState.sch) { audio.stopSidetone(); clearTimeout(txState.timer); txState.active = false; } else wipe(); return; }
+  if (e.key === 'Escape') { e.preventDefault(); pendingTx = null; if (txState.active && txState.sch) { audio.stopSidetone(); clearTimeout(txState.timer); txState.active = false; } else wipe(); return; }
   if (typing && e.target.type !== 'range') return;
   if (e.key === ' ' && !e.repeat) { e.preventDefault(); if (!spaceHeld) { spaceHeld = true; pttDown(); } return; }
   if (e.key === ' ') { e.preventDefault(); return; }
