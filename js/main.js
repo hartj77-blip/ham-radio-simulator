@@ -46,7 +46,7 @@ function showTab(t) {
 }
 
 function onboarding() {
-  const name = h('input', { value: S.op.name, placeholder: 'e.g. Alex', size: 14 });
+  const name = h('input', { value: S.op.name, placeholder: 'e.g. Jim', size: 14 });
   const sel = h('select', {}, ...STATES.map((s) => h('option', { value: s.abbr, selected: s.abbr === S.op.state }, s.name)));
   const close = modal(h('div', { class: 'onboard' },
     h('h1', {}, '📻 Ham Shack Simulator'),
