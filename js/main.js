@@ -31,6 +31,7 @@ import { elmer } from './elmer.js';
 import { openSettings, applySettings } from './settings.js';
 import { MISSION, REAL, SIMULATED, SOURCES, REFERENCES } from './data/sources.js';
 import { initFeedback, openFeedback } from './feedback.js';
+import './manualui.js';
 
 // [id, label, icon, group]
 const TABS = [

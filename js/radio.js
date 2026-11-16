@@ -8,6 +8,8 @@ import { rigStatus } from './shack.js';
 import { system, ANT_TYPES } from './antenna.js';
 import { bandNoiseDbm, sUnits, distanceKm, bearing } from './propagation.js';
 import { elmer } from './elmer.js';
+import { decorate as decorateFaceplate, sync as syncFaceplate } from './faceplate.js';
+import { manualButton } from './manualui.js';
 import { ui as opUi, txState } from './operating.js';
 import { net } from './net.js';
 import { owns, maxPower } from './limits.js';
@@ -325,7 +327,7 @@ export function initRadioUI(el) {
   const stepSel = h('select', { class: 'rsel', title: 'Tuning step' }, ...[10, 50, 100, 500, 1000, 5000, 10000].map((s) => h('option', { value: s, selected: s === r.step }, s >= 1000 ? `${s / 1000} kHz` : `${s} Hz`)));
   stepSel.onchange = () => { r.step = +stepSel.value; save(); };
   const freqIn = h('input', { class: 'rsel', placeholder: 'kHz ↵', size: 9, title: 'Type a frequency in kHz and press Enter' });
-  freqIn.onkeydown = (e) => { if (e.key === 'Enter') { const v = parseFloat(freqIn.value); if (v > 1000) { prevFreq = R().freq; setFreq(v * 1000); freqIn.value = ''; freqIn.blur(); } } };
+  freqIn.onkeydown = (e) => { if (e.key === 'Enter') { const v = parseFloat(freqIn.value); if (v >= 100) { prevFreq = R().freq; setFreq(v * 1000); freqIn.value = ''; freqIn.blur(); } } };
 
   const slider = (label, min, max, step, val, fn, fmt = (v) => v) => {
     const out = h('span', { class: 'val' }, fmt(val));
@@ -362,9 +364,9 @@ export function initRadioUI(el) {
   const mvBtn = h('button', { class: `btn small ${S.settings.master ? 'active' : ''}`, id: 'master-btn', title: 'Show every control and the signal chain inside the radio', onclick: () => { S.settings.master = !S.settings.master; save(); mvBtn.classList.toggle('active', S.settings.master); renderMaster(); } }, 'Master view');
   const rg0 = rig();
   el.append(h('div', { class: 'rig-bar row spread' },
-    h('div', { class: 'rig-badge' }, h('span', { class: 'rig-maker' }, (rg0.maker || 'Generic').toUpperCase()), h('span', { class: 'rig-model' }, rg0.name.replace(rg0.maker || '', '').trim()), h('span', { class: 'tiny muted' }, ` ${rg0.cls}`)),
-    h('div', { class: 'row' }, h('button', { class: 'btn small', onclick: () => bus.emit('goto', 'rigbuilder') }, 'Equipment'), mvBtn)));
-  el.append(h('div', { class: `rig look-${rg0.look || 'classic'}` },
+    h('div', { class: 'rig-badge' }, h('span', { class: 'rig-maker' }, rg0.code || ''), h('span', { class: 'rig-model' }, rg0.name), h('span', { class: 'tiny muted' }, ` ${rg0.cls}`)),
+    h('div', { class: 'row' }, manualButton(S.rig || 'allmode'), h('button', { class: 'btn small', onclick: () => bus.emit('goto', 'rigbuilder') }, 'Equipment'), mvBtn)));
+  const rigEl = h('div', { class: `rig look-${rg0.look || 'classic'}` },
     h('div', { class: 'rig-top' },
       h('div', { class: 'rig-left' }, meterCv, h('div', { class: 'muted tiny center' }, 'click meter: S / PO / SWR')),
       lcd,
@@ -379,20 +381,22 @@ export function initRadioUI(el) {
         slider('AF GAIN', 0, 1, 0.01, r.af, (v) => { r.af = v; }, (v) => Math.round(v * 100)),
         slider('SQL', 0, 1, 0.01, r.sql, (v) => { r.sql = v; }, (v) => Math.round(v * 100)),
         h('div', { class: 'row' }, attBtn, ritBtn, ritSl), owns('dsp') || rig().dsp ? h('button', { class: `rbtn ${r.nr ? 'active' : ''}`, onclick: (e) => { r.nr = !r.nr; e.target.classList.toggle('active', r.nr); save(); } }, 'NR (DSP)') : null),
-      h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'TRANSMIT'),
+      h('div', { class: 'ctl-group tx-group', hidden: !rg0.tx.length }, h('div', { class: 'ctl-title' }, 'TRANSMIT'),
         slider('POWER', 5, maxPower(), 5, Math.min(r.power, maxPower()), (v) => { r.power = v; if (v <= 25) elmer('power_min'); }, (v) => `${v} W`),
         h('div', { class: 'row' }, atuBtn, tuneBtn),
         h('div', { class: 'fm-only' }, h('label', { class: 'knobrow' }, h('span', {}, 'OFFSET'), rptSel), h('label', { class: 'knobrow' }, h('span', {}, 'CTCSS'), toneSel)),
         rotator, mtuner, h('div', { id: 'antswitch' })),
     ),
-  ));
+  );
+  el.append(rigEl);
+  decorateFaceplate(rigEl, { atuTune, update: updateDisplay });
   const mv = h('div', { id: 'master-view', class: 'master-view' });
   el.append(mv); mountMaster(mv);
   fillFilters();
   updateDisplay();
   if (radioListeners) return;
   radioListeners = true;
-  bus.on('rig', () => { const r2 = R(); if (!rig().modes.includes(r2.mode)) r2.mode = rig().modes[0]; if (r2.power > maxPower()) r2.power = maxPower(); initRadioUI(panel); applyMode(); world.setFreq(r2.freq); });
+  bus.on('rig', () => { const r2 = R(); if (!rig().modes.includes(r2.mode)) r2.mode = rig().modes[0]; if (r2.power > maxPower()) r2.power = maxPower(); if (!(r2.power > 0) && maxPower() > 0) r2.power = Math.min(100, maxPower()); initRadioUI(panel); applyMode(); world.setFreq(r2.freq); });
   bus.on('antenna', updateDisplay);
   bus.on('shack', updateDisplay);
   bus.on('license', updateDisplay);
@@ -507,12 +511,12 @@ export function updateDisplay() {
   const swr = rs.powered ? effectiveSwr(r.freq) : 0;
   lcd.className = 'lcd-panel' + (rs.powered ? ' on' : '');
   lcd.innerHTML = rs.powered ? `
-    <div class="lcd-row small"><span>VFO-A${r.split ? ' <b class="hl">SPLIT</b>' : ''}</span>${r.preamp ? `<span class="hl">P.AMP${r.preamp}</span>` : ''}${r.nb ? '<span class="hl">NB</span>' : ''}${r.notch && rig().notch ? '<span class="hl">NOTCH</span>' : ''}<span>${band ? band.name : serviceOf(r.freq)?.label || 'GEN'}</span><span class="${r.atuOn ? 'hl' : 'dim'}">ATU${r.atuOn && r.atuTunedFreq && Math.abs(r.freq - r.atuTunedFreq) < Math.max(8000, r.freq * 0.005) ? '✓' : ''}</span><span class="${r.rfAtt ? 'hl' : 'dim'}">ATT</span><span>${r.power}W</span><span id="lcd-tx" class="dim">TX</span></div>
+    <div class="lcd-row small"><span>VFO-A${r.split ? ' <b class="hl">SPLIT</b>' : ''}</span>${r.preamp ? `<span class="hl">P.AMP${r.preamp}</span>` : ''}${r.nb ? '<span class="hl">NB</span>' : ''}${r.notch && rig().notch ? '<span class="hl">NOTCH</span>' : ''}<span>${band ? band.name : serviceOf(r.freq)?.label || 'GEN'}</span>${rig().atu ? `<span class="${r.atuOn ? 'hl' : 'dim'}">ATU${r.atuOn && r.atuTunedFreq && Math.abs(r.freq - r.atuTunedFreq) < Math.max(8000, r.freq * 0.005) ? '✓' : ''}</span>` : ''}<span class="${r.rfAtt ? 'hl' : 'dim'}">ATT</span>${rig().tx.length ? `<span>${r.power}W</span><span id="lcd-tx" class="dim">TX</span>` : '<span>RX ONLY</span>'}</div>
     <div class="lcd-freq">${fmtFreq(r.freq)}<span class="unit">MHz</span></div>
     <div class="lcd-row"><span class="mode">${r.mode}</span><span>FIL ${r.filter[r.mode] >= 1000 ? (r.filter[r.mode] / 1000) + 'k' : r.filter[r.mode]}</span>
       <span class="${r.ritOn ? 'hl' : 'dim'}">RIT ${r.rit >= 0 ? '+' : ''}${(r.rit / 1000).toFixed(2)}</span>
       ${r.mode === 'FM' ? `<span>${r.rptOffset ? (r.rptOffset < 0 ? '−' : '+') + 'SHIFT' : 'SIMP'}</span><span>${r.toneHz ? 'T ' + r.toneHz.toFixed(1) : ''}</span>` : ''}
-      <span>SWR ${swr > 50 ? '∞' : swr.toFixed(1)}</span></div>
+      ${rig().tx.length ? `<span>SWR ${swr > 50 ? '∞' : swr.toFixed(1)}</span>` : ''}</div>
     <div class="lcd-row small"><span>${rs.end === 'antenna' ? (S.antenna.built ? ANT_TYPES[S.antenna.type].label.split('(')[0] : 'NO ANTENNA UP') : rs.end === 'dummy' ? 'DUMMY LOAD' : 'ANT: OPEN'}</span>
       ${r.mode === 'FM' && r.rptOffset ? `<span>TX ${(txf / 1e6).toFixed(3)}</span>` : ''}</div>`
     : `<div class="lcd-off">${rs.issues[0] || 'OFF'}<br><small>(see the Station wiring page)</small></div>`;
@@ -531,6 +535,7 @@ export function updateDisplay() {
   $('#atu-btn', panel)?.toggleAttribute('hidden', !rg.atu);
   panel.querySelector('.warnb')?.toggleAttribute('hidden', !rg.atu);
   panel.classList.toggle('no-scope', !rg.scope);
+  syncFaceplate(panel.querySelector('.rig'));
   const asw = $('#antswitch', panel);
   if (asw) {
     asw.innerHTML = '';

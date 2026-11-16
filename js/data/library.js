@@ -43,8 +43,8 @@ export const LIBRARY = [
 <h4>Fusing</h4>
 <p>A fuse protects the <em>wire</em>, not the radio. Place it as close to the source (battery or supply terminals) as practical, and rate it below the ampacity of the conductor but above the radio's peak draw. A 30 A fuse on 10 AWG feeding a 22 A radio is typical. The DC cable supplied with most transceivers already carries fuses in <b>both</b> the positive and negative leads. The negative fuse matters in vehicles: if the negative return opens, return current can try to flow through the coaxial shield, CAT cables or other chassis paths, which are not designed to carry 20 A. Never replace a blown fuse with a higher rating; find out why it blew.</p>
 
-<h4>Connectors: Anderson Powerpole</h4>
-<p>The de facto amateur DC connector is the Anderson <b>Powerpole</b>, a genderless housing that accepts 15 A, 30 A or 45 A contacts (the same housing fits all three). The 30 A contact suits 12 to 16 AWG wire; the 45 A contact suits 10 to 14 AWG. Crimp with the correct ratcheting tool and pull-test each contact. ARES and RACES groups standardized the orientation so that any two stations are compatible: viewed from the mating face with the tongues on top, <b>red is on the right</b> ("red right, tongue top"). A distribution block (for example, a fused Powerpole strip) lets one supply feed several radios with individual fuses.</p>
+<h4>Connectors: genderless high-current DC connectors</h4>
+<p>The de facto amateur DC connector is a <b>genderless, colour-coded snap-together housing</b> that accepts 15 A, 30 A or 45 A contacts (the same housing fits all three). The 30 A contact suits 12 to 16 AWG wire; the 45 A contact suits 10 to 14 AWG. Crimp with the correct ratcheting tool and pull-test each contact. ARES and RACES groups standardized the orientation so that any two stations are compatible: viewed from the mating face with the tongues on top, <b>red is on the right</b> ("red right, tongue top"). A distribution block (for example, a fused Powerpole strip) lets one supply feed several radios with individual fuses.</p>
 
 <h4>Polarity</h4>
 <p>Reversing polarity is the most common way to damage a radio. Most transceivers contain a reverse-polarity diode across the input that conducts heavily and blows the fuse, but you should not rely on it. Use red for positive and black for negative throughout, label everything, and check with a meter before first connection. If you use zip cord, the ribbed or marked conductor is conventionally negative; verify it.</p>
@@ -59,7 +59,7 @@ export const LIBRARY = [
 <ul><li>Design for 13.8 V nominal and about 22 A peak for a 100 W rig.</li>
 <li>Keep round-trip voltage drop under about 0.5 V; 10 AWG for typical desk runs.</li>
 <li>Fuse both leads, close to the source, sized to protect the wire.</li>
-<li>Use Powerpole connectors in the standard "red right, tongue top" orientation.</li>
+<li>Use these connectors in the standard "red right, tongue top" orientation.</li>
 <li>Check polarity with a meter before connecting a radio.</li></ul>
 `,
     related: ['power-supplies', 'grounding', 'rf-path', 'formulas'],

@@ -60,7 +60,7 @@ export function openSettings(tab = 'audio') {
       row('Handheld PTT on the left', chk0('leftHand', applySettings), 'For left-handed operators.'),
       row('Reduce motion', chk0('reduceMotion', applySettings), 'Fewer animations.'),
       row('Faceplate', select('face', [['auto', 'Match radio model'], ['graphite', 'Graphite'], ['black', 'Black'], ['silver', 'Silver'], ['retro', 'Retro wood & cream']], applyLook)),
-      row('Display colour', select('lcd', [['green', 'Green'], ['amber', 'Amber'], ['blue', 'Ice blue'], ['white', 'Paper white']], applyLook)),
+      row('Display colour', select('lcd', [['auto', 'Match radio model'], ['green', 'Green'], ['amber', 'Amber'], ['blue', 'Ice blue'], ['white', 'Paper white']], applyLook)),
       row('Radio page panels', h('button', { class: 'btn small', onclick: () => { close(); openStation('look'); } }, 'Choose panels…')));
     if (t === 'play') {
       pane.append(
