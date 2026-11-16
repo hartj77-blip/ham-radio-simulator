@@ -158,14 +158,40 @@ The handheld works like a real dual-band HT:
 
 On iPad and other touch screens, buttons and sliders get bigger automatically, the tabs scroll sideways, and the radio layout adapts to the screen.
 
-## 🏡 Antenna builder (Antenna tab)
-You hang your antenna in your own yard:
+## 🏡 Antenna builder (Antenna tab): wherever you live or operate
+First pick the place you're putting the antenna:
 
-- **Your yard:** set the trees, house and mast (height and position) and the width of your lot.
-- **What it works out:** the real height at the feed point including sag, how much rope you need, how far an inverted-V's legs droop (which changes its resonance in the solver), the slope of an end-fed, the footprint of radials, and whether the wire fits at all. It warns you about ends hanging low.
-- **Hang it here:** applies the result to your antenna.
-- **Bill of materials:** a full list with typical prices, including wire, balun or unun, insulators, rope, pulleys, throw line, coax, connectors, weatherproofing and arrestor.
-- **Build steps:** a six-step checklist from measuring the wire to sweeping with the analyzer.
+| Place | Highlights |
+|---|---|
+| 🏡 Suburban yard | |
+| 🚜 Rural acreage | |
+| 🏙 City rooftop | |
+| 🏢 Apartment balcony | set your floor |
+| 🏘 HOA / condo | attic dipole or flagpole stealth antennas |
+| 🌲 Park (POTA) | |
+| ⛰ Summit (SOTA) | |
+| 🚙 Vehicle | loaded mobile whip |
+| ⛵ Sailboat | |
+| 🏖 Beach / island trip | |
+
+Each place sets:
+
+- **Supports:** trees, buildings, balcony railings, roof masts, fibreglass poles, the car mount or the boat's mast. You can edit their height and position.
+- **Space:** how much room you have.
+- **Ground:** for example, salt water at sea or poor ground on a rooftop.
+- **Antennas:** which antennas are practical there.
+- **Rules and tips:** local and international ones, such as leases and the OTARD rule, HOA covenants and PRB-1, POTA/SOTA etiquette, reciprocal licensing abroad (CEPT, IARP), and marine licensing.
+
+The place also changes the simulation:
+
+- **Noise:** man-made noise relative to a typical suburb, from about −10 dB on a summit to +10 dB on an apartment balcony (based on the ITU-R P.372 noise categories).
+- **Losses:** extra loss from concrete and steel, indoor attics, or a shortened mobile whip (about −8 dB on 40 m).
+- **Ground:** the place's ground type is used for the antenna.
+- **VHF range:** the height of your balcony, roof or mast sets your radio horizon.
+
+From your supports, the builder works out the real feed-point height including sag, how much rope you need, how far an inverted-V's legs droop (which changes its resonance in the solver), the slope of an end-fed, the radials you need (on the ground, elevated, the car body as counterpoise, or the sea itself), and whether the wire fits at all. When a wire is too long it tells you how to deal with it: let the ends hang down, or bend them along the rafters in an attic.
+
+You also get a **bill of materials** with typical prices and a six-step **build checklist**.
 
 ## ⚙ Settings
 Press ⚙ in the top bar:
