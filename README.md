@@ -219,5 +219,8 @@ The professional design steps, using your real site:
 
 **✅ Apply to my antenna** sets the length and height in one click.
 
+## Updates & offline play
+A small service worker (`sw.js`) always fetches the newest files first. A new version is picked up on the next load, and an open tab tells you when an update is available. If you're offline, it falls back to the last copy it saved, so the game still starts. **⚙ Settings → Data** shows the version you're running and has **Check for update** and **Reload** buttons.
+
 ## Disclaimer
 The exam questions are original practice questions on the official topics. They are not the NCVEC pool, so study the current official pool before a real exam. Callsigns are randomly generated.
