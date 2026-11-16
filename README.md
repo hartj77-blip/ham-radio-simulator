@@ -15,7 +15,7 @@ Then open https://hartj77-blip.github.io/ham-radio-simulator/ Use headphones. Ch
 | Tab | What you do |
 |---|---|
 | 🔌 **Shack** | Wire the station by clicking connectors: the DC leads to the power supply (polarity matters, and reversing it blows the fuse), coax from the radio's ANT jack through the SWR meter and tuner to the lightning arrestor or the dummy load, ground bonding, mic and paddle. |
-| 📡 **Antenna** | Pick a dipole, inverted-V, quarter-wave vertical with radials, end-fed half-wave or 3-element Yagi. Cut the wire to length, set the height or radials and the coax, and raise it. Sweep it with the antenna analyzer, which shows the SWR curve plus R and X, then lower it and trim. |
+| 📡 **Antenna** | Pick a dipole, inverted-V, quarter-wave vertical with radials, end-fed half-wave or 3-element Yagi. Set the length with **−/+ 1 in / 1 ft** buttons or press **🎯 Auto-size**, set the height, radials and coax, and raise it. Sweep it with the antenna analyzer, which shows the SWR curve plus R and X and tells you how many inches to lengthen or shorten. The **🧭 Site & design planner** below it does the professional design work (see below). |
 | 📻 **Radio** | An HF/6 m/2 m transceiver with a VFO knob, band and mode buttons, IF filters, AGC, RIT, ATT, squelch, an internal ATU, a manual tuner, a rotator, an S/PO/SWR meter and a live waterfall. Listen to CW and SSB QSOs, NCDXF beacons, and the local 2 m repeater, which needs the correct offset and CTCSS tone. |
 | 🏆 **Contests** | Field Day, a DX contest in the style of CQ WW, and a State QSO Party. You can run pileups or search and pounce. The logger works like N1MM, with F-key macros and ESM (Enter Sends Message). After the contest, your log is checked for busted calls, NIL contacts and wrong exchanges. |
 | 🪪 **License** | Study cards and practice exams for Technician, General and Extra, plus a "VE exam" that grants your license and callsign. |
@@ -47,7 +47,7 @@ An in-game **Elmer** (mentor) steps in when you hit a situation the exams cover,
   - 🎓 **Career:** learn and build everything, earn your license and credits, buy gear.
   - 🧪 **Free play / Lab:** everything unlocked, for testing setups and just operating.
   - 🎧 **Listener:** receive-only and no license needed.
-- **One-click station setups:** classic home HF, apartment/stealth, backyard vertical, POTA/Field Day portable, DX tower, contest super-station, VHF/repeater, handheld and scanner listener. Each wires the shack, cuts and raises the antenna and tunes the radio. In Career mode, a setup lists the gear it still needs.
+- **One-click station setups:** classic home HF, apartment/stealth, backyard vertical, POTA/Field Day portable, DX tower, contest super-station, VHF/repeater, handheld and scanner listener. Each wires the shack, sizes and raises the antenna and tunes the radio. In Career mode, a setup lists the gear it still needs.
 - **Radio models with real limits:**
 
   | Model | Covers |
@@ -72,7 +72,7 @@ In Career mode Elmer (ham slang for a mentor) walks you through everything, one 
 
 - **Each step** says exactly what to do. **▶ Show me** jumps to the right tab and highlights the exact connector or button, **❓ Why?** explains the reason, and **🛠 How?** gives detailed instructions.
 - **He notices when you get it right**, detecting each step automatically and praising you with the reason it matters.
-- **He catches mistakes kindly:** reversed polarity, a wrong connector, a blown fuse, a blocked transmission (with the reason), or a wire cut to the wrong length.
+- **He catches mistakes kindly:** reversed polarity, a wrong connector, a blown fuse, a blocked transmission (with the reason), or a wire length that doesn't fit the band.
 - **Ask Elmer anything** ("why do I need a ground?", "how do I use a repeater?"). A built-in knowledge base of 30+ topics answers *why* or *how* depending on your question, with Show me links.
 - **One voice:** the exam-topic lessons appear in his panel instead of pop-ups. You can minimize him, turn step-by-step off, restart the tutorial or hide him (⚙).
 
@@ -108,7 +108,22 @@ Propagation applies to every station: MW groundwave by day and long-distance sky
 - **Matching:** every L-network solution, with real component values, efficiency at a given coil Q and the matched bandwidth. Also single-stub matches, quarter-wave transformers and unun/balun suggestions.
 - **Accuracy:** expect about 1–3% on resonance in the model. A real site adds a few % (insulation, trees, house wiring). Measure, then trim.
 
-The game's own antennas use the same solver, with a 3% insulated-wire correction.
+The game's own antennas use the same solver, including your chosen ground type, wire gauge and a 3% insulated-wire correction.
+
+## 🧭 Site & design planner (Antenna tab)
+The professional design steps, using your real site:
+
+- **🎯 Exact length.** The planner solves the antenna you actually have with the Method-of-Moments engine: its height, ground type, wire gauge and insulation. It uses a root-finder on the feed-point reactance and takes about five solves. It shows the result next to the 468/f rule of thumb, so you can see why real antennas differ from the formula.
+- **📏 Height for your goal.** Pick NVIS (local), regional or DX. The planner gives the height that puts the main lobe at the right take-off angle, h = λ / (4 sin θ). Your supports cap that height, and the planner tells you how many dB you give up.
+- **🏔 Real terrain.**
+  - It reads the real ground elevation at your location, from Open-Meteo (Copernicus 90 m DEM) worldwide, with USGS 3DEP as a fallback in the US.
+  - It takes elevation profiles out to 16 km toward Europe, Asia, South America, Africa and the Pacific.
+  - It computes the slope and the horizon angle in each direction. Ground that falls away tilts your lobe lower, which helps DX, and the height recommendation is corrected for it. This is a simplified version of HFTA, the terrain-analysis tool contesters use.
+- **📈 Elevation pattern.** It plots the elevation pattern over your ground type, using Fresnel reflection coefficients for real soil, from salt water to sand. Your height is drawn against the ideal height.
+- **📡 VHF.** It works out your height above average terrain (HAAT, 3–16 km) and the radio horizon.
+- **📍 Your real location.** This is optional. Your browser's location is used only for the elevation lookup and propagation, and is kept in your browser.
+
+**✅ Apply to my antenna** sets the length and height in one click.
 
 ## Disclaimer
 The exam questions are original practice questions on the official topics. They are not the NCVEC pool, so study the current official pool before a real exam. Callsigns are randomly generated.

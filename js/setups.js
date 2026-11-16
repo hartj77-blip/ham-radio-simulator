@@ -46,7 +46,7 @@ export function applySetup(id, { quiet } = {}) {
   S.rig = p.rig;
   wireStation();
   const a = S.antenna;
-  Object.assign(a, { type: p.ant.type, length: cutFor(p.ant.type, p.ant.band), height: p.ant.height ?? a.height, feed: p.ant.feed, feedLen: p.ant.feedLen, radials: p.ant.radials ?? a.radials, axis: p.ant.axis ?? a.axis, heading: p.ant.heading ?? a.heading, built: true, spliced: 0 });
+  Object.assign(a, { type: p.ant.type, length: cutFor(p.ant.type, p.ant.band), height: p.ant.height ?? a.height, feed: p.ant.feed, feedLen: p.ant.feedLen, radials: p.ant.radials ?? a.radials, axis: p.ant.axis ?? a.axis, heading: p.ant.heading ?? a.heading, built: true, spliced: 0, sizedBy: 'setup' });
   const r = S.radio;
   r.atuOn = !!RIGS[p.rig].atu; r.atuTunedFreq = null; r.mtBypass = true;
   r.power = Math.min(p.power || 100, maxPower());

@@ -12,7 +12,7 @@ export const defaultState = () => ({
   xp: 0,
   shack: { conn: [], psuOn: false, rigOn: false, fuseBlown: false, autoWired: false },
   antenna: {
-    type: 'dipole', length: 0, height: 30, axis: 0, heading: 45, radials: 4,
+    type: 'dipole', length: 0, height: 30, ground: 'average', wire: 'AWG 14 copper', insulated: true, axis: 0, heading: 45, radials: 4,
     feed: 'RG-8X', feedLen: 75, built: false, spliced: 0,
   },
   radio: {

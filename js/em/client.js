@@ -1,9 +1,12 @@
 // Runs MoM jobs in a module Web Worker (falls back to the main thread if workers are unavailable).
-let worker = null, seq = 0;
+// Two lanes: 'bg' for long background sweeps (the game antenna's band tables) and 'fast' for
+// interactive work (auto-size), so a click never waits behind a full multi-band sweep.
+const workers = {}, seq = { n: 0 };
 const pending = new Map();
 
-function getWorker() {
-  if (worker !== null) return worker;
+function getWorker(lane = 'bg') {
+  if (workers[lane] !== undefined) return workers[lane];
+  let worker;
   try {
     worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
     worker.onmessage = (e) => {
@@ -13,15 +16,15 @@ function getWorker() {
       pending.delete(e.data.id);
       e.data.error ? p.reject(new Error(e.data.error)) : p.resolve(e.data);
     };
-    worker.onerror = (e) => { for (const p of pending.values()) p.reject(new Error(e.message || 'worker error')); pending.clear(); worker = false; };
+    worker.onerror = (e) => { for (const p of pending.values()) p.reject(new Error(e.message || 'worker error')); pending.clear(); workers[lane] = false; };
   } catch (e) { worker = false; }
-  return worker;
+  return (workers[lane] = worker);
 }
 
-export async function runSolver(job, onProgress) {
-  const w = getWorker();
+export async function runSolver(job, onProgress, lane = 'bg') {
+  const w = getWorker(lane);
   if (w) {
-    const id = ++seq;
+    const id = ++seq.n;
     return new Promise((resolve, reject) => { pending.set(id, { resolve, reject, onProgress }); w.postMessage({ id, ...job }); });
   }
   // fallback
