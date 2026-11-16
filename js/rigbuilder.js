@@ -169,7 +169,7 @@ function render() {
     const sel = h('select', { 'data-slot': cat }, ...Object.entries(G.items).map(([id, it]) => h('option', { value: id, selected: d[cat] === id }, `${it.name}${it.usd ? ` — $${it.usd}` : ''}`)));
     sel.onchange = () => { d[cat] = sel.value; save(); render(); };
     const it = G.items[d[cat]];
-    return h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, G.label)), sel, h('div', { class: 'tiny muted' }, it.desc));
+    return h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, G.label), h('button', { class: 'link small', onclick: () => bus.emit('open-manual', d.rig, cat) }, 'Guide')), sel, h('div', { class: 'tiny muted' }, it.desc));
   };
   const r = A.r;
   const m240 = h('input', { type: 'checkbox', checked: !!d.mains240 }); m240.onchange = () => { d.mains240 = m240.checked; save(); render(); };
@@ -181,7 +181,7 @@ function render() {
       drawDesk(A, d)),
     h('div', { class: 'rb-grid' },
       h('div', { class: 'card rb-slots' },
-        h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, 'Radio')), rigSel, h('div', { class: 'tiny muted' }, r.blurb)),
+        h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, 'Radio'), h('button', { class: 'link small', onclick: () => bus.emit('open-manual', d.rig) }, 'Operating guide')), rigSel, h('div', { class: 'tiny muted' }, r.blurb)),
         ...SLOTS.map(slot),
         h('label', { class: 'inline small' }, m240, ' My shack has a 240 V outlet (for big amplifiers)')),
       h('div', { class: 'card rb-spec' },

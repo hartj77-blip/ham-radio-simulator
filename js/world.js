@@ -15,7 +15,7 @@ let NEXT_ID = 1;
 export const activeContest = () => (world.contest && !['30m', '17m', '12m', '2m'].includes(world.band) ? world.contest : null);
 export const player = () => { if (S.op.lat != null) return { lat: S.op.lat, lon: S.op.lon }; const st = stateBy(S.op.state) || stateBy('KS'); return { lat: st.lat, lon: st.lon }; };
 
-const RIGS = ['IC-7300', 'FT-991A', 'K3', 'TS-590', 'FTDX10', 'IC-7610', 'FTDX101', 'K4', 'IC-705', 'FT-891', 'TS-890', 'KX3'];
+const RIGS = ['SDR TCVR', 'HOMEBREW', '100W TCVR', 'OLD TUBE RIG', 'KIT RIG', 'QRP RIG', 'MOBILE RIG', 'SDR BASE', 'DUAL RX TCVR', 'VINTAGE RIG'];
 const ANTS = ['DIPOLE AT 40 FT', 'VERTICAL', '3 EL YAGI', 'END FED', 'INV V', 'HEX BEAM', 'LOOP', 'G5RV'];
 const WX = ['SUNNY', 'CLOUDY', 'RAIN', 'SNOW', 'WINDY', 'CLEAR'];
 const greet = (st) => { const h = (simDate().getUTCHours() + st.op.lon / 15 + 24) % 24; return h < 12 ? 'GM' : h < 18 ? 'GA' : 'GE'; };
