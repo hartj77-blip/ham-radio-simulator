@@ -18,10 +18,12 @@ python3 -m http.server 8000
 
 ## What you can do
 
-- **Learn:** follow the course, read the reference library (35 articles with diagrams covering stations, antennas, measurement, receiving, propagation and operating), and study for the Technician, General and Extra exams with practice tests.
+- **Learn:** follow the course, read the reference library (52 articles covering stations, antennas, measurement, RF analysis, receiving, propagation, operating, and etiquette and protocols), follow the free self-study path for RF communications, and study for the Technician, General and Extra exams with practice tests.
 - **Build:** wire a station connector by connector (polarity, RF path, grounding), design antennas with a Method-of-Moments solver and an SWR/impedance analyzer, place them at a realistic site (yard, rooftop, balcony, park, vehicle and others), assess terrain, and assemble equipment from real-world specifications.
 - **Design in one click:** "Find my location & design the best antenna" chooses the band, antenna type, height, orientation and feedline for your goal and site, solves the exact length and explains each decision.
 - **Equipment replicas:** 20 radios (base, touchscreen SDR, flagship, mobile, portable, handheld and PC-software receivers) and their accessories, under generic names, each with a faceplate laid out like its real-world class and fully working keys and knobs. Every model has an original operating guide, opened from the radio.
+- **Measure (RF tools):** an FFT spectrum analyzer with waterfall, markers, averaging, max hold and five window functions. Nine test signals each teach one technique: resolution bandwidth, weak signals in noise, AM and FM sidebands, two-tone IMD, harmonics, key clicks and SSB. It can also analyse real audio from the microphone/line input, another browser tab (for example a web SDR) or a live feed. Calculators cover levels (W, dBm, µV, S-units), SWR, return loss and mismatch, feedline loss with SWR, electrical length, wattmeter accuracy, coupler directivity and mismatch uncertainty, test-equipment attenuation, EIRP/ERP, line-of-sight link budget, radio horizon and Fresnel zone, receiver sensitivity, FCC RF exposure (MPE), antenna lengths, LC resonance, Q and bandwidth, occupied bandwidth by mode and FFT resolution.
+- **Listen (Live feeds):** a checked directory of real web SDR receivers, amateur, air-band, scanner and weather audio, broadcast streams and live propagation spot networks; a search of the Radio Browser stream directory; and your own saved feeds (audio streams play in a built-in player that can send its audio to the spectrum analyzer; receiver pages open in a new tab). Feeds can be exported and imported.
 - **Operate:** a transceiver with VFO, filters, AGC, RIT, tuner, meters and waterfall; a propagation map with live ionosphere layers and click-to-analyse paths; a logger with contest practice; a handheld view for phones; and an optional shared band where other users can hear you over the internet.
 - **Give feedback:** the question-mark button opens a form that creates a GitHub issue.
 
@@ -35,6 +37,7 @@ python3 -m http.server 8000
 - Nearby AM/FM broadcast stations and their live audio streams, played from the broadcasters.
 - Airport locations and published radio frequencies (OurAirports).
 - UTC time, and your device location only if you allow it.
+- Everything on the Live feeds page (web SDRs, scanner/air-band/weather audio, broadcast streams, spot networks), and any real audio you choose to analyse.
 - Other users shown online are real people; their voices travel over the internet (WebRTC), never by radio.
 - Band edges and license privileges (FCC Part 97), beacon schedules, repeater conventions and typical equipment specifications from published sources.
 
@@ -44,6 +47,7 @@ python3 -m http.server 8000
 - Propagation is a simplified model driven by the live data above; it is not a forecast.
 - Antenna impedance, SWR and patterns come from a numerical model; real installations differ by a few percent.
 - Receiver noise, static, filtering and synthesized voices.
+- The spectrum analyzer's test signals.
 - NOAA Weather Radio and airport ATIS read real forecast and observation text in a synthesized voice; aircraft and ambulance traffic is invented. WWV is an imitation of the NIST format.
 - Licenses, callsigns, QSL confirmations and awards earned here have no legal or official standing. Real licenses are issued by the FCC after a Volunteer Examiner session; practice questions are original and cover the official topics, not the official pool.
 
@@ -67,6 +71,11 @@ Services and libraries used while the app runs:
 | [GitHub Issues](https://github.com/hartj77-blip/ham-radio-simulator/issues) | Feedback submissions | Requires a GitHub account |
 
 Published references the simulation is based on:
+
+- [47 CFR §1.1310](https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-1/subpart-I/section-1.1310) and FCC OET Bulletin 65 Supplement B: RF exposure limits and duty factors.
+- IARU Region 1 Technical Recommendation R.1: S-meter calibration. ITU-R P.372: radio noise levels.
+- Times Microwave LMR datasheets: coax attenuation.
+- [IARU Ethics and Operating Procedures for the Radio Amateur](https://www.iaru-r1.org/on-the-air/eop/) and ARRL net/radiogram practice: etiquette and protocol articles.
 
 - [FCC 47 CFR Part 97](https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-97): amateur bands, privileges, identification and power rules.
 - [NCVEC question pools](https://www.ncvec.org): topics covered by the practice exams.
