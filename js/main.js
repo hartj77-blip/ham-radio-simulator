@@ -5,7 +5,8 @@ import { icon } from './icons.js';
 import { stateBy } from './data/world.js';
 import { audio } from './audio.js';
 import { world } from './world.js';
-import { SUN, bandConditions, simDate, grid } from './propagation.js';
+import { SUN, bandConditions, simDate, grid, mufAt } from './propagation.js';
+import { startIono, IONO, blackout } from './iono.js';
 import { initShackUI, shackTick } from './shack.js';
 import { initAntennaUI } from './antenna.js';
 import { initRadioUI, rxUpdate, drawFrame, tuneBy, setFreq, setMode, updateDisplay } from './radio.js';
@@ -28,6 +29,8 @@ import { startRealWorld, RW } from './realworld.js';
 import { initScannerUI } from './services.js';
 import { elmer } from './elmer.js';
 import { openSettings, applySettings } from './settings.js';
+import { MISSION, REAL, SIMULATED, SOURCES, REFERENCES } from './data/sources.js';
+import { initFeedback, openFeedback } from './feedback.js';
 
 // [id, label, icon, group]
 const TABS = [
@@ -52,7 +55,10 @@ function solarBanner() {
   const st = stateBy(S.op.state);
   const bc = bandConditions(st);
   const cls = (c) => `bc-${c.toLowerCase()}`;
-  $('#solar').innerHTML = `${SUN.live ? '<span class="live-dot" title="Live data from the NOAA Space Weather Prediction Center">LIVE</span>' : ''}<span class="sb-item" title="Solar Flux Index (10.7 cm)"><span class="sb-k">SFI</span><b>${SUN.sfi}</b></span><span class="sb-item" title="A-index (daily geomagnetic)"><span class="sb-k">A</span><b>${SUN.a}</b></span><span class="sb-item" title="K-index (3-hour geomagnetic)"><span class="sb-k">K</span><b class="${SUN.k >= 5 ? 'bad' : SUN.k >= 4 ? 'warn' : ''}">${SUN.k}</b></span>`
+  const mq = st ? mufAt(st) : null;
+  const ionoHtml = mq && mq.live ? `<span class="sb-item" title="Live from NOAA GloTEC (${IONO.time?.slice(11, 16)} UTC): MUF for a 3000 km hop and critical frequency over your location"><span class="sb-k">MUF</span><b>${mq.muf.toFixed(1)}</b><span class="sb-k">foF2</span><b>${mq.foF2.toFixed(1)}</b></span>` : '';
+  const bo = blackout() ? `<span class="sb-item" title="NOAA: ${IONO.xray} / ${IONO.proton}"><b class="bad">HF absorption event</b></span>` : '';
+  $('#solar').innerHTML = `${SUN.live ? '<span class="live-dot" title="Live data from the NOAA Space Weather Prediction Center">LIVE</span>' : ''}<span class="sb-item" title="Solar Flux Index (10.7 cm)"><span class="sb-k">SFI</span><b>${SUN.sfi}</b></span><span class="sb-item" title="A-index (daily geomagnetic)"><span class="sb-k">A</span><b>${SUN.a}</b></span><span class="sb-item" title="K-index (3-hour geomagnetic)"><span class="sb-k">K</span><b class="${SUN.k >= 5 ? 'bad' : SUN.k >= 4 ? 'warn' : ''}">${SUN.k}</b></span>${ionoHtml}${bo}`
     + `<span class="bc-group">${bc.map((b) => `<span class="bc" title="${b.name}: day ${b.day} / night ${b.night}"><span class="sb-k">${b.name.replace('-', '–')}</span><b class="${cls(b.now)}">${b.now}</b></span>`).join('')}`
     + (SUN.es ? '<span class="bc" title="Sporadic-E is likely today on 6 m and 10 m"><span class="sb-k">Es</span><b class="bc-good">Likely</b></span>' : '') + '</span>';
 }
@@ -86,7 +92,7 @@ function showTab(t) {
 }
 
 function helpTab(el) {
-  el.append(h('div', { class: 'page-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Support'), h('h1', {}, 'Help'), h('p', { class: 'lead' }, 'How the simulator is organised, keyboard shortcuts and operating abbreviations.'))),
+  el.append(h('div', { class: 'page-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Support'), h('h1', {}, 'Help'), h('p', { class: 'lead' }, 'How the simulator is organised, what is real and what is simulated, sources and credits, keyboard shortcuts and operating abbreviations.'))),
     h('div', { class: 'help-grid' },
       h('div', { class: 'card' }, h('h3', {}, 'Modes'),
         ...Object.entries(MODES).map(([, x]) => h('div', { class: 'help-mode' }, h('span', { class: 'hm-icon', html: icon(x.icon) }), h('div', {}, h('b', {}, x.label), h('p', { class: 'small muted' }, x.desc)))),
@@ -104,13 +110,29 @@ function helpTab(el) {
       h('div', { class: 'card' }, h('h3', {}, 'Abbreviations'),
         h('p', { class: 'small' }, 'CQ calling any station · DE from · K over · KN over, named station only · SK end of contact · 73 best regards · RST signal report · 5NN 599 · QTH location · QSL confirm · QRZ? who is calling · QRL? is this frequency in use · QSY change frequency · QRS send slower · AGN again · TU thank you · ES and · FB fine business · WX weather · UR your'),
         h('button', { class: 'btn small', onclick: () => bus.emit('library', 'q-codes') }, 'Full Q-code reference')),
+      h('div', { class: 'card' }, h('h3', {}, 'Report an issue'),
+        h('p', { class: 'small muted' }, 'Found a bug, have an idea or a question? Use the question-mark button in the bottom corner of any page, or open the form here.'),
+        h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => openFeedback('bug') }, 'Report a problem'), h('button', { class: 'btn', onclick: () => openFeedback('idea') }, 'Suggest an improvement'))),
       h('div', { class: 'card' }, h('h3', {}, 'Settings'),
         h('p', { class: 'small muted' }, 'Audio, display size and touch layout, mode and guidance, PTT key and CW speed, time and space weather, location, and backup/restore of your data.'),
         h('button', { class: 'btn primary', onclick: () => openSettings() }, 'Open settings')),
       h('div', { class: 'card' }, h('h3', {}, 'About the models'),
-        h('p', { class: 'small' }, 'A sun-driven ionosphere model (MUF, D-layer absorption, skip, K-index and aurora); antenna impedance from a Method-of-Moments solver with height, ground, radials and coax loss including mismatch; a receiver chain with IF filtering, AGC, band noise and static; FCC Part 97 privileges by license class; and simulated operators who answer only when they can actually hear you.'),
-        h('p', { class: 'small muted' }, 'Exam questions are original practice questions covering the official topics — study the current NCVEC pool before a real VE session. Callsigns are randomly generated.')),
-    ));
+        h('p', { class: 'small' }, 'Propagation: a simplified HF model (MUF, D-layer absorption, skip, multi-hop, K-index and auroral loss) driven by live NOAA ionosphere data when available. Antennas: a Method-of-Moments solver with height, ground, radials and coax loss including mismatch. Receiver: IF filtering, AGC, band noise and static. Rules: FCC Part 97 privileges by license class.'),
+        h('button', { class: 'btn small', onclick: () => document.getElementById('about-real')?.scrollIntoView({ behavior: 'smooth' }) }, 'What is real and what is simulated')),
+    ),
+    h('div', { class: 'card about-card', id: 'about-mission' }, h('h3', {}, 'Purpose'), h('p', {}, MISSION)),
+    h('div', { class: 'card about-card', id: 'about-real' }, h('h3', {}, 'What is real and what is simulated'),
+      h('div', { class: 'real-sim' },
+        h('div', {}, h('h4', { class: 'ok' }, 'Real (live or published data)'), h('dl', { class: 'design-why' }, ...REAL.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]))),
+        h('div', {}, h('h4', { class: 'warn' }, 'Simulated'), h('dl', { class: 'design-why' }, ...SIMULATED.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]))))),
+    h('div', { class: 'card about-card', id: 'about-sources' }, h('h3', {}, 'Sources and credits'),
+      h('p', { class: 'small muted' }, 'Outside services and libraries the app uses while running. Only your approximate location is sent to the weather, terrain and broadcast services; your name and callsign are never sent.'),
+      h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl small' }, h('thead', {}, h('tr', {}, h('th', {}, 'Source'), h('th', {}, 'Used for'), h('th', {}, 'Terms'))),
+        h('tbody', {}, ...SOURCES.map(([n, u, l, t]) => h('tr', {}, h('td', {}, h('a', { href: l, target: '_blank', rel: 'noopener' }, n)), h('td', {}, u), h('td', { class: 'muted' }, t)))))),
+      h('h4', {}, 'Published references'),
+      h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl small' }, h('thead', {}, h('tr', {}, h('th', {}, 'Reference'), h('th', {}, 'Used for'))),
+        h('tbody', {}, ...REFERENCES.map(([n, u, l]) => h('tr', {}, h('td', {}, l ? h('a', { href: l, target: '_blank', rel: 'noopener' }, n) : n), h('td', {}, u))))))));
+
 }
 
 function buildChrome() {
@@ -139,6 +161,7 @@ function init() {
   migrateMode();
   buildChrome();
   initModes();
+  initFeedback();
   initTraining($('#coach'));
   initExplain();
   initFinder($('#finder'));
@@ -154,6 +177,8 @@ function init() {
   initWorldView($('#world-panel'));
   initScannerUI($('#scanner-panel'));
   startRealWorld();
+  startIono();
+  bus.on('iono', () => { solarBanner(); world.bandCache = {}; });
   bus.on('realworld', (k) => { if (k === 'sun') { solarBanner(); world.bandCache = {}; } if (k === 'wx') clock(); });
   initOperatingUI($('#operating'));
   initNetUI($('#net-panel'));
