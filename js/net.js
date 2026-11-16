@@ -365,7 +365,7 @@ function render() {
   rosterBox = h('div', { class: 'roster' });
   root.append(h('div', { class: 'card net', id: 'net-card' },
     h('div', { class: 'row spread' }, h('h3', {}, 'Who\'s on the air (real players)'), h('div', { class: 'row' }, net.hosting ? h('span', { class: 'badge', title: 'Your browser is currently keeping the player list' }, 'lobby host') : null, statusEl)),
-    h('p', { class: 'small muted' }, 'A shared, real-time ham band. On the air, you hear any player who transmits where you\'re tuned — just like a real receiver — if the band is open between your QTHs. Mistuned voices sound garbled; the wrong sideband sounds like Donald Duck. Tune to anyone\'s frequency (or press Join) and hold SPACE to talk. Everyone shares the same AI stations, space weather and UTC clock. Others see your callsign, state and frequency while you\'re on the air.'),
+    h('p', { class: 'small muted' }, 'A shared, simulated band with other people using the app. You hear anyone who transmits where you\'re tuned — just like a real receiver — if the band is open between your QTHs. Mistuned voices sound garbled; the wrong sideband sounds like Donald Duck. Tune to anyone\'s frequency (or press Join) and hold SPACE to talk. Everyone shares the same simulated stations, space weather and UTC clock. Voices travel over the internet (WebRTC), never over the air. Others see your callsign, state and frequency while you\'re on the air.'),
     net.online
       ? h('div', {},
         rosterBox,

@@ -50,8 +50,8 @@ export function openSettings(tab = 'audio') {
       row('Static crashes (QRN)', check('qrn'), 'Lightning crashes on the low bands (worse during real nearby storms).'),
       row('CW sidetone volume', range('sideVol', 0, 0.6, 0.02, (v) => `${Math.round(v / 0.6 * 100)}%`)),
       row('CW sidetone pitch', range('pitch', 300, 1000, 10, (v) => `${v} Hz`, reapplyMode, S.radio), 'Also your CW receive pitch (zero-beat).'),
-      row('AI voice speed', range('ttsRate', 0.7, 1.5, 0.05, (v) => `${v.toFixed(2)}×`)),
-      row('Speak AI stations aloud', check('tts'), 'Off = subtitles only (quieter for public places).'),
+      row('Synthesized voice speed', range('ttsRate', 0.7, 1.5, 0.05, (v) => `${v.toFixed(2)}×`)),
+      row('Speak simulated stations aloud', check('tts'), 'Off = subtitles only (quieter for public places).'),
       row('Subtitles', check('subtitles'), 'Show what you hear as text in the transcript.'));
     if (t === 'display') pane.append(
       row('Text & control size', range('uiScale', 0.8, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`, applySettings), 'Make everything bigger on a tablet or TV.'),
@@ -69,12 +69,12 @@ export function openSettings(tab = 'audio') {
         row('Contextual notes', check('notes'), 'Short explanations of exam topics as situations come up (Training and Simulation).'),
         row('Explain mode', chk0('explain', () => bus.emit('explain')), 'Hover or long-press any control to learn what it does.'),
         row('Lab readouts on the scope', chk0('lab'), 'Signal and noise dBm, SNR, path mode, distance.'),
-        row('AI operator patience', select('patience', [[1, 'Realistic'], [1.6, 'Patient (more repeats)'], [0.7, 'Contest-fast']]), 'How long AI stations wait and how often they repeat for you.'),
+        row('Simulated operator patience', select('patience', [[1, 'Realistic'], [1.6, 'Patient (more repeats)'], [0.7, 'Contest-fast']]), 'How long simulated stations wait and how often they repeat for you.'),
         row('Sandbox license', h('div', { class: 'row' }, ...['T', 'G', 'E'].map((l) => h('button', { class: 'btn small', onclick: () => sandboxLicense(l) }, `Grant ${licName(l)}`))), 'Skip the exams (for jumping straight into contests).'));
     }
     if (t === 'op') pane.append(
       row('Push-to-talk key', select('pttKey', [[' ', 'Space'], ['Control', 'Ctrl'], ['`', '` (backtick)'], ['Insert', 'Insert']]), 'Hold to transmit on voice modes.'),
-      row('My CW speed', range('myWpm', 10, 40, 1, (v) => `${v} wpm`), 'AI stations reply at about your speed.'),
+      row('My CW speed', range('myWpm', 10, 40, 1, (v) => `${v} wpm`), 'Simulated stations reply at about your speed.'),
       row('ESM (Enter Sends Message)', check('esm'), 'Contest-logger style: Enter does the next logical thing.'),
       row('CW decoder', check('decoder'), 'Show decoded Morse text (a crutch — try copying by ear!).'),
       row('Go on the air automatically', chk0('autoOnline'), 'Rejoin the shared band with real players at start-up.'),

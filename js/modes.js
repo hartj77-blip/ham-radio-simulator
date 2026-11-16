@@ -183,9 +183,10 @@ export function welcome(onDone) {
   close = modal(h('div', { class: 'welcome' },
     h('div', { class: 'eyebrow' }, 'Amateur radio training & station simulation'),
     h('h1', {}, 'Ham Radio Simulator'),
-    h('p', { class: 'lead' }, 'Build a complete amateur radio station in your browser — wiring, antenna design and measurement, receiving and operating — backed by a real ionospheric propagation model and a Method-of-Moments antenna solver.'),
+    h('p', { class: 'lead' }, 'Build a complete amateur radio station in your browser — wiring, antenna design and measurement, receiving and operating — using a propagation model driven by live NOAA ionosphere data and a Method-of-Moments antenna solver.'),
     h('div', { class: 'row welcome-fields' }, h('label', { class: 'fc-field' }, h('span', {}, 'Name'), name), h('label', { class: 'fc-field' }, h('span', {}, 'Location (state)'), sel)),
     h('div', { class: 'mode-grid' }, card('training'), card('simulation'), card('free')),
+    h('div', { class: 'callout welcome-safe' }, 'Nothing here transmits a real radio signal. Practise and experiment freely without interfering with licensed operators. Live data (space weather, ionosphere, weather, broadcast stations) is real; the radio traffic and stations are simulated.'),
     h('p', { class: 'tiny muted' }, 'Headphones recommended. Voice recognition works best in Chrome or Edge. You can change mode at any time from the mode selector at the top of the screen. Progress is saved in this browser.')),
   { wide: true, onClose: () => { if (!S.started) { S.started = true; S.mode ||= 'training'; save(); setAppMode(S.mode, { quiet: true }); } audio.init(); } });
 }
