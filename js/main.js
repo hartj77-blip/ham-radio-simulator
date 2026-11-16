@@ -29,6 +29,7 @@ import { startRealWorld, RW } from './realworld.js';
 import { initScannerUI } from './services.js';
 import { elmer } from './elmer.js';
 import { openSettings, applySettings } from './settings.js';
+import { MISSION, REAL, SIMULATED, SOURCES, REFERENCES } from './data/sources.js';
 import { initFeedback, openFeedback } from './feedback.js';
 
 // [id, label, icon, group]
@@ -91,7 +92,7 @@ function showTab(t) {
 }
 
 function helpTab(el) {
-  el.append(h('div', { class: 'page-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Support'), h('h1', {}, 'Help'), h('p', { class: 'lead' }, 'How the simulator is organised, keyboard shortcuts and operating abbreviations.'))),
+  el.append(h('div', { class: 'page-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Support'), h('h1', {}, 'Help'), h('p', { class: 'lead' }, 'How the simulator is organised, what is real and what is simulated, sources and credits, keyboard shortcuts and operating abbreviations.'))),
     h('div', { class: 'help-grid' },
       h('div', { class: 'card' }, h('h3', {}, 'Modes'),
         ...Object.entries(MODES).map(([, x]) => h('div', { class: 'help-mode' }, h('span', { class: 'hm-icon', html: icon(x.icon) }), h('div', {}, h('b', {}, x.label), h('p', { class: 'small muted' }, x.desc)))),
@@ -116,9 +117,22 @@ function helpTab(el) {
         h('p', { class: 'small muted' }, 'Audio, display size and touch layout, mode and guidance, PTT key and CW speed, time and space weather, location, and backup/restore of your data.'),
         h('button', { class: 'btn primary', onclick: () => openSettings() }, 'Open settings')),
       h('div', { class: 'card' }, h('h3', {}, 'About the models'),
-        h('p', { class: 'small' }, 'Live ionosphere from NOAA SWPC: measured foF2 and layer height (GloTEC, every 10 minutes) set the MUF along every path, and D-RAP absorption is applied during solar flares and proton events. A sun-driven model fills in when live data is unavailable or time warp is on (MUF, D-layer absorption, skip, K-index and aurora); antenna impedance from a Method-of-Moments solver with height, ground, radials and coax loss including mismatch; a receiver chain with IF filtering, AGC, band noise and static; FCC Part 97 privileges by license class; and simulated operators who answer only when they can actually hear you.'),
-        h('p', { class: 'small muted' }, 'Exam questions are original practice questions covering the official topics — study the current NCVEC pool before a real VE session. Callsigns are randomly generated.')),
-    ));
+        h('p', { class: 'small' }, 'Propagation: a simplified HF model (MUF, D-layer absorption, skip, multi-hop, K-index and auroral loss) driven by live NOAA ionosphere data when available. Antennas: a Method-of-Moments solver with height, ground, radials and coax loss including mismatch. Receiver: IF filtering, AGC, band noise and static. Rules: FCC Part 97 privileges by license class.'),
+        h('button', { class: 'btn small', onclick: () => document.getElementById('about-real')?.scrollIntoView({ behavior: 'smooth' }) }, 'What is real and what is simulated')),
+    ),
+    h('div', { class: 'card about-card', id: 'about-mission' }, h('h3', {}, 'Purpose'), h('p', {}, MISSION)),
+    h('div', { class: 'card about-card', id: 'about-real' }, h('h3', {}, 'What is real and what is simulated'),
+      h('div', { class: 'real-sim' },
+        h('div', {}, h('h4', { class: 'ok' }, 'Real (live or published data)'), h('dl', { class: 'design-why' }, ...REAL.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]))),
+        h('div', {}, h('h4', { class: 'warn' }, 'Simulated'), h('dl', { class: 'design-why' }, ...SIMULATED.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]))))),
+    h('div', { class: 'card about-card', id: 'about-sources' }, h('h3', {}, 'Sources and credits'),
+      h('p', { class: 'small muted' }, 'Outside services and libraries the app uses while running. Only your approximate location is sent to the weather, terrain and broadcast services; your name and callsign are never sent.'),
+      h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl small' }, h('thead', {}, h('tr', {}, h('th', {}, 'Source'), h('th', {}, 'Used for'), h('th', {}, 'Terms'))),
+        h('tbody', {}, ...SOURCES.map(([n, u, l, t]) => h('tr', {}, h('td', {}, h('a', { href: l, target: '_blank', rel: 'noopener' }, n)), h('td', {}, u), h('td', { class: 'muted' }, t)))))),
+      h('h4', {}, 'Published references'),
+      h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl small' }, h('thead', {}, h('tr', {}, h('th', {}, 'Reference'), h('th', {}, 'Used for'))),
+        h('tbody', {}, ...REFERENCES.map(([n, u, l]) => h('tr', {}, h('td', {}, l ? h('a', { href: l, target: '_blank', rel: 'noopener' }, n) : n), h('td', {}, u))))))));
+
 }
 
 function buildChrome() {

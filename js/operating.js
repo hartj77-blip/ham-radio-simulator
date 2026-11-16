@@ -191,7 +191,7 @@ export async function pttUp() {
   const known = world.stations.filter((s) => Math.abs(s.freq - R().freq) < 3000).map((s) => s.call);
   const text = raw ? normalizeSpeech(raw, known) : '';
   if (raw) ui.transcript('You', `${text}`, 'tx', pttP.via, `heard: "${raw}"`);
-  else if (!voice.recogSupported) ui.transcript('sys', 'Your browser has no speech recognition (try Chrome or Edge). AI stations can\'t understand live voice — use the macro buttons, or talk to real players via Online.', 'sys');
+  else if (!voice.recogSupported) ui.transcript('sys', 'Your browser has no speech recognition (try Chrome or Edge). Simulated stations can\'t understand live voice — use the macro buttons, or talk to real players via Online.', 'sys');
   finishTx(pttP, text, 'PHONE');
 }
 
@@ -292,7 +292,7 @@ function render() {
           h('span', { class: 'muted tiny' }, 'Enter = ESM · Ctrl+Enter = log · Esc = wipe/stop · Space in call field = next field')),
         h('div', { class: 'cw-box' }, h('div', { class: 'row' }, cwIn, h('label', { class: 'knobrow inline' }, h('span', {}, 'KEYER'), wpm, wpmV))),
         h('div', { class: 'ptt-box' }, pttBtn, h('div', { class: 'muted tiny' },
-          voice.recogSupported ? 'Speech recognition ON: say callsigns with phonetics ("Kilo Delta Nine…"). AI stations will answer.' : 'No speech recognition in this browser — macro buttons speak for you.')),
+          voice.recogSupported ? 'Speech recognition ON: say callsigns with phonetics ("Kilo Delta Nine…"). Simulated stations will answer.' : 'No speech recognition in this browser — macro buttons speak for you.')),
       ),
       h('div', { class: 'card rxlog' },
         h('div', { class: 'row spread' }, h('h3', {}, 'What you hear'), h('div', { class: 'row' }, h('label', { class: 'inline small' }, subChk, ' subtitles'), h('label', { class: 'inline small' }, decChk, ' CW decoder'))),
