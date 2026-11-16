@@ -1,5 +1,5 @@
 // Operating position: logger, macros, CW keyboard, push-to-talk, and the TX path.
-import { S, save, addXp } from './state.js';
+import { S, save } from './state.js';
 import { h, $, $$, clamp, toast, bus, now, wattsToDbm } from './util.js';
 import { checkTx, bandOf } from './data/bandplan.js';
 import { CONTESTS } from './data/contests.js';
@@ -13,7 +13,7 @@ import { voice, normalizeSpeech } from './voice.js';
 import { elmer } from './elmer.js';
 import { net } from './net.js';
 import { distanceKm, bearing } from './propagation.js';
-import { powerLimit , maxPower } from './store.js';
+import { powerLimit , maxPower } from './limits.js';
 import { siteEffects } from './yard.js';
 import { rig, rigCanTx, rigMaxW , gearOf } from './rigs.js';
 
@@ -56,22 +56,22 @@ let lastId = Date.now(), lastIdWarn = 0, firstTxSinceId = 0;
 // Validate a transmission. Returns {txf, watts, swr, dbm, via} or null.
 function prepare(modeOverride, quiet) {
   const r = R(), rs = rigStatus();
-  if (!rs.powered) { toast('The radio is off. Finish the setup in the Shack tab.', 'warn'); return null; }
+  if (!rs.powered) { toast('The radio is off. Finish the wiring on the Station wiring page.', 'warn'); return null; }
   const mode = modeOverride || r.mode;
   const txf = r.split && r.vfoB ? r.vfoB : r.mode === 'FM' ? r.freq + r.rptOffset : r.freq;
   if (!quiet) {
-    if (mode === 'CW' && !rs.key) { toast('Plug the CW paddle into the radio (Shack tab).', 'warn'); return null; }
-    if (mode !== 'CW' && !rs.mic) { toast('Plug the microphone into the radio (Shack tab).', 'warn'); return null; }
+    if (mode === 'CW' && !rs.key) { toast('Plug the CW paddle into the radio (Station wiring page).', 'warn'); return null; }
+    if (mode !== 'CW' && !rs.mic) { toast('Plug the microphone into the radio (Station wiring page).', 'warn'); return null; }
   }
-  if (!rig().tx.length) { toast(`📡 The ${rig().name} is receive-only. Choose a transceiver in 🎛 Station → Radio model.`, 'warn'); return null; }
-  { const bn = bandOf(txf)?.name; if (bn && !rigCanTx(bn)) { toast(`📻 Your ${rig().name} can't transmit on ${bn} (it covers ${rig().tx.join(', ')}).`, 'warn'); return null; } }
-  if (rs.end === 'open') { elmer('no_antenna', true); toast('⚠ Nothing connected to the ANT jack! The rig\'s SWR protection shut down the transmitter.', 'bad'); return null; }
+  if (!rig().tx.length) { toast(`The ${rig().name} is receive-only. Choose a transceiver in Station → Radio model.`, 'warn'); return null; }
+  { const bn = bandOf(txf)?.name; if (bn && !rigCanTx(bn)) { toast(`Your ${rig().name} can't transmit on ${bn} (it covers ${rig().tx.join(', ')}).`, 'warn'); return null; } }
+  if (rs.end === 'open') { elmer('no_antenna', true); toast('Nothing connected to the ANT jack! The rig\'s SWR protection shut down the transmitter.', 'bad'); return null; }
   const via = rs.end === 'dummy' ? 'dummy' : 'rf';
   if (via === 'rf') {
     const chk = checkTx(S.license, txf, mode);
     if (!chk.ok) {
       S.stats.violations++; save();
-      toast(`🚫 <b>Transmission blocked.</b> ${chk.reason}${chk.code === 'nolicense' ? '<br>Tip: you CAN transmit into the dummy load to practice.' : ''}`, 'bad', 9000);
+      toast(`<b>Transmission blocked.</b> ${chk.reason}${chk.code === 'nolicense' ? '<br>Tip: you CAN transmit into the dummy load to practice.' : ''}`, 'bad', 9000);
       if (chk.code === 'edge') elmer('band_edge'); else if (chk.code !== 'nolicense') elmer('privileges');
       if (chk.code === 'privilege' && S.license === 'T') elmer('tech_hf');
       bus.emit('helper-mistake', 'tx-blocked', chk.reason);
@@ -79,10 +79,10 @@ function prepare(modeOverride, quiet) {
     }
   }
   const swr = effectiveSwr(txf);
-  if (via === 'rf' && !S.antenna.built) { elmer('no_antenna', true); toast('The feedline goes outside but there\'s no antenna on it! Build one in the Antenna tab.', 'bad'); return null; }
+  if (via === 'rf' && !S.antenna.built) { elmer('no_antenna', true); toast('The feedline goes outside but there\'s no antenna on it! Build one on the Antenna page.', 'bad'); return null; }
   if (via === 'rf' && S.license && r.power > powerLimit(S.license, txf)) {
     S.stats.violations++; save();
-    toast(`🚫 <b>Transmission blocked.</b> ${r.power} W exceeds the ${powerLimit(S.license, txf)} W PEP limit for ${S.license === 'T' ? 'Technicians on HF' : 'this band (30 m)'}. Turn the power down.`, 'bad', 9000);
+    toast(`<b>Transmission blocked.</b> ${r.power} W exceeds the ${powerLimit(S.license, txf)} W PEP limit for ${S.license === 'T' ? 'Technicians on HF' : 'this band (30 m)'}. Turn the power down.`, 'bad', 9000);
     elmer('power_min');
     return null;
   }
@@ -96,7 +96,7 @@ function prepare(modeOverride, quiet) {
   // SSB/AM talk power: a better mic, speech compression, and mic gain (too low = weak, too high = ALC splatter)
   const mg = r.micGain ?? 0.5;
   const talk = mode !== 'CW' && mode !== 'FM' ? (gearOf('mic').talk || 0) + (r.comp ? 2.5 : 0) + (mg < 0.3 ? -4 * (0.3 - mg) / 0.3 : 0) - (mg > 0.85 ? 2 : 0) : 0;
-  if (mode !== 'CW' && mode !== 'FM' && mg > 0.85 && !quiet) toast('🔴 ALC overdriven: mic gain too high — your signal is splattering (wide and distorted). Back it off.', 'warn', 5000);
+  if (mode !== 'CW' && mode !== 'FM' && mg > 0.85 && !quiet) toast('ALC overdriven: mic gain too high — your signal is splattering (wide and distorted). Back it off.', 'warn', 5000);
   const dbm = via === 'dummy' ? -200 : wattsToDbm(watts) + 10 * Math.log10(1 - g * g) + talk - siteEffects(txf / 1e6).lossDb;
   return { txf, watts, swr, dbm, via, mode };
 }
@@ -107,7 +107,7 @@ function trackId(text) {
   if (!firstTxSinceId) firstTxSinceId = t;
   if (t - Math.min(lastId, firstTxSinceId) > 10 * 60 * 1000 && t - lastIdWarn > 10 * 60 * 1000 && rigStatus().end === 'antenna') {
     lastIdWarn = t;
-    toast('⚠ You haven\'t sent your callsign in over 10 minutes. FCC §97.119 requires an ID every 10 minutes and at the end of a contact.', 'warn', 9000);
+    toast('You haven\'t sent your callsign in over 10 minutes. FCC §97.119 requires an ID every 10 minutes and at the end of a contact.', 'warn', 9000);
     elmer('id_rule', true);
   }
 }
@@ -116,7 +116,7 @@ function trackId(text) {
 let pendingTx = null;
 function queueTx(fn, label) {
   pendingTx = fn;
-  ui.transcript('sys', `⏳ queued: ${label}`, 'sys');
+  ui.transcript('sys', `queued: ${label}`, 'sys');
 }
 function runPending() { const fn = pendingTx; pendingTx = null; if (fn) setTimeout(fn, 150); }
 
@@ -203,7 +203,7 @@ export let runMode = false;
 export const ui = {
   transcript(who, text, kind, via, note) {
     if (!transcriptBox) return;
-    const line = h('div', { class: `tl ${kind}` }, h('span', { class: 'who' }, who === 'sys' ? '🧓' : who), ' ', h('span', { class: 'txt' }, text),
+    const line = h('div', { class: `tl ${kind}` }, h('span', { class: 'who' }, who === 'sys' ? '' : who), ' ', h('span', { class: 'txt' }, text),
       via === 'dummy' ? h('span', { class: 'tag' }, ' (into dummy load)') : null, note ? h('div', { class: 'note' }, note) : null);
     transcriptBox.append(line);
     while (transcriptBox.children.length > 80) transcriptBox.firstChild.remove();
@@ -266,7 +266,7 @@ function render() {
   const wpm = h('input', { type: 'range', min: 5, max: 40, value: S.settings.myWpm });
   const wpmV = h('span', { class: 'val' }, `${S.settings.myWpm} wpm`);
   wpm.oninput = () => { S.settings.myWpm = +wpm.value; wpmV.textContent = `${wpm.value} wpm`; save(); };
-  pttBtn = h('button', { class: 'ptt' }, h('div', {}, '🎙 PTT'), h('div', { class: 'ptt-sub' }, 'hold SPACE or click & hold'));
+  pttBtn = h('button', { class: 'ptt' }, h('div', {}, 'PTT'), h('div', { class: 'ptt-sub' }, 'hold SPACE or click & hold'));
   pttBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); pttDown(); });
   pttBtn.addEventListener('pointerup', () => pttUp());
   pttBtn.addEventListener('pointerleave', () => { if (txState.ptt) pttUp(); });
@@ -282,12 +282,12 @@ function render() {
     contestBar,
     h('div', { class: 'op-grid' },
       h('div', { class: 'card logger' },
-        h('div', { class: 'row spread' }, h('h3', {}, cd ? `🏆 ${cd.name} logger` : '📒 Logger'),
+        h('div', { class: 'row spread' }, h('h3', {}, cd ? `${cd.name} logger` : 'Logger'),
           h('div', { class: 'row' }, runBtn, spBtn, h('label', { class: 'inline small', title: 'Enter Sends Message (N1MM-style)' }, esmChk, ' ESM'))),
         row, info,
         macroBox,
         h('div', { class: 'row' },
-          h('button', { class: 'btn primary', onclick: logQso, title: 'Ctrl+Enter' }, '✔ Log QSO'),
+          h('button', { class: 'btn primary', onclick: logQso, title: 'Ctrl+Enter' }, '✓ Log QSO'),
           h('button', { class: 'btn', onclick: wipe, title: 'Esc' }, 'Wipe'),
           h('span', { class: 'muted tiny' }, 'Enter = ESM · Ctrl+Enter = log · Esc = wipe/stop · Space in call field = next field')),
         h('div', { class: 'cw-box' }, h('div', { class: 'row' }, cwIn, h('label', { class: 'knobrow inline' }, h('span', {}, 'KEYER'), wpm, wpmV))),
@@ -295,7 +295,7 @@ function render() {
           voice.recogSupported ? 'Speech recognition ON: say callsigns with phonetics ("Kilo Delta Nine…"). AI stations will answer.' : 'No speech recognition in this browser — macro buttons speak for you.')),
       ),
       h('div', { class: 'card rxlog' },
-        h('div', { class: 'row spread' }, h('h3', {}, '📜 What you hear'), h('div', { class: 'row' }, h('label', { class: 'inline small' }, subChk, ' subtitles'), h('label', { class: 'inline small' }, decChk, ' CW decoder'))),
+        h('div', { class: 'row spread' }, h('h3', {}, 'What you hear'), h('div', { class: 'row' }, h('label', { class: 'inline small' }, subChk, ' subtitles'), h('label', { class: 'inline small' }, decChk, ' CW decoder'))),
         decoderBox, transcriptBox),
     ),
   );
@@ -421,7 +421,7 @@ function onCallInput() {
   const band = bandOf(R().freq)?.name;
   const prev = S.log.filter((q) => q.call === c);
   const dupe = activeContest() && prev.some((q) => q.contest === activeContest().id && q.band === band && q.mode === modeName());
-  if (dupe) parts.push('⚠ DUPE in this contest!');
+  if (dupe) parts.push('DUPE in this contest!');
   else if (prev.length) parts.push(`worked before ×${prev.length}`);
   info.textContent = parts.join('  ·  ') || ' ';
   info.classList.toggle('dupe', !!dupe);
@@ -453,10 +453,10 @@ export function logQso() {
     if (q.status === 'confirmed') {
       const newDx = q.truth?.country && !S.log.slice(0, -1).some((x) => x.status === 'confirmed' && x.truth?.country === q.truth.country);
       const newSt = q.truth?.state && !S.log.slice(0, -1).some((x) => x.status === 'confirmed' && x.truth?.state === q.truth.state);
-      addXp(20 + (newDx ? 30 : 0) + (newSt ? 15 : 0), 'QSO');
-      toast(`✅ QSO with ${c} logged & <b>confirmed</b>.${newDx ? ` New country: ${q.truth.country}!` : ''}${newSt ? ` New state: ${q.truth.state}!` : ''}`, 'good');
+      
+      toast(`QSO with ${c} logged & <b>confirmed</b>.${newDx ? ` New country: ${q.truth.country}!` : ''}${newSt ? ` New state: ${q.truth.state}!` : ''}`, 'good');
     } else if (q.status === 'partial') toast(`Logged ${c} — but the QSO wasn't completed (they never got your report/73). It won't confirm.`, 'warn');
-    else toast(`Logged ${c}. ⚠ No matching station heard you — this would be "Not In Log" (check the call).`, 'warn');
+    else toast(`Logged ${c}. No matching station heard you — this would be "Not In Log" (check the call).`, 'warn');
   } else if (q.dupe) toast(`${c} is a dupe — logged, but scores zero.`, 'warn');
   wipe();
 }

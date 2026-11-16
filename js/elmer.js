@@ -1,10 +1,10 @@
-// "Elmer" = a ham radio mentor. Contextual lessons that pop up as you play,
-// each tied to a topic you'll see on the license exams.
-import { S, save, addXp } from './state.js';
+// Contextual notes that appear as you operate, each tied to a license-exam topic.
+// Training: shown in the guide panel. Simulation: a brief notice. Free Play: suppressed.
+import { S, save } from './state.js';
 import { toast, bus } from './util.js';
 
 export const TIPS = {
-  welcome: ['Welcome to the shack!', 'You start as a <b>shortwave listener (SWL)</b>. Anyone may listen — but to transmit you need an FCC license. Earn your <b>Technician</b> license on the License tab. Meanwhile: wire up the rig, build an antenna, and listen!', 'T1'],
+  welcome: ['Welcome', 'You start as a <b>shortwave listener (SWL)</b>. Anyone may listen — but to transmit you need an FCC license. Earn your <b>Technician</b> license on the License study page. Meanwhile: wire up the rig, build an antenna, and listen!', 'T1'],
   psu_polarity: ['Polarity matters', 'Red = positive (+), black = negative (−). Reversing DC polarity on a radio blows the fuse (or worse). Fuses protect against <b>excessive current</b> — never replace one with a larger rating.', 'T0A'],
   fuse_blown: ['POP! Fuse blown', 'Reversed polarity tripped the inline fuse. Fix the wiring, then replace the fuse with one of the <b>same rating</b>. A fuse protects against overcurrent and fire.', 'T0A'],
   grounding: ['Bond everything', 'Bond all station equipment to a common ground bus and to the lightning arrestor/ground rod. This reduces RF "bite" and is key for lightning protection: <b>all ground rods/connections must be bonded together</b>.', 'T0A'],
@@ -41,10 +41,10 @@ export const TIPS = {
   tech_hf: ['Technicians on HF', 'Technicians have voice privileges on 10 m (28.300–28.500 MHz) and CW on 80/40/15/10 m. When 10 m is open (high solar flux, daytime) you can work the world!', 'T1B'],
   tx_offband: ['FCC violation!', 'You transmitted outside your privileges. The FCC can issue warnings and fines. Official Observers volunteer to send friendly notices about such mistakes.', 'T1D'],
   power_min: ['Use minimum power', 'FCC rules: use the <b>minimum power necessary</b> to carry out the communication. (§97.313)', 'T1E'],
-  exam_pass: ['Licensed!', 'Congratulations! Your new callsign is now in the FCC database (in game). Volunteer Examiners (VEs) give the real exams — usually 35 questions; 26 correct to pass.', 'T1'],
+  exam_pass: ['Licensed!', 'Congratulations! Your new callsign is now in the (simulated) FCC database. Volunteer Examiners (VEs) give the real exams — usually 35 questions; 26 correct to pass.', 'T1'],
   beacon: ['Beacons', 'The NCDXF beacon network transmits on 14.100, 18.110, 21.150, 24.930 and 28.200 MHz — each beacon sends its call then four 1-second dashes at 100 W, 10 W, 1 W and 0.1 W. Use them to check propagation!', 'G3C'],
   cw_decoder: ['CW decoders', 'The decoder is a crutch that fails on weak or fading signals. Learning to copy by ear is a superpower — there\'s no Morse requirement for any license, but CW gets through when voice can\'t.', 'T8D'],
-  ptt_voice: ['Push-to-talk', 'Hold SPACE (or the PTT button) to transmit, just like game voice chat. Speak clearly, use phonetics, and release to listen. If your browser supports speech recognition, the stations will understand you!', 'T2B'],
+  ptt_voice: ['Push-to-talk', 'Hold SPACE (or the PTT button) to transmit, like the PTT switch on a microphone. Speak clearly, use phonetics, and release to listen. If your browser supports speech recognition, the stations will understand you!', 'T2B'],
   yagi: ['Point the beam', 'A Yagi has gain in one direction. Point it using the short-path bearing to the station. Its front-to-back ratio rejects signals from behind.', 'G9C'],
   polarization: ['Polarization', 'VHF FM and repeaters use <b>vertical</b> polarization. A horizontal antenna on FM loses a lot of signal (cross-polarization). SSB/CW on VHF traditionally uses horizontal.', 'T3A'],
 };
@@ -57,7 +57,7 @@ export function elmer(id, force = false) {
   const seen = S.tips.includes(id);
   if (seen && !force) return;
   if (queue.includes(id)) return;
-  if (!seen) { S.tips.push(id); save(); addXp(5, 'lesson'); }
+  if (!seen) { S.tips.push(id); save(); }
   const nowMs = Date.now();
   if (nowMs < busyUntil) {
     queue.push(id);
@@ -70,12 +70,12 @@ export function elmer(id, force = false) {
 }
 function show(id) {
   const t = TIPS[id];
-  // When the Elmer panel is open, lessons go into its feed instead of a pop-up.
-  if (S.helper?.on !== false && !S.helper?.min && !document.body.classList.contains('ht-view') && document.getElementById('elmer')) {
-    bus.emit('helper-say', `📘 <b>${t[0]}</b> — ${t[1]} <span class="exam-ref">(exam topic ${t[2]})</span>`);
+  if (S.mode === 'free' || S.settings.notes === false) return;
+  if (S.mode === 'training' && !S.training?.min && !document.body.classList.contains('ht-view')) {
+    bus.emit('helper-say', `<b>${t[0]}.</b> ${t[1]} <span class="exam-ref">Exam topic ${t[2]}</span>`);
     bus.emit('tip', id);
     return;
   }
-  toast(`<div class="elmer"><span class="elmer-ic">🧓</span><div><b>Elmer: ${t[0]}</b><br>${t[1]}<div class="exam-ref">📘 Exam topic ${t[2]}</div></div></div>`, 'elmer', 14000);
+  toast(`<div class="note-toast"><b>${t[0]}</b><div>${t[1]}</div><div class="exam-ref">Exam topic ${t[2]}</div></div>`, 'note', 12000);
   bus.emit('tip', id);
 }

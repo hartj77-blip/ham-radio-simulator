@@ -58,19 +58,19 @@ function render() {
   const prog = h('div', { class: 'progress' }, h('div', { id: 'wb-prog' }));
 
   const design = h('div', { class: 'card wb-design' },
-    h('h3', {}, '📐 Design'),
+    h('h3', {}, 'Design'),
     h('label', {}, 'Antenna', tplSel), h('p', { class: 'muted small' }, T.help),
     h('div', { class: 'wb-params' }, ...inputs),
     h('label', {}, 'Conductor', condSel), h('label', {}, 'Ground', gndSel),
     h('div', { class: 'row' }, h('label', { class: 'inline' }, 'Target ', fIn, ' MHz'), bandQuick, h('label', { class: 'inline' }, '± ', spIn, ' %')),
     h('div', { class: 'row' },
-      h('button', { class: 'btn primary', onclick: simulate, disabled: running }, '▶ Simulate'),
-      h('button', { class: 'btn', onclick: autotune, disabled: running, title: 'Scale the main dimension until the model is resonant at the target' }, '🎯 Auto-tune to target')),
+      h('button', { class: 'btn primary', onclick: simulate, disabled: running }, 'Simulate'),
+      h('button', { class: 'btn', onclick: autotune, disabled: running, title: 'Scale the main dimension until the model is resonant at the target' }, 'Auto-tune to target')),
     prog,
     h('div', { class: 'row' },
-      h('button', { class: 'btn small', onclick: exportNec }, '⬇ NEC-2 deck'),
-      h('label', { class: 'btn small filebtn' }, '⬆ Import NEC', h('input', { type: 'file', accept: '.nec,.txt', onchange: importNec })),
-      h('button', { class: 'btn small', onclick: useInGame }, '📡 Build this in the game')),
+      h('button', { class: 'btn small', onclick: exportNec }, 'NEC-2 deck'),
+      h('label', { class: 'btn small filebtn' }, 'Import NEC', h('input', { type: 'file', accept: '.nec,.txt', onchange: importNec })),
+      h('button', { class: 'btn small', onclick: useInGame }, 'Build this as my station antenna')),
   );
 
   const geo = h('canvas', { class: 'wb-3d' });
@@ -85,7 +85,7 @@ function render() {
   plotCv.onmousemove = (e) => { if (plotCv._invX) { cursorF = plotCv._invX(e.offsetX) * 1e6; drawPlot(); drawReadout(); } };
   plotCv.onmouseleave = () => { cursorF = null; drawPlot(); drawReadout(); };
   const results = h('div', { class: 'card wb-results' },
-    h('div', { class: 'row spread' }, h('h3', {}, '📈 Results'), plotSel),
+    h('div', { class: 'row spread' }, h('h3', {}, 'Results'), plotSel),
     plotCv, h('div', { id: 'wb-readout', class: 'readouts' }),
     h('div', { class: 'wb-pattern' }, h('canvas', { class: 'wb-polar', id: 'wb-az' }), h('canvas', { class: 'wb-polar', id: 'wb-el' })));
 
@@ -97,11 +97,11 @@ function render() {
   const deChk = h('input', { type: 'checkbox', checked: w.deemb });
   deChk.onchange = () => { w.deemb = deChk.checked; save(); measChanged(); };
   const measure = h('div', { class: 'card wb-measure' },
-    h('h3', {}, '📟 Real measurements'),
+    h('h3', {}, 'Real measurements'),
     h('p', { class: 'muted small' }, 'Load a sweep from your antenna analyzer (NanoVNA / RigExpert / any VNA): Touchstone .s1p, or CSV with Freq,R,X (or Freq,SWR). Or read a NanoVNA live over USB (Chrome/Edge desktop).'),
     h('div', { class: 'row' },
-      h('label', { class: 'btn filebtn' }, '⬆ Load .s1p / .csv', h('input', { type: 'file', accept: '.s1p,.csv,.txt,.tsv', onchange: loadMeas })),
-      h('button', { class: 'btn', onclick: liveVna }, '🔌 Read NanoVNA'),
+      h('label', { class: 'btn filebtn' }, 'Load .s1p / .csv', h('input', { type: 'file', accept: '.s1p,.csv,.txt,.tsv', onchange: loadMeas })),
+      h('button', { class: 'btn', onclick: liveVna }, 'Read NanoVNA'),
       w.meas ? h('button', { class: 'btn small', onclick: () => { w.meas = null; save(); render(); } }, 'Clear') : null),
     w.meas ? h('div', { class: 'small ok' }, `${w.meas.pts.length} points from ${w.meas.source} (${(w.meas.pts[0].f / 1e6).toFixed(3)}–${(w.meas.pts[w.meas.pts.length - 1].f / 1e6).toFixed(3)} MHz)`) : null,
     h('fieldset', {}, h('legend', {}, 'Feedline between analyzer and antenna'),
@@ -121,19 +121,19 @@ function render() {
   const endIn = h('input', { type: 'number', value: w.endIn, step: 0.5, class: 'num small' });
   endIn.onchange = () => { w.endIn = +endIn.value || 0; save(); drawCut(); };
   const match = h('div', { class: 'card wb-match' },
-    h('h3', {}, '🧲 Matching network'),
+    h('h3', {}, 'Matching network'),
     h('div', { class: 'row' }, h('label', { class: 'inline' }, 'Match ', srcSel), w.matchSrc === 'manual' ? h('span', { class: 'row' }, mR, ' + j ', mX, ' Ω') : null,
       h('label', { class: 'inline small' }, 'coil Q ', qIn), h('span', { class: 'muted small' }, `at ${w.fT} MHz to 50 Ω`)),
     h('div', { id: 'wb-match' }));
-  const cut = h('div', { class: 'card wb-cut' }, h('h3', {}, '✂ Cut list'),
+  const cut = h('div', { class: 'card wb-cut' }, h('h3', {}, 'Cut list'),
     h('div', { class: 'row' }, h('label', { class: 'inline small' }, insChk, ' insulated wire (≈3% shorter)'), h('label', { class: 'inline small' }, 'end-insulator wrap ', endIn, ' in')),
     h('div', { id: 'wb-cut' }));
 
   root.append(
-    h('div', { class: 'wb-intro card' }, h('b', {}, '🛠 Antenna Workbench'), ' — a real design tool. The solver is a thin-wire Method-of-Moments engine (the same physics as NEC-2). Typical accuracy for wire antennas: resonance within ~1–3%; real-world sites add a few % (trees, house wiring, wire insulation, sag). Model → cut a little long → measure → let the trim advisor finish the job.'),
+    h('div', { class: 'wb-intro card' }, h('b', {}, 'Antenna Workbench'), ' — a real design tool. The solver is a thin-wire Method-of-Moments engine (the same physics as NEC-2). Typical accuracy for wire antennas: resonance within ~1–3%; real-world sites add a few % (trees, house wiring, wire insulation, sag). Model → cut a little long → measure → let the trim advisor finish the job.'),
     h('div', { class: 'wb-grid' },
       h('div', { class: 'wb-col' }, design, cut),
-      h('div', { class: 'wb-col' }, h('div', { class: 'card' }, h('h3', {}, '🧊 Geometry & currents'), geo), results),
+      h('div', { class: 'wb-col' }, h('div', { class: 'card' }, h('h3', {}, 'Geometry & currents'), geo), results),
       h('div', { class: 'wb-col' }, measure, match)));
   requestAnimationFrame(() => { draw3d(); drawPlot(); drawReadout(); drawPattern(); drawTrim(); drawMatch(); drawCut(); });
 }
@@ -292,7 +292,7 @@ function drawReadout() {
     box('Measured SWR', s > 50 ? '>50' : s.toFixed(2), s < 1.6 ? 'ok' : s < 3 ? 'warn' : 'bad');
     if (w.meas?.kind === 'complex' && w.cableFt > 0) box('Coax loss @f', `${(lossDbPerM(w.cable, p.f) * w.cableFt * FT).toFixed(2)} dB`);
   }
-  el.innerHTML = cells.join('') || '<div class="muted small">Press ▶ Simulate (and/or load a measurement).</div>';
+  el.innerHTML = cells.join('') || '<div class="muted small">Press Simulate (and/or load a measurement).</div>';
 }
 
 function drawPattern() {
@@ -331,8 +331,8 @@ function drawTrim() {
       <div><span>2:1 bandwidth</span><b>${a.bw ? ((a.bw[1] - a.bw[0]) / 1e3).toFixed(0) + ' kHz' : '—'}</b></div>
     </div>
     ${modelCal}
-    <div class="advice">${Math.abs(fr - fT) / fT < 0.003 ? '👍 Already on target (within 0.3%). Leave it!' :
-      `<b>${d > 0 ? '✂ Trim' : '➕ Add'}</b> ${per === 2 ? `<b>${inch(d / 2)}</b> ${d > 0 ? 'off' : 'to'} <b>each</b> end (${inch(d)} total)` : `<b>${inch(d)}</b>`} to move resonance from ${(fr / 1e6).toFixed(3)} to ${w.fT} MHz.
+    <div class="advice">${Math.abs(fr - fT) / fT < 0.003 ? 'Already on target (within 0.3%). Leave it!' :
+      `<b>${d > 0 ? 'Trim' : 'Add'}</b> ${per === 2 ? `<b>${inch(d / 2)}</b> ${d > 0 ? 'off' : 'to'} <b>each</b> end (${inch(d)} total)` : `<b>${inch(d)}</b>`} to move resonance from ${(fr / 1e6).toFixed(3)} to ${w.fT} MHz.
       <div class="muted tiny">Based on the current ${T.params[key][0].toLowerCase()} of ${L} ft scaling inversely with frequency (good to ~1%). Trim a bit less than suggested, re-measure, repeat.</div>`}</div>
     <button class="btn small" id="wb-applytrim">Update design length to ${newL.toFixed(2)} ft</button>`;
   $('#wb-applytrim').onclick = () => { p[key] = Math.round(newL * 100) / 100; save(); render(); };
@@ -350,7 +350,7 @@ function drawMatch() {
   if (!el) return;
   const w = W(), f = w.fT * 1e6;
   const Z = matchZ();
-  if (!Z) { el.innerHTML = `<p class="muted small">${w.matchSrc === 'meas' ? 'Load a measurement with R and X (phase) first.' : 'Run ▶ Simulate first.'}</p>`; return; }
+  if (!Z) { el.innerHTML = `<p class="muted small">${w.matchSrc === 'meas' ? 'Load a measurement with R and X (phase) first.' : 'Run Simulate first.'}</p>`; return; }
   const s0 = swr(Z);
   const nets = lNetworks(Z, f);
   const src = w.matchSrc === 'meas' ? measPts().filter((p) => p.Z) : w.matchSrc === 'model' ? result?.sweep || [] : [];
@@ -421,11 +421,11 @@ async function importNec(e) {
 function useInGame() {
   const w = W(), p = params();
   const map = { dipole: ['dipole', p.len, p.h], invv: ['invv', p.len, p.h], vertical: ['vertical', p.len, 0], efhw: ['efhw', p.len, p.h], yagi3: ['yagi', p.drv, p.h] }[w.tpl];
-  if (!map) return toast('That antenna type isn\'t available in the game yet (dipole, inverted-V, vertical, EFHW and Yagi are).', 'warn');
+  if (!map) return toast('That antenna type isn\'t available as a station antenna yet (dipole, inverted-V, vertical, EFHW and Yagi are).', 'warn');
   const a = S.antenna;
-  if (a.built) return toast('Lower your current antenna first (Antenna tab).', 'warn');
+  if (a.built) return toast('Lower your current antenna first (Antenna page).', 'warn');
   Object.assign(a, { type: map[0], length: Math.round(map[1] * 100) / 100, height: Math.round(map[2]) || a.height });
   if (w.tpl === 'vertical') a.radials = [0, 4, 8, 16, 32, 60].reduce((b, x) => (x <= p.radials ? x : b), 0);
   save(); bus.emit('antenna'); bus.emit('antenna-rebuild');
-  toast('Design copied to your game antenna. Raise it on the Antenna tab!', 'good');
+  toast('Design copied to your station antenna. Raise it on the Antenna page.', 'good');
 }

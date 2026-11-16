@@ -6,6 +6,7 @@ import { world, player } from './world.js';
 import { dayFactor, interp, simDate, distanceKm } from './propagation.js';
 import { stateBy } from './data/world.js';
 import { net } from './net.js';
+import { mapTarget, targetCard } from './modes.js';
 
 const LAND_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json';
 let land = null, landTried = false, cv, ctx, nightImg = null, nightAt = 0, hover = null, root;
@@ -36,17 +37,21 @@ async function loadLand() {
 export const getLand = () => { loadLand(); return land; };
 export function initMapUI(el) {
   root = el;
-  cv = h('canvas', { class: 'pmap', title: 'Click a station to tune to it' });
+  cv = h('canvas', { class: 'pmap', title: 'Click a station to tune to it, or any location for a path analysis' });
+  const tbox = h('div', { class: 'map-target' });
   root.append(h('div', { class: 'card map-card' },
-    h('div', { class: 'row spread' }, h('h3', {}, '🗺 Propagation map'), h('span', { class: 'muted tiny', id: 'map-legend' }, '')),
-    cv));
+    h('div', { class: 'card-head' }, h('div', {}, h('h3', {}, 'Propagation map'), h('div', { class: 'muted tiny' }, 'Greyline, active stations and path analysis. Click any location to analyse the path; in Free Play this also tunes the radio.')), h('span', { class: 'muted tiny', id: 'map-legend' }, '')),
+    cv, tbox));
+  bus.on('target', (t) => { tbox.innerHTML = ''; tbox.append(targetCard(t)); });
   ctx = cv.getContext('2d');
   cv.addEventListener('mousemove', (e) => { hover = { x: e.offsetX, y: e.offsetY }; });
   cv.addEventListener('mouseleave', () => { hover = null; });
   cv.addEventListener('click', (e) => {
     const r = pickRoster(e.offsetX, e.offsetY);
     if (r) return bus.emit('net-join', r);
-    const st = pickAt(e.offsetX, e.offsetY); if (st) bus.emit('tune-to', st.freq, st.mode === 'CW' ? 'CW' : st.mode === 'FM' ? 'FM' : st.sb);
+    const st = pickAt(e.offsetX, e.offsetY); if (st) return bus.emit('tune-to', st.freq, st.mode === 'CW' ? 'CW' : st.mode === 'FM' ? 'FM' : st.sb);
+    const W = cv.clientWidth, H = cv.clientHeight;
+    bus.emit('map-target', { lat: 90 - (e.offsetY / H) * 180, lon: (e.offsetX / W) * 360 - 180 });
   });
   loadLand();
 }
@@ -62,18 +67,25 @@ function pickAt(x, y) {
 }
 
 function nightLayer(W, H) {
-  // recompute the terminator shading at most every 30 s
-  if (nightImg && now() - nightAt < 30 && nightImg.width === W) return nightImg;
-  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  // Recompute the terminator shading at most every 30 s. One pixel per 3 screen pixels, then
+  // scaled up with smoothing so the greyline is a soft gradient instead of blocks.
+  if (nightImg && now() - nightAt < 30 && nightImg.dw === W) return nightImg;
+  const step = 3, cw = Math.ceil(W / step), ch = Math.ceil(H / step);
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch; c.dw = W;
   const x = c.getContext('2d');
+  const img = x.createImageData(cw, ch), px = img.data;
   const d = simDate();
-  const step = 4;
-  for (let py = 0; py < H; py += step) for (let px = 0; px < W; px += step) {
-    const lat = 90 - (py + step / 2) / H * 180, lon = (px + step / 2) / W * 360 - 180;
+  for (let py = 0; py < ch; py++) for (let qx = 0; qx < cw; qx++) {
+    const lat = 90 - (py + 0.5) / ch * 180, lon = (qx + 0.5) / cw * 360 - 180;
     const df = dayFactor({ lat, lon }, d);
-    if (df < 1) { x.fillStyle = `rgba(2,6,20,${0.62 * (1 - df)})`; x.fillRect(px, py, step, step); }
-    if (df > 0.02 && df < 0.35) { x.fillStyle = 'rgba(255,170,60,0.10)'; x.fillRect(px, py, step, step); }
+    const i = (py * cw + qx) * 4;
+    const night = 0.6 * (1 - df), grey = df > 0.02 && df < 0.35 ? 0.12 * (1 - Math.abs(df - 0.18) / 0.17) : 0;
+    const a = night + grey;
+    // night: deep blue-black; greyline: warm amber tint
+    px[i] = Math.round((2 * night + 230 * grey) / Math.max(a, 1e-6)); px[i + 1] = Math.round((6 * night + 150 * grey) / Math.max(a, 1e-6)); px[i + 2] = Math.round((18 * night + 60 * grey) / Math.max(a, 1e-6));
+    px[i + 3] = Math.round(Math.min(1, a) * 255);
   }
+  x.putImageData(img, 0, 0);
   nightImg = c; nightAt = now();
   return c;
 }
@@ -86,22 +98,22 @@ export function drawMap() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   // ocean
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#0b2742'); g.addColorStop(0.5, '#0e3354'); g.addColorStop(1, '#0b2742');
+  g.addColorStop(0, '#0a1622'); g.addColorStop(0.5, '#0d1d2c'); g.addColorStop(1, '#0a1622');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   // graticule
-  ctx.strokeStyle = 'rgba(120,170,220,0.10)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(140,170,200,0.08)'; ctx.lineWidth = 1;
   for (let lon = -180; lon <= 180; lon += 30) { const [x] = proj(0, lon, W, H); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
   for (let lat = -60; lat <= 60; lat += 30) { const [, y] = proj(lat, 0, W, H); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
   // land
   if (land) {
-    ctx.fillStyle = '#2c4a33'; ctx.strokeStyle = '#4f7a55';
+    ctx.fillStyle = '#1c2a36'; ctx.strokeStyle = '#33485a';
     for (const poly of land) {
       ctx.beginPath();
       for (const r of poly) r.forEach(([lon, lat], i) => { const [x, y] = proj(lat, lon, W, H); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
       ctx.fill('evenodd'); ctx.stroke();
     }
   }
-  ctx.drawImage(nightLayer(W, H), 0, 0, W, H);
+  ctx.imageSmoothingEnabled = true; ctx.drawImage(nightLayer(W, H), 0, 0, W, H);
   // stations
   const me = player();
   const [mx, my] = proj(me.lat, me.lon, W, H);
@@ -162,6 +174,21 @@ export function drawMap() {
   }
   const rh = hover ? pickRoster(hover.x, hover.y) : null;
   if (rh) { ctx.font = '12px system-ui'; const lbl = `${rh.call} (${rh.state}) · ${(rh.freq / 1e6).toFixed(3)} ${rh.mode}${rh.tx ? ' · ON AIR' : ''} — click to join`; const w = ctx.measureText(lbl).width + 12; ctx.fillStyle = 'rgba(40,10,35,0.9)'; ctx.fillRect(Math.min(hover.x + 10, W - w - 4), hover.y - 24, w, 20); ctx.fillStyle = '#fff'; ctx.fillText(lbl, Math.min(hover.x + 10, W - w - 4) + 6, hover.y - 10); }
+  // analysed target
+  const tg = mapTarget.t;
+  if (tg) {
+    ctx.strokeStyle = 'rgba(65,184,232,0.9)'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); let px2 = null;
+    for (let i = 0; i <= 64; i++) { const p = interp(me, tg, i / 64); const [x, y] = proj(p.lat, p.lon, W, H); if (px2 != null && Math.abs(x - px2) > W / 2) ctx.moveTo(x, y); else (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); px2 = x; }
+    ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+    const [tx2, ty2] = proj(tg.lat, tg.lon, W, H);
+    ctx.strokeStyle = '#41b8e8'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(tx2, ty2, 7, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(tx2 - 11, ty2); ctx.lineTo(tx2 - 4, ty2); ctx.moveTo(tx2 + 4, ty2); ctx.lineTo(tx2 + 11, ty2); ctx.moveTo(tx2, ty2 - 11); ctx.lineTo(tx2, ty2 - 4); ctx.moveTo(tx2, ty2 + 4); ctx.lineTo(tx2, ty2 + 11); ctx.stroke(); ctx.lineWidth = 1;
+    const lbl = `${Math.round(tg.dist).toLocaleString()} km · ${Math.round(tg.brg)}° · ${tg.best ? `best ${tg.best.band}` : 'no open band'}`;
+    ctx.font = '11px "JetBrains Mono", monospace'; const w2 = ctx.measureText(lbl).width + 12;
+    const lx2 = Math.min(Math.max(4, tx2 + 12), W - w2 - 4), ly2 = Math.min(H - 6, Math.max(18, ty2 + 22));
+    ctx.fillStyle = 'rgba(8,13,19,0.88)'; ctx.fillRect(lx2, ly2 - 14, w2, 19); ctx.fillStyle = '#9fdcf4'; ctx.fillText(lbl, lx2 + 6, ly2);
+  }
   // home QTH
   ctx.fillStyle = '#ff4d4d'; ctx.strokeStyle = '#fff';
   ctx.beginPath(); ctx.arc(mx, my, 5, 0, 7); ctx.fill(); ctx.stroke();
@@ -176,5 +203,5 @@ export function drawMap() {
   sg.addColorStop(0, 'rgba(255,240,150,1)'); sg.addColorStop(1, 'rgba(255,200,60,0)');
   ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, 14, 0, 7); ctx.fill();
   const leg = document.getElementById('map-legend');
-  if (leg) leg.innerHTML = `<span style="color:#ffd166">●</span> SSB <span style="color:#7fd3ff">●</span> CW <span style="color:#ff6bd5">◯</span> real players (click to join) · bright = heard now · ${world.band || ''} ${land ? '' : '(coastlines need internet)'}`;
+  if (leg) leg.innerHTML = `<span class="lg" style="--c:#ffd166"></span>SSB <span class="lg" style="--c:#7fd3ff"></span>CW <span class="lg ring" style="--c:#ff6bd5"></span>online operators · bright = heard now · ${world.band || ''} ${land ? '' : '(coastlines need internet)'}`;
 }

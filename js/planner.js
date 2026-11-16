@@ -214,7 +214,7 @@ export function render() {
   const lenBox = h('div', { class: 'readouts' });
   const doSize = async () => {
     if (busy) return; busy = true;
-    lenBox.innerHTML = '<div><span>Resonant length</span><b>⏳ solving…</b></div>';
+    lenBox.innerHTML = '<div><span>Resonant length</span><b>solving…</b></div>';
     try {
       const L = await autoSize(a, fHz);
       p.lastSize = { type: a.type, band: p.band, seg: p.seg, L, h: a.height, ground: a.ground, wire: a.wire, ins: a.insulated };
@@ -227,7 +227,7 @@ export function render() {
     ${['dipole', 'invv'].includes(a.type) ? `<div><span>Each leg</span><b>${(ls.L / 2).toFixed(2)} ft</b></div>` : ''}
     <div><span>Rule of thumb said</span><b>${(ANT_TYPES[a.type].k / f).toFixed(2)} ft</b></div>
     <div><span>Solved for</span><b>${ls.h} ft up · ${GROUNDS[ls.ground].label.split(' (')[0]} · #${ls.wire.split(' ')[1]} wire${ls.ins ? ' insulated' : ' bare'}</b></div>`
-    : '<div><span>Resonant length</span><b>press 🎯 Calculate</b></div>';
+    : '<div><span>Resonant length</span><b>press Calculate</b></div>';
 
   const terrRows = site ? site.profiles.map((x) => { const t = terrain(x, a.height * FT); return h('tr', { class: x.id === p.dir ? 'sel' : '' },
     h('td', {}, `${x.name} (${Math.round(x.brg)}°)`), h('td', { class: t.slope < -1 ? 'ok' : t.slope > 1 ? 'bad' : '' }, `${t.slope >= 0 ? '+' : ''}${t.slope.toFixed(2)}°`),
@@ -235,10 +235,10 @@ export function render() {
 
   const goalAdvice = a.type === 'vertical'
     ? `Verticals radiate at low angles regardless of height (great for ${p.goal === 'nvis' ? 'DX, poor for NVIS — use a low dipole for NVIS' : 'DX'}). What matters is the radial field: ${a.radials} radials${a.radials < 16 ? ' — add more to cut ground loss' : ' — good'}.`
-    : `For ${goal.label.toLowerCase()} the main lobe should be near <b>${goal.angle}°</b>${tilt ? ` (${wantAngle.toFixed(1)}° locally — the terrain tilts your pattern ${tilt > 0 ? 'down' : 'up'} by ${Math.abs(tilt).toFixed(1)}°)` : ''}. That needs <b>${idealH.toFixed(0)} ft</b> (${(idealH / lamFt).toFixed(2)} λ). ${idealH > support ? `Your supports reach <b>${support} ft</b> → you give up <b>${(gIdeal - gUse).toFixed(1)} dB</b> at ${goal.angle}° (more height at the Hamfest).` : 'Your supports can reach that. 👍'} At your current ${a.height} ft you have <b>${gNow.toFixed(1)} dBi</b> at ${goal.angle}° (ideal ${gIdeal.toFixed(1)} dBi).`;
+    : `For ${goal.label.toLowerCase()} the main lobe should be near <b>${goal.angle}°</b>${tilt ? ` (${wantAngle.toFixed(1)}° locally — the terrain tilts your pattern ${tilt > 0 ? 'down' : 'up'} by ${Math.abs(tilt).toFixed(1)}°)` : ''}. That needs <b>${idealH.toFixed(0)} ft</b> (${(idealH / lamFt).toFixed(2)} λ). ${idealH > support ? `Your supports reach <b>${support} ft</b> → you give up <b>${(gIdeal - gUse).toFixed(1)} dB</b> at ${goal.angle}° (more height at the Hamfest).` : 'Your supports can reach that.'} At your current ${a.height} ft you have <b>${gNow.toFixed(1)} dBi</b> at ${goal.angle}° (ideal ${gIdeal.toFixed(1)} dBi).`;
 
   root.append(h('div', { class: 'card planner' },
-    h('div', { class: 'row spread' }, h('h3', {}, '🧭 Site & design planner'), h('span', { class: 'muted tiny' }, 'Professional mode: real terrain, MoM-solved lengths, ground-reflection patterns')),
+    h('div', { class: 'row spread' }, h('h3', {}, 'Site & design planner'), h('span', { class: 'muted tiny' }, 'Professional mode: real terrain, MoM-solved lengths, ground-reflection patterns')),
     h('div', { class: 'plan-grid' },
       h('div', {},
         h('label', {}, 'Band ', sel('band', BANDS.map((b) => [b.name, b.name]))), h('label', {}, 'Optimise for ', sel('seg', [['center', 'whole band'], ['cw', 'CW end'], ['phone', 'phone end']])),
@@ -247,20 +247,20 @@ export function render() {
         h('label', {}, 'Wire ', sel('wire', Object.keys(CONDUCTORS).filter((k) => k.includes('copper')).map((k) => [k, k]), a),
           h('label', { class: 'inline small' }, (() => { const c = h('input', { type: 'checkbox', checked: a.insulated }); c.onchange = () => { a.insulated = c.checked; save(); bus.emit('antenna'); render(); }; return c; })(), ' insulated')),
         h('div', { class: 'row' },
-          h('button', { class: 'btn primary', id: 'plan-calc', onclick: doSize }, '🎯 Calculate exact length'),
-          ls ? h('button', { class: 'btn', onclick: () => applyPlan(ls, idealH, support) }, '✅ Apply to my antenna') : null)),
+          h('button', { class: 'btn primary', id: 'plan-calc', onclick: doSize }, 'Calculate exact length'),
+          ls ? h('button', { class: 'btn', onclick: () => applyPlan(ls, idealH, support) }, 'Apply to my antenna') : null)),
       h('div', {}, lenBox, h('div', { class: 'advice small', html: goalAdvice }),
-        isVhf ? h('div', { class: 'advice small', html: haat != null ? `📡 VHF: height above average terrain (3–16 km) ≈ <b>${haat.toFixed(0)} m</b> → radio horizon to a 10 m-high station ≈ <b>${vhfRange.toFixed(0)} km</b>. Every 10 ft of height helps.` : 'Load your site to compute VHF coverage.' }) : null),
+        isVhf ? h('div', { class: 'advice small', html: haat != null ? `VHF: height above average terrain (3–16 km) ≈ <b>${haat.toFixed(0)} m</b> → radio horizon to a 10 m-high station ≈ <b>${vhfRange.toFixed(0)} km</b>. Every 10 ft of height helps.` : 'Load your site to compute VHF coverage.' }) : null),
       h('div', {}, h('canvas', { class: 'plan-pat', id: 'plan-pat' }), h('div', { class: 'muted tiny' }, `Elevation pattern over ${GROUNDS[a.ground].label.split(' (')[0].toLowerCase()} at ${f.toFixed(3)} MHz: your height (orange) vs. ideal (blue dashed). Shaded = goal angles.`))),
-    h('h4', {}, '🏔 Your site'),
+    h('h4', {}, 'Your site'),
     site ? h('div', {},
       h('p', { class: 'small', html: `Ground elevation <b>${site.elevM.toFixed(1)} m (${(site.elevM / FT).toFixed(0)} ft)</b> at ${site.lat.toFixed(4)}, ${site.lon.toFixed(4)}${site.real ? ' (your location)' : ' (state centre — use your real location for accuracy)'} · source: ${site.source}.` }),
       h('table', { class: 'tbl small' }, h('tr', {}, h('th', {}, 'Toward'), h('th', {}, 'Slope (first 1.5 km)'), h('th', {}, 'Horizon angle'), h('th', {}, '')), ...terrRows),
       h('label', { class: 'small' }, 'Design for direction ', sel('dir', Object.entries(TARGETS).map(([k, [n]]) => [k, n]))))
       : h('p', { class: 'small muted' }, 'Load real terrain to see how the land around you tilts your signal toward each continent.'),
     h('div', { class: 'row' },
-      h('button', { class: 'btn', onclick: async () => { try { toast('Loading terrain…', 'info', 2000); await loadSite(true); render(); } catch (e) { toast(e.message, 'bad'); } } }, site ? '↻ Reload terrain' : '🏔 Load my terrain'),
-      h('button', { class: 'btn', onclick: useMyLocation }, S.op.lat != null ? '📍 Real location in use' : '📍 Use my real location'),
+      h('button', { class: 'btn', onclick: async () => { try { toast('Loading terrain…', 'info', 2000); await loadSite(true); render(); } catch (e) { toast(e.message, 'bad'); } } }, site ? '↻ Reload terrain' : 'Load my terrain'),
+      h('button', { class: 'btn', onclick: useMyLocation }, S.op.lat != null ? 'Real location in use' : 'Use my real location'),
       S.op.lat != null ? h('button', { class: 'link small', onclick: () => { delete S.op.lat; delete S.op.lon; save(); bus.emit('qth'); render(); } }, 'use state centre') : null),
     h('p', { class: 'muted tiny' }, 'Accuracy: MoM lengths ≈1–2% for a clear site; real installs shift a few % (nearby trees, buildings, sag). Terrain analysis is a simplified HFTA (slope & horizon only, no diffraction). Your location is only sent to the elevation service and stays in your browser.')));
   drawPattern(idealH, wantAngle);
@@ -272,7 +272,7 @@ function applyPlan(ls, idealH, support) {
   if (a.type !== 'vertical') a.height = Math.round(Math.min(idealH, support));
   S.radio.atuTunedFreq = null;
   save(); bus.emit('antenna'); bus.emit('antenna-rebuild');
-  toast(`✅ Applied: ${ls.L.toFixed(2)} ft${a.type !== 'vertical' ? ` at ${a.height} ft` : ''}. Check the analyzer below — the dip should sit right in the band.`, 'good', 7000);
+  toast(`Applied: ${ls.L.toFixed(2)} ft${a.type !== 'vertical' ? ` at ${a.height} ft` : ''}. Check the analyzer below — the dip should sit right in the band.`, 'good', 7000);
 }
 
 function useMyLocation() {
@@ -282,7 +282,7 @@ function useMyLocation() {
     bus.emit('qth');
     try { await loadSite(true); } catch (e) { toast(e.message, 'bad'); }
     render();
-    toast('📍 Using your real location for terrain and propagation.', 'good');
+    toast('Using your real location for terrain and propagation.', 'good');
   }, (e) => toast(`Location: ${e.message}`, 'warn'), { enableHighAccuracy: false, timeout: 15000 });
 }
 

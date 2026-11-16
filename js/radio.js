@@ -1,5 +1,5 @@
 // Transceiver front panel, panadapter/waterfall and the receive audio chain.
-import { S, save, addXp } from './state.js';
+import { S, save } from './state.js';
 import { h, $, $$, clamp, fmtFreq, bus, now, toast, rand, chance, db2amp } from './util.js';
 import { BANDS, bandOf, bandByName, privilegeMap, CTCSS, SIDEBAND_FOR } from './data/bandplan.js';
 import { audio } from './audio.js';
@@ -10,7 +10,7 @@ import { bandNoiseDbm, sUnits, distanceKm, bearing } from './propagation.js';
 import { elmer } from './elmer.js';
 import { ui as opUi, txState } from './operating.js';
 import { net } from './net.js';
-import { owns, maxPower } from './store.js';
+import { owns, maxPower } from './limits.js';
 import { mountMaster, render as renderMaster } from './masterview.js';
 import { siteEffects } from './yard.js';
 import { serviceOf, SERVICE_REGIONS } from './services.js';
@@ -221,7 +221,7 @@ export function rxUpdate() {
       const lvl = s.audible && open ? clamp((s.intelligible ? 1 : 0.35) * (s.st.mode === 'WFM' ? clamp((s.snr - 3) / 12, 0, 1) * 1.2 : NREF * db2amp(s.snr) * agc / 0.12), 0, 1.5) : 0;
       if (lvl > 0.01 && !s.st.dead) { const rec = audio.stream(s.st.id, s.st.url); if (rec.dead) s.st.dead = true; }
       audio.streamLevel(s.st.id, lvl, r.af);
-      if (lvl > 0.01 && S.settings.subtitles && s.st.lastSub !== s.st.id) { s.st.lastSub = s.st.id; opUi.transcript(s.st.op.call, `📻 ${s.st.op.name} — live${s.st.dead ? ' (stream unavailable)' : ''}`, 'rx'); }
+      if (lvl > 0.01 && S.settings.subtitles && s.st.lastSub !== s.st.id) { s.st.lastSub = s.st.id; opUi.transcript(s.st.op.call, `${s.st.op.name} — live${s.st.dead ? ' (stream unavailable)' : ''}`, 'rx'); }
       s.st.rxSnrRecent = s.snr;
       continue;
     }
@@ -359,18 +359,18 @@ export function initRadioUI(el) {
 
   const mtuner = h('div', { id: 'mtuner' });
 
-  const mvBtn = h('button', { class: `btn small ${S.settings.master ? 'active' : ''}`, id: 'master-btn', title: 'Show every control and the signal chain inside the radio', onclick: () => { S.settings.master = !S.settings.master; save(); mvBtn.classList.toggle('active', S.settings.master); renderMaster(); } }, '🎛 Master view');
+  const mvBtn = h('button', { class: `btn small ${S.settings.master ? 'active' : ''}`, id: 'master-btn', title: 'Show every control and the signal chain inside the radio', onclick: () => { S.settings.master = !S.settings.master; save(); mvBtn.classList.toggle('active', S.settings.master); renderMaster(); } }, 'Master view');
   const rg0 = rig();
   el.append(h('div', { class: 'rig-bar row spread' },
-    h('div', { class: 'rig-badge' }, h('span', { class: 'rig-maker' }, (rg0.maker || 'HamShack').toUpperCase()), h('span', { class: 'rig-model' }, rg0.name.replace(rg0.maker || '', '').trim()), h('span', { class: 'tiny muted' }, ` ${rg0.cls}`)),
-    h('div', { class: 'row' }, h('button', { class: 'btn small', onclick: () => bus.emit('goto', 'rigbuilder') }, '🧰 Change gear'), mvBtn)));
+    h('div', { class: 'rig-badge' }, h('span', { class: 'rig-maker' }, (rg0.maker || 'Generic').toUpperCase()), h('span', { class: 'rig-model' }, rg0.name.replace(rg0.maker || '', '').trim()), h('span', { class: 'tiny muted' }, ` ${rg0.cls}`)),
+    h('div', { class: 'row' }, h('button', { class: 'btn small', onclick: () => bus.emit('goto', 'rigbuilder') }, 'Equipment'), mvBtn)));
   el.append(h('div', { class: `rig look-${rg0.look || 'classic'}` },
     h('div', { class: 'rig-top' },
       h('div', { class: 'rig-left' }, meterCv, h('div', { class: 'muted tiny center' }, 'click meter: S / PO / SWR')),
       lcd,
       h('div', { class: 'rig-right' }, knob, h('div', { class: 'row center' }, stepSel, freqIn)),
     ),
-    h('div', { class: 'rig-mid' }, h('div', { class: 'wf-wrap' }, wf, h('div', { class: 'no-scope-msg' }, `📻 The ${rig().name} has no spectrum scope — tune by ear, like the old days. (Watch the S-meter!)`))),
+    h('div', { class: 'rig-mid' }, h('div', { class: 'wf-wrap' }, wf, h('div', { class: 'no-scope-msg' }, `The ${rig().name} has no spectrum scope — tune by ear, like the old days. (Watch the S-meter!)`))),
     h('div', { class: 'rig-controls' },
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'HAM BANDS'), bandBtns,
         h('div', { class: 'ctl-title', style: { marginTop: '8px' } }, 'GENERAL COVERAGE (RX)'), serviceButtons()),
@@ -446,7 +446,7 @@ const spanHz = () => { const sv = serviceOf(R().freq); if (sv) return sv.span; r
 // ------------------------------------------------------------------ ATU
 function atuTune() {
   const rs = rigStatus(), r = R();
-  if (!rs.powered) return toast('Turn the radio on first (Shack tab).', 'warn');
+  if (!rs.powered) return toast('Turn the radio on first (Station wiring page).', 'warn');
   if (rs.end === 'open') { elmer('no_antenna', true); return toast('ATU: no load connected! "HI SWR" — the tuner refuses to tune into an open connector.', 'bad'); }
   const txf = r.freq;
   if (rs.end === 'antenna') {
@@ -493,6 +493,8 @@ export function effectiveSwr(f) {
   let swr = sys.swrRig;
   if (rs.hasTuner && !r.mtBypass) swr = manualTunerSwr(f, swr);
   if (r.atuOn && r.atuTunedFreq && Math.abs(f - r.atuTunedFreq) < Math.max(8000, f * 0.005) && swr <= 3.05) swr = 1.1 + (swr - 1) * 0.04;
+  // Free Play: the antenna is re-cut for each band and a wide-range tuner matches it automatically.
+  if (S.mode === 'free' && r.atuOn) swr = Math.min(swr, 1.1 + Math.min(swr - 1, 4) * 0.02);
   return swr;
 }
 
@@ -513,7 +515,7 @@ export function updateDisplay() {
       <span>SWR ${swr > 50 ? '∞' : swr.toFixed(1)}</span></div>
     <div class="lcd-row small"><span>${rs.end === 'antenna' ? (S.antenna.built ? ANT_TYPES[S.antenna.type].label.split('(')[0] : 'NO ANTENNA UP') : rs.end === 'dummy' ? 'DUMMY LOAD' : 'ANT: OPEN'}</span>
       ${r.mode === 'FM' && r.rptOffset ? `<span>TX ${(txf / 1e6).toFixed(3)}</span>` : ''}</div>`
-    : `<div class="lcd-off">${rs.issues[0] || 'OFF'}<br><small>(fix it in the Shack tab)</small></div>`;
+    : `<div class="lcd-off">${rs.issues[0] || 'OFF'}<br><small>(see the Station wiring page)</small></div>`;
   $$('.rbtn[data-band]', panel).forEach((b) => b.classList.toggle('active', band && b.dataset.band === band.name));
   $$('.rbtn[data-mode]', panel).forEach((b) => b.classList.toggle('active', b.dataset.mode === r.mode));
   $('#atu-btn', panel)?.classList.toggle('active', r.atuOn);
@@ -667,7 +669,7 @@ export function drawFrame() {
     wfCtx.fillText(`Noise ${rx.noiseDbm.toFixed(1)} dBm  S-meter ${rx.smeterDbm.toFixed(1)} dBm${s ? `  Sig ${s.dbm.toFixed(1)} dBm  SNR ${s.snr.toFixed(1)} dB` : ''}`, 10, 16);
     if (s) { const p = s.st.path || {}; wfCtx.fillText(`${s.st.call}  ${s.st.op.qth || ''}  ${p.dist ? Math.round(p.dist) + ' km' : ''}  brg ${p.brg != null ? Math.round(p.brg) + '°' : '?'}  path ${p.mode || '?'}  loss ${p.loss ? p.loss.toFixed(1) + ' dB' : '?'}  off ${(s.off >= 0 ? '+' : '') + Math.round(s.off)} Hz`, 10, 29); }
   }
-  if (!rs.powered) { wfCtx.fillStyle = '#ffd166'; wfCtx.font = '16px sans-serif'; wfCtx.fillText('Radio is off — finish wiring in the Shack tab', W / 2 - 170, specH / 2); }
+  if (!rs.powered) { wfCtx.fillStyle = '#ffd166'; wfCtx.font = '16px sans-serif'; wfCtx.fillText('Radio is off — complete the Station wiring', W / 2 - 170, specH / 2); }
   drawMeter(rs);
   const txl = document.getElementById('lcd-tx');
   if (txl) txl.className = txState.active ? 'tx-on' : 'dim';

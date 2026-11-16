@@ -1,4 +1,4 @@
-// 🌍 World view: everything your radio could hear, sorted by what it's FOR. Toggle each kind of
+// World view: everything your radio could hear, sorted by what it's FOR. Toggle each kind of
 // service on and off, switch between your local area and the whole world, and tune with a click.
 import { S, save } from './state.js';
 import { h, bus, hashStr } from './util.js';
@@ -13,16 +13,16 @@ import { bandOf } from './data/bandplan.js';
 
 // Kinds of radio service, with what they're used for.
 export const KINDS = {
-  hamhf: { label: 'Amateur HF', icon: '📻', col: '#ffb347', range: 'world', use: 'Hobby, DX, contests and emergency nets. 1.8–54 MHz, SSB/CW/digital. Long distance via the ionosphere.' },
-  hamvhf: { label: 'Amateur VHF & repeaters', icon: '🔁', col: '#5ee08a', range: 'local', use: 'Local ragchews, nets, ARES/RACES emergency comms. 2 m FM through repeaters (offset + CTCSS tone).' },
-  beacon: { label: 'Propagation beacons', icon: '📶', col: '#c792ea', range: 'world', use: 'NCDXF/IARU beacons rotate through 5 bands every 3 minutes — hear one and you know the band is open to that region.' },
-  time: { label: 'Time & frequency', icon: '⏱', col: '#e8e8e8', range: 'world', use: 'NIST WWV/WWVH: atomic-clock time, frequency standard, and space-weather bulletins at :18 / :45.' },
-  bcam: { label: 'AM broadcast', icon: '📻', col: '#4fc3f7', range: 'local', use: 'News, talk, sports. 530–1700 kHz: groundwave by day, skywave hundreds of km at night.' },
-  bcfm: { label: 'FM broadcast', icon: '🎵', col: '#29b6f6', range: 'local', use: 'Music and public radio, 88–108 MHz wide FM. Line-of-sight, ~50–100 km.' },
-  air: { label: 'Aviation', icon: '✈', col: '#ff7a6b', range: 'local', use: 'Tower, ground, approach and ATIS (recorded weather). AM, 108–137 MHz. 121.5 MHz is the emergency (guard) frequency.' },
-  wx: { label: 'Weather & alerts', icon: '🌦', col: '#ffd54f', range: 'local', use: 'NOAA Weather Radio: continuous forecasts and the 1050 Hz alert tone for warnings. 162.400–162.550 MHz.' },
-  ems: { label: 'Public safety', icon: '🚑', col: '#ef5350', range: 'local', use: 'HEAR ambulance-to-hospital channel (155.340). Most police and fire radio is now digital or encrypted.' },
-  players: { label: 'Real players', icon: '🧑‍🤝‍🧑', col: '#ffffff', range: 'world', use: 'Other people playing right now. Same band + open path = you can talk.' },
+  hamhf: { label: 'Amateur HF', icon: '', col: '#ffb347', range: 'world', use: 'Hobby, DX, contests and emergency nets. 1.8–54 MHz, SSB/CW/digital. Long distance via the ionosphere.' },
+  hamvhf: { label: 'Amateur VHF & repeaters', icon: '', col: '#5ee08a', range: 'local', use: 'Local ragchews, nets, ARES/RACES emergency comms. 2 m FM through repeaters (offset + CTCSS tone).' },
+  beacon: { label: 'Propagation beacons', icon: '', col: '#c792ea', range: 'world', use: 'NCDXF/IARU beacons rotate through 5 bands every 3 minutes — hear one and you know the band is open to that region.' },
+  time: { label: 'Time & frequency', icon: '', col: '#e8e8e8', range: 'world', use: 'NIST WWV/WWVH: atomic-clock time, frequency standard, and space-weather bulletins at :18 / :45.' },
+  bcam: { label: 'AM broadcast', icon: '', col: '#4fc3f7', range: 'local', use: 'News, talk, sports. 530–1700 kHz: groundwave by day, skywave hundreds of km at night.' },
+  bcfm: { label: 'FM broadcast', icon: '', col: '#29b6f6', range: 'local', use: 'Music and public radio, 88–108 MHz wide FM. Line-of-sight, ~50–100 km.' },
+  air: { label: 'Aviation', icon: '', col: '#ff7a6b', range: 'local', use: 'Tower, ground, approach and ATIS (recorded weather). AM, 108–137 MHz. 121.5 MHz is the emergency (guard) frequency.' },
+  wx: { label: 'Weather & alerts', icon: '', col: '#ffd54f', range: 'local', use: 'NOAA Weather Radio: continuous forecasts and the 1050 Hz alert tone for warnings. 162.400–162.550 MHz.' },
+  ems: { label: 'Public safety', icon: '', col: '#ef5350', range: 'local', use: 'HEAR ambulance-to-hospital channel (155.340). Most police and fire radio is now digital or encrypted.' },
+  players: { label: 'Real players', icon: '', col: '#ffffff', range: 'world', use: 'Other people playing right now. Same band + open path = you can talk.' },
 };
 const off = (p, km, seed) => { const a = (seed % 360) * Math.PI / 180; return { lat: p.lat + Math.cos(a) * km / 111, lon: p.lon + Math.sin(a) * km / (111 * Math.cos(p.lat * Math.PI / 180)) }; };
 
@@ -46,9 +46,9 @@ export function catalog() {
   for (const a of RW.airports || []) for (const fr of a.freqs.filter((x) => /ATIS|TWR|GND|APP|DEP|CTAF|UNIC|AWOS|ASOS/i.test(x.type)).slice(0, 4)) add('air', { name: `${a.ident} ${fr.type}`, f: Math.round(fr.mhz * 1e6), mode: 'AM', lat: a.lat, lon: a.lon, note: a.name });
   add('air', { name: 'Guard (emergency)', f: 121.5e6, mode: 'AM', ...me, note: 'monitored by all aircraft' });
   const wxp = off(me, 35, hashStr(RW.nws?.office || 'NWS'));
-  add('wx', { name: `NOAA Weather Radio${RW.nws?.office ? ` (${RW.nws.office})` : ''}`, f: WX_CHANNELS[hashStr(RW.nws?.office || 'NWS') % 7], mode: 'FM', ...wxp, note: RW.nws?.alerts?.length ? `⚠ ${RW.nws.alerts[0].event}` : 'forecast & alerts' });
+  add('wx', { name: `NOAA Weather Radio${RW.nws?.office ? ` (${RW.nws.office})` : ''}`, f: WX_CHANNELS[hashStr(RW.nws?.office || 'NWS') % 7], mode: 'FM', ...wxp, note: RW.nws?.alerts?.length ? `${RW.nws.alerts[0].event}` : 'forecast & alerts' });
   add('ems', { name: 'HEAR hospital channel', f: HEAR, mode: 'FM', ...off(me, 8, 200), note: 'ambulance ↔ hospital' });
-  for (const e of net.roster || []) { const st = stateBy(e.state); if (st) add('players', { name: e.call, f: e.freq, mode: e.mode, lat: st.lat, lon: st.lon, note: `${st.name}${e.tx ? ' · 🔴 talking' : ''}`, roster: e }); }
+  for (const e of net.roster || []) { const st = stateBy(e.state); if (st) add('players', { name: e.call, f: e.freq, mode: e.mode, lat: st.lat, lon: st.lon, note: `${st.name}${e.tx ? ' · talking' : ''}`, roster: e }); }
   return out;
 }
 
@@ -71,8 +71,8 @@ function render() {
   cv.addEventListener('click', (e) => { const b = cv.getBoundingClientRect(); const x = e.clientX - b.left, y = e.clientY - b.top; let best = null, bd = 14; for (const p of hoverPts) { const d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; best = p.it; } } if (best) tune(best); });
   list = h('div', { class: 'wv-list' });
   root.append(h('div', { class: 'card wv-card' },
-    h('div', { class: 'row spread wrap' }, h('h3', {}, '🌍 World view — what\'s on the air, by use'),
-      h('div', { class: 'row' }, ...[['local', '📍 My area'], ['world', '🌐 World']].map(([k, l]) => h('button', { class: `rbtn ${v.scale === k ? 'active' : ''}`, onclick: () => { v.scale = k; save(); render(); } }, l)))),
+    h('div', { class: 'row spread wrap' }, h('h3', {}, 'World view — what\'s on the air, by use'),
+      h('div', { class: 'row' }, ...[['local', 'My area'], ['world', 'World']].map(([k, l]) => h('button', { class: `rbtn ${v.scale === k ? 'active' : ''}`, onclick: () => { v.scale = k; save(); render(); } }, l)))),
     h('div', { class: 'wv-chips' }, ...Object.entries(KINDS).map(([k, K]) => h('button', { class: `wv-chip ${v.on[k] ? 'on' : ''}`, style: { '--c': K.col }, title: K.use, onclick: () => { v.on[k] = !v.on[k]; if (v.on[k] && (k === 'bcam' || k === 'bcfm')) wantBroadcast(); if (v.on[k] && k === 'air') wantAirports(); save(); render(); } }, `${K.icon} ${K.label}`)),
       h('button', { class: 'link small', onclick: () => { for (const k in v.on) v.on[k] = true; wantBroadcast(); wantAirports(); save(); render(); } }, 'all'), h('button', { class: 'link small', onclick: () => { for (const k in v.on) v.on[k] = false; save(); render(); } }, 'none')),
     h('div', { class: 'wv-body' }, cv, list)));
@@ -148,5 +148,5 @@ function draw() {
   ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mx, my, 9, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
   // tuned station highlight
   const tuned = items.find((x) => Math.abs(x.f - S.radio.freq) < 3000);
-  if (tuned) { const [tx, ty] = proj(tuned.lat, tuned.lon); ctx.strokeStyle = '#fff'; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#fff'; ctx.font = '11px Inter, sans-serif'; ctx.fillText(`▶ ${tuned.name}`, tx + 7, ty - 6); }
+  if (tuned) { const [tx, ty] = proj(tuned.lat, tuned.lon); ctx.strokeStyle = '#fff'; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#fff'; ctx.font = '11px Inter, sans-serif'; ctx.fillText(`${tuned.name}`, tx + 7, ty - 6); }
 }
