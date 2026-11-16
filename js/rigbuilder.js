@@ -144,16 +144,21 @@ function drawDesk(A, d) {
   let tunerX = null;
   if (A.tuner.usd) tunerX = place(box(x, 0, 150, A.tuner.auto ? 40 : 80, A.tuner.name.replace(/^Generic /, ''), (g, t, w, hh) => { if (A.tuner.auto) { g.append(s('circle', { cx: 20, cy: t + 20, r: 4, fill: '#3cff8a' }), s('rect', { x: 90, y: t + 12, width: 40, height: 14, rx: 2, fill: '#222' })); return; } g.append(knob(30, t + hh / 2, 16), knob(75, t + hh / 2, 16), knob(120, t + hh / 2, 16)); }), 150);
   // cables: DC (red/black) PSU→rig, coax rig→(amp)→meter→(tuner)→wall
-  const cab = (x1, x2, col, dy) => svg.append(s('path', { d: `M${x1} ${150 + dy} C ${x1} ${205 + dy}, ${x2} ${205 + dy}, ${x2} ${150 + dy}`, stroke: col, 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round', opacity: 0.9 }));
-  cab(psuX + 100, rigX + 20, '#c22', 6); cab(psuX + 110, rigX + 30, '#111', 10);
+  // Each cable gets a light casing underneath so dark leads/coax stay visible on the dark bench.
+  const cable = (d, col, w) => svg.append(
+    s('path', { d, stroke: '#c9d3dd', 'stroke-width': w + 3, fill: 'none', 'stroke-linecap': 'round', opacity: 0.55 }),
+    s('path', { d, stroke: col, 'stroke-width': w, fill: 'none', 'stroke-linecap': 'round' }));
+  const cab = (x1, x2, col, dy) => cable(`M${x1} ${150 + dy} C ${x1} ${205 + dy}, ${x2} ${205 + dy}, ${x2} ${150 + dy}`, col, 4);
+  cab(psuX + 100, rigX + 20, '#e53935', 6); cab(psuX + 110, rigX + 30, '#3a3f45', 10);
   const chain = [rigX + rw - 30, ampX && ampX + 20, ampX && ampX + 170, meterX + 20, meterX + 80, tunerX && tunerX + 20, tunerX && tunerX + 130].filter((v) => v != null);
-  for (let i = 0; i + 1 < chain.length; i += 2) cab(chain[i], chain[i + 1], '#1a1a1a', 14);
+  for (let i = 0; i + 1 < chain.length; i += 2) cab(chain[i], chain[i + 1], '#33383e', 14);
   const last = chain[chain.length - 1];
   const wallX = Math.max(1000, x + 40);
   svg.setAttribute('viewBox', `0 0 ${wallX + 60} 260`);
   svg.querySelectorAll('rect[width="1100"]').forEach((r) => r.setAttribute('width', wallX + 60));
   svg.append(s('rect', { x: wallX, y: 20, width: 14, height: 160, fill: '#2a2f35' }), s('circle', { cx: wallX + 7, cy: 120, r: 6, fill: '#c9a227' }));
-  svg.append(s('path', { d: `M${last} 164 C ${last} 235, ${wallX + 7} 235, ${wallX + 7} 126`, stroke: '#1a1a1a', 'stroke-width': 5, fill: 'none' }), label(wallX + 7, 12, 'wall feedthrough → antenna'));
+  cable(`M${last} 164 C ${last} 235, ${wallX + 7} 235, ${wallX + 7} 126`, '#33383e', 5);
+  svg.append(label(wallX + 7, 12, 'wall feedthrough → antenna'));
   return svg;
 }
 
