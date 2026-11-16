@@ -1,4 +1,4 @@
-// ⚙ Game settings: audio, display, layout, gameplay, operating, time & propagation,
+// Settings: audio, display, layout, mode & guidance, operating, time & propagation,
 // location & privacy, and your saved data.
 import { S, save, resetAll, licName } from './state.js';
 import { h, bus, toast, modal, download } from './util.js';
@@ -8,11 +8,12 @@ import { world } from './world.js';
 import { SUN } from './propagation.js';
 import { net } from './net.js';
 import { sandboxLicense } from './exam.js';
-import { setGameMode, applyLook, openStation } from './setups.js';
+import { applyLook, openStation } from './setups.js';
+import { MODES } from './modes.js';
 import { reapplyMode } from './radio.js';
 
 const ST = () => S.settings;
-const TABS = [['audio', '🔊 Audio'], ['display', '🖥 Display & layout'], ['play', '🎮 Gameplay'], ['op', '📻 Operating'], ['time', '🌞 Time & space weather'], ['loc', '📍 Location & privacy'], ['data', '💾 Data']];
+const TABS = [['audio', 'Audio'], ['display', 'Display & layout'], ['play', 'Mode & guidance'], ['op', 'Operating'], ['time', 'Time & space weather'], ['loc', 'Location & privacy'], ['data', 'Data']];
 
 // Apply the settings that live outside individual panels (call at start-up and on change).
 export function applySettings() {
@@ -60,14 +61,12 @@ export function openSettings(tab = 'audio') {
       row('Reduce motion', chk0('reduceMotion', applySettings), 'Fewer animations.'),
       row('Faceplate', select('face', [['auto', 'Match radio model'], ['graphite', 'Graphite'], ['black', 'Black'], ['silver', 'Silver'], ['retro', 'Retro wood & cream']], applyLook)),
       row('Display colour', select('lcd', [['green', 'Green'], ['amber', 'Amber'], ['blue', 'Ice blue'], ['white', 'Paper white']], applyLook)),
-      row('Radio tab panels', h('button', { class: 'btn small', onclick: () => { close(); openStation('look'); } }, 'Choose panels…')));
+      row('Radio page panels', h('button', { class: 'btn small', onclick: () => { close(); openStation('look'); } }, 'Choose panels…')));
     if (t === 'play') {
-      const helper = (S.helper ||= { on: true, tutorial: true, step: 0, min: false });
       pane.append(
-        row('Game mode', h('div', { class: 'row wrap' }, ...[['career', '🎓 Career'], ['free', '🧪 Free play'], ['listener', '🎧 Listener']].map(([m, l]) => h('button', { class: `rbtn ${(S.gameMode || 'career') === m ? 'active' : ''}`, onclick: () => { setGameMode(m); draw('play'); } }, l))), 'Your log, awards and progress are kept when you switch.'),
-        row('Elmer (mentor)', check('on', () => bus.emit('helper-refresh'), helper), 'The helper panel with tips and Ask Elmer.'),
-        row('Step-by-step tutorial', check('tutorial', () => bus.emit('helper-refresh'), helper), 'Career mode walkthrough.'),
-        row('Goal bar', check('hideGuide', () => bus.emit('guide-refresh'), ST(), true)),
+        row('Mode', h('div', { class: 'seg' }, ...Object.entries(MODES).map(([m, x]) => h('button', { class: S.mode === m ? 'active' : '', onclick: () => { bus.emit('set-mode', m); draw('play'); } }, x.label))), 'Your log, license and course progress are kept when you switch.'),
+        row('Restart the training course', h('button', { class: 'btn small', onclick: () => { S.training = { step: 0, done: {}, answers: {}, marks: {}, min: false }; save(); bus.emit('training-goto', 0); toast('Training course restarted.', 'info', 2500); } }, 'Restart'), 'Clears course progress only.'),
+        row('Contextual notes', check('notes'), 'Short explanations of exam topics as situations come up (Training and Simulation).'),
         row('Explain mode', chk0('explain', () => bus.emit('explain')), 'Hover or long-press any control to learn what it does.'),
         row('Lab readouts on the scope', chk0('lab'), 'Signal and noise dBm, SNR, path mode, distance.'),
         row('AI operator patience', select('patience', [[1, 'Realistic'], [1.6, 'Patient (more repeats)'], [0.7, 'Contest-fast']]), 'How long AI stations wait and how often they repeat for you.'),
@@ -90,7 +89,7 @@ export function openSettings(tab = 'audio') {
         row('Real UTC time', live, 'Propagation follows the real sun: low bands open at night, high bands by day.'),
         row('Time warp', h('span', { class: 'row' }, hour, lbl), 'Practice night-time 80 m or a daytime 10 m opening.'),
         row('Space weather', h('div', { class: 'row wrap' },
-          h('button', { class: 'btn small', onclick: () => { if (net.online) return toast('Online, everyone shares the real space weather — go offline to experiment.', 'warn'); SUN.randomize(); world.repopulate(); bus.emit('solar'); toast(`Practice space weather: SFI ${SUN.sfi}, K ${SUN.k}`, 'info'); } }, '☀ Random (practice)'),
+          h('button', { class: 'btn small', onclick: () => { if (net.online) return toast('Online, everyone shares the real space weather — go offline to experiment.', 'warn'); SUN.randomize(); world.repopulate(); bus.emit('solar'); toast(`Practice space weather: SFI ${SUN.sfi}, K ${SUN.k}`, 'info'); } }, 'Random (practice)'),
           h('button', { class: 'btn small', onclick: () => { SUN.override = false; SUN.key = null; SUN.shared(); world.repopulate(); bus.emit('solar'); } }, '↺ Live / shared')), 'Live data comes from NOAA SWPC.'));
     }
     if (t === 'loc') {
@@ -99,7 +98,7 @@ export function openSettings(tab = 'audio') {
       pane.append(
         row('Your QTH (state)', qth, 'Sets your callsign district, nearby broadcast stations, airports, weather and propagation.'),
         row('Precise location', S.op.lat != null ? h('div', { class: 'row' }, h('span', { class: 'small' }, `${S.op.lat.toFixed(2)}, ${S.op.lon.toFixed(2)}`), h('button', { class: 'btn small', onclick: () => { delete S.op.lat; delete S.op.lon; S.site = null; save(); bus.emit('qth'); draw('loc'); } }, 'Forget it'))
-          : h('button', { class: 'btn small', onclick: () => navigator.geolocation?.getCurrentPosition((p) => { S.op.lat = +p.coords.latitude.toFixed(4); S.op.lon = +p.coords.longitude.toFixed(4); save(); bus.emit('qth'); draw('loc'); toast('📍 Using your real location.', 'good'); }, (e) => toast(`Location: ${e.message}`, 'warn')) }, '📍 Use my real location'),
+          : h('button', { class: 'btn small', onclick: () => navigator.geolocation?.getCurrentPosition((p) => { S.op.lat = +p.coords.latitude.toFixed(4); S.op.lon = +p.coords.longitude.toFixed(4); save(); bus.emit('qth'); draw('loc'); toast('Using your real location.', 'good'); }, (e) => toast(`Location: ${e.message}`, 'warn')) }, 'Use my real location'),
         'Used for terrain, nearby stations and propagation. It stays in this browser and is never sent to other players (they only see your state).'),
         row('Real-world data', h('div', { class: 'tiny muted' }, 'NOAA SWPC (space weather), NWS / Open-Meteo (weather & elevation), Radio Browser (broadcast streams), OurAirports (airports), USGS (elevation). Only your approximate location is sent to these, never your name or callsign.')));
     }
@@ -107,14 +106,14 @@ export function openSettings(tab = 'audio') {
       const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
       file.onchange = async () => { try { const d = JSON.parse(await file.files[0].text()); if (!d || typeof d !== 'object' || !d.radio) throw new Error('not a save file'); localStorage.setItem('hamshack-sim-v1', JSON.stringify(d)); location.reload(); } catch (e) { toast(`Import failed: ${e.message}`, 'bad'); } };
       pane.append(
-        row('App version', h('div', { class: 'row' }, h('span', { class: 'small mono', id: 'app-ver' }, '…'), h('button', { class: 'btn small', onclick: () => bus.emit('check-version') }, '🔄 Check for update'), h('button', { class: 'btn small', onclick: () => location.reload() }, 'Reload')), 'The game updates itself when it\'s online. If something looks out of date, press Reload.'),
-        row('Export my save', h('button', { class: 'btn small', onclick: () => download(`hamshack-${S.call || 'save'}-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S, null, 1), 'application/json') }, '⬇ Download'), 'Back up your license, log, gear and settings — or move them to another device.'),
-        row('Import a save', h('span', {}, file, h('button', { class: 'btn small', onclick: () => file.click() }, '⬆ Load file…')), 'Replaces the current progress.'),
+        row('App version', h('div', { class: 'row' }, h('span', { class: 'small mono', id: 'app-ver' }, '…'), h('button', { class: 'btn small', onclick: () => bus.emit('check-version') }, 'Check for update'), h('button', { class: 'btn small', onclick: () => location.reload() }, 'Reload')), 'The app updates itself when it\'s online. If something looks out of date, press Reload.'),
+        row('Export my save', h('button', { class: 'btn small', onclick: () => download(`hamshack-${S.call || 'save'}-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S, null, 1), 'application/json') }, 'Download'), 'Back up your license, log, gear and settings — or move them to another device.'),
+        row('Import a save', h('span', {}, file, h('button', { class: 'btn small', onclick: () => file.click() }, 'Load file…')), 'Replaces the current progress.'),
         row('Reset everything', h('button', { class: 'btn warn small', onclick: () => { if (confirm('Erase ALL progress (license, log, station)?')) resetAll(); } }, 'Reset'), 'Cannot be undone.'));
     }
   };
   draw(tab);
   const showVer = () => { const el = document.getElementById('app-ver'); if (!el) return; fetch('js/main.js', { method: 'HEAD', cache: 'no-store' }).then((r) => { const lm = r.headers.get('last-modified'); el.textContent = lm ? `updated ${new Date(lm).toLocaleString()}` : 'current'; }).catch(() => { el.textContent = 'offline copy'; }); };
   body.addEventListener('click', () => setTimeout(showVer, 50)); setTimeout(showVer, 50);
-  close = modal(h('div', {}, h('h2', {}, '⚙ Settings'), body), { wide: true });
+  close = modal(h('div', {}, h('h2', {}, 'Settings'), body), { wide: true });
 }

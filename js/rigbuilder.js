@@ -1,11 +1,10 @@
-// 🧰 Rig builder: assemble a station from real-world equipment and check it like an engineer.
+// Rig builder: assemble a station from real-world equipment and check it like an engineer.
 // Power budget (supply amps vs. radio draw), amplifier drive and mains, tuner and meter ratings,
 // band and receive coverage, cost and weight. "Use this station" puts it on the air.
 import { S, save } from './state.js';
 import { h, bus, toast } from './util.js';
 import { RIGS, GEAR_DEFAULT } from './rigs.js';
 import { GEAR, REAL_RIGS } from './data/gear.js';
-import { owns, ownsGear, money, freePlay } from './store.js';
 import { BANDS } from './data/bandplan.js';
 
 const SLOTS = ['psu', 'tuner', 'meter', 'amp', 'mic', 'key', 'arrestor'];
@@ -16,18 +15,18 @@ const GROUPS = [
   ['Receivers (listen only)', (r) => !r.tx.length],
 ];
 const PRESETS = [
-  ['💰 Budget starter', { rig: 'ft891', psu: 'gen30', tuner: 'gen300', meter: 'gen200', amp: 'none', mic: 'stock', key: 'gen' }],
-  ['🏠 Classic home station', { rig: 'ic7300', psu: 'rs35m', tuner: 'mfj949', meter: 'cn901', amp: 'none', mic: 'heilpr781', key: 'by1' }],
-  ['🌲 POTA / portable', { rig: 'ic705', psu: 'lfp20', tuner: 'z100', meter: 'gen200', amp: 'none', mic: 'stock', key: 'by1' }],
-  ['🏆 Contest super-station', { rig: 'k4', psu: 'rs35m', tuner: 'at2k', meter: 'lp500', amp: 'spe13k', mic: 'heilpro7', key: 'by1', mains240: true }],
-  ['📟 Handheld only', { rig: 'uv5r', psu: 'sla12', tuner: 'none', meter: 'gen200', amp: 'none', mic: 'stock', key: 'gen' }],
-  ['🎧 SDR listening post', { rig: 'rspdx', psu: 'gen30', tuner: 'none', meter: 'gen200', amp: 'none', mic: 'stock', key: 'gen' }],
+  ['Budget starter', { rig: 'ft891', psu: 'gen30', tuner: 'gen300', meter: 'gen200', amp: 'none', mic: 'stock', key: 'gen' }],
+  ['Classic home station', { rig: 'ic7300', psu: 'rs35m', tuner: 'mfj949', meter: 'cn901', amp: 'none', mic: 'heilpr781', key: 'by1' }],
+  ['POTA / portable', { rig: 'ic705', psu: 'lfp20', tuner: 'z100', meter: 'gen200', amp: 'none', mic: 'stock', key: 'by1' }],
+  ['Contest super-station', { rig: 'k4', psu: 'rs35m', tuner: 'at2k', meter: 'lp500', amp: 'spe13k', mic: 'heilpro7', key: 'by1', mains240: true }],
+  ['Handheld only', { rig: 'uv5r', psu: 'sla12', tuner: 'none', meter: 'gen200', amp: 'none', mic: 'stock', key: 'gen' }],
+  ['SDR listening post', { rig: 'rspdx', psu: 'gen30', tuner: 'none', meter: 'gen200', amp: 'none', mic: 'stock', key: 'gen' }],
 ];
 
 let root;
 const draft = () => (S.rbDraft ||= { rig: S.rig || 'allmode', ...GEAR_DEFAULT, ...(S.gear || {}) });
 
-export function initRigBuilder(el) { root = el; render(); bus.on('money', () => { if (!root.hidden) render(); }); }
+export function initRigBuilder(el) { root = el; render(); }
 
 // ------------------------------------------------------------------ analysis
 export function analyze(d) {
@@ -163,65 +162,48 @@ function render() {
   if (!root) return;
   const d = draft(), A = analyze(d);
   root.innerHTML = '';
-  const priceTag = (owned, price) => (owned ? '✓ owned' : freePlay() ? 'free play' : `₵${price}`);
-  const rigOwned = (id) => owns(`rig-${id}`);
-  const rigSel = h('select', { id: 'rb-rig' }, ...GROUPS.map(([g, f]) => h('optgroup', { label: g }, ...Object.entries(RIGS).filter(([, r]) => f(r)).map(([id, r]) => h('option', { value: id, selected: d.rig === id }, `${r.name}${REAL_RIGS[id] ? ` — $${r.usd}` : ' (generic)'} · ${priceTag(rigOwned(id), r.price)}`)))));
+  const rigSel = h('select', { id: 'rb-rig' }, ...GROUPS.map(([g, f]) => h('optgroup', { label: g }, ...Object.entries(RIGS).filter(([, r]) => f(r)).map(([id, r]) => h('option', { value: id, selected: d.rig === id }, `${r.name}${REAL_RIGS[id] ? ` — $${r.usd}` : ' (generic)'}`)))));
   rigSel.onchange = () => { d.rig = rigSel.value; save(); render(); };
   const slot = (cat) => {
     const G = GEAR[cat];
-    const sel = h('select', { 'data-slot': cat }, ...Object.entries(G.items).map(([id, it]) => h('option', { value: id, selected: d[cat] === id }, `${it.name}${it.usd ? ` — $${it.usd}` : ''} · ${priceTag(ownsGear(cat, id), it.price)}`)));
+    const sel = h('select', { 'data-slot': cat }, ...Object.entries(G.items).map(([id, it]) => h('option', { value: id, selected: d[cat] === id }, `${it.name}${it.usd ? ` — $${it.usd}` : ''}`)));
     sel.onchange = () => { d[cat] = sel.value; save(); render(); };
     const it = G.items[d[cat]];
-    const buy = !ownsGear(cat, d[cat]) ? h('button', { class: 'btn small primary', onclick: () => buyGear(cat, d[cat]) }, `Buy ₵${it.price}`) : null;
-    return h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, `${G.icon} ${G.label}`), buy), sel, h('div', { class: 'tiny muted' }, it.desc));
+    return h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, G.label)), sel, h('div', { class: 'tiny muted' }, it.desc));
   };
   const r = A.r;
   const m240 = h('input', { type: 'checkbox', checked: !!d.mains240 }); m240.onchange = () => { d.mains240 = m240.checked; save(); render(); };
-  const missing = [!rigOwned(d.rig) && ['rig', d.rig], ...SLOTS.filter((c) => !ownsGear(c, d[c])).map((c) => [c, d[c]])].filter(Boolean);
   const inUse = S.rig === d.rig && SLOTS.every((c) => (S.gear || {})[c] === d[c]);
   root.append(
     h('div', { class: 'card' },
-      h('div', { class: 'row spread wrap' }, h('div', {}, h('h2', {}, '🧰 Rig builder'), h('p', { class: 'muted small' }, 'Assemble a station from real equipment. Every choice changes the simulation: supply current limits your output, amplifiers need drive (and sometimes 240 V), tuners and meters have power ratings, receivers have gaps, better mics add talk power.')),
+      h('div', { class: 'row spread wrap' }, h('div', {}, h('h2', {}, 'Equipment'), h('p', { class: 'muted small' }, 'Assemble a station from real equipment. Every choice changes the simulation: supply current limits your output, amplifiers need drive (and sometimes 240 V), tuners and meters have power ratings, receivers have gaps, better mics add talk power.')),
         h('div', { class: 'row wrap rb-presets' }, ...PRESETS.map(([n, p]) => h('button', { class: 'btn small', onclick: () => { Object.assign(d, GEAR_DEFAULT, p); save(); render(); } }, n)))),
       drawDesk(A, d)),
     h('div', { class: 'rb-grid' },
       h('div', { class: 'card rb-slots' },
-        h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, '📻 Radio'), !rigOwned(d.rig) ? h('button', { class: 'btn small primary', onclick: () => buyRig(d.rig) }, `Buy ₵${r.price}`) : null), rigSel, h('div', { class: 'tiny muted' }, r.blurb)),
+        h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, 'Radio')), rigSel, h('div', { class: 'tiny muted' }, r.blurb)),
         ...SLOTS.map(slot),
         h('label', { class: 'inline small' }, m240, ' My shack has a 240 V outlet (for big amplifiers)')),
       h('div', { class: 'card rb-spec' },
-        h('h3', {}, `📋 ${r.name}${A.amp.out && A.outW > A.rigW ? ` + ${A.amp.name}` : ''}`),
+        h('h3', {}, `${r.name}${A.amp.out && A.outW > A.rigW ? ` + ${A.amp.name}` : ''}`),
         h('table', { class: 'tbl small' },
           ...[['Class', r.cls], ['Output', r.tx.length ? `${A.outW} W${A.ampNote}${A.rigW < r.maxW ? ` (radio limited to ${A.rigW} W by the supply)` : ''}${r.maxWvhf ? ` · ${r.maxWvhf} W on 2 m` : ''}` : 'receive only'],
             ['Transmit', A.tx], ['Receive', A.rxTxt], ['Modes', r.modes.join(' / ')],
             ['Receiver', `${r.quietRx > 2 ? 'excellent' : r.quietRx > 0 ? 'very good' : r.quietRx < -2 ? 'basic (noisy, overloads)' : 'good'}${r.narrowCw ? ', narrow CW filters' : ''}${r.dsp ? ', DSP NR' : ''}${r.preamps ? `, ${r.preamps} preamp${r.preamps > 1 ? 's' : ''}` : ''}`],
             ['Features', [r.atu && 'internal ATU', r.scope && 'spectrum scope', r.ifs && 'IF shift', r.notch && 'notch', r.battery && 'internal battery'].filter(Boolean).join(' · ') || '—'],
             ['Current draw', `${r.drawA || '?'} A @ 13.8 V (TX)`], ['Station cost', `≈ $${A.cost.toLocaleString()}`], ['Weight', `≈ ${A.kg.toFixed(1)} kg`]].map(([k, v]) => h('tr', {}, h('th', {}, k), h('td', {}, v)))),
-        h('h4', {}, A.ok ? '✅ Engineering check: good to go' : '⛔ Engineering check: problems to fix'),
-        h('ul', { class: 'rb-checks' }, ...A.checks.map(([k, t]) => h('li', { class: k }, `${k === 'ok' ? '✓' : k === 'warn' ? '⚠' : '✗'} ${t}`))),
+        h('h4', {}, A.ok ? 'Engineering check: good to go' : 'Engineering check: problems to fix'),
+        h('ul', { class: 'rb-checks' }, ...A.checks.map(([k, t]) => h('li', { class: k }, `${k === 'ok' ? '✓' : k === 'warn' ? '' : '✗'} ${t}`))),
         h('div', { class: 'row' },
-          h('button', { class: 'btn primary big', id: 'rb-apply', disabled: inUse, onclick: () => apply(d, missing) }, inUse ? '✓ This is your station' : '✅ Use this station'),
-          missing.length && !freePlay() ? h('span', { class: 'small warn' }, `Not owned yet: ${missing.length} item(s) — ₵${missing.reduce((s2, [c, id]) => s2 + (c === 'rig' ? RIGS[id].price : GEAR[c].items[id].price), 0)} (you have ₵${money()})`) : null),
-        h('p', { class: 'muted tiny' }, 'Specs are approximate published figures; prices are typical US street prices. Product names identify equipment only — no affiliation with any manufacturer.'))));
+          h('button', { class: 'btn primary big', id: 'rb-apply', disabled: inUse, onclick: () => apply(d) }, inUse ? '✓ This is your station' : 'Use this station')),
+        h('p', { class: 'muted tiny' }, 'Specs are approximate published figures; prices are typical US street prices, shown for reference. Product names identify equipment only — no affiliation with any manufacturer.'))));
 }
 
-function buyRig(id) {
-  const r = RIGS[id];
-  if (owns(`rig-${id}`)) return;
-  if (money() < r.price) return toast(`Not enough credits (₵${money()} / ₵${r.price}). Operate and contest to earn more.`, 'warn');
-  S.money -= r.price; (S.owned ||= []).push(`rig-${id}`); save(); bus.emit('money', 0); toast(`🛒 Bought the ${r.name}.`, 'good'); render();
-}
-function buyGear(cat, id) {
-  const it = GEAR[cat].items[id];
-  if (money() < it.price) return toast(`Not enough credits (₵${money()} / ₵${it.price}).`, 'warn');
-  S.money -= it.price; (S.owned ||= []).push(`gear-${cat}-${id}`); save(); bus.emit('money', 0); toast(`🛒 Bought: ${it.name}.`, 'good'); render();
-}
-function apply(d, missing) {
-  if (missing.length && !freePlay()) return toast('Buy the missing items first (or switch to Free play in 🎛 Station → Game mode).', 'warn');
+function apply(d) {
   S.rig = d.rig;
   S.gear = Object.fromEntries([...SLOTS, 'mains240'].map((k) => [k, d[k]]));
   save(); bus.emit('rig'); bus.emit('gear');
   const A = analyze(d);
-  toast(`📻 Station updated: ${A.r.name}, ${A.r.tx.length ? `${A.outW} W` : 'receive only'}.${A.ok ? '' : ' ⚠ Check the warnings — the problems are simulated!'}`, A.ok ? 'good' : 'warn', 7000);
+  toast(`Station updated: ${A.r.name}, ${A.r.tx.length ? `${A.outW} W` : 'receive only'}.${A.ok ? '' : ' Check the warnings — the problems are simulated!'}`, A.ok ? 'good' : 'warn', 7000);
   render();
 }

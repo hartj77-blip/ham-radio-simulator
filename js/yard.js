@@ -1,11 +1,11 @@
-// 🏡 Antenna builder: hang the antenna wherever you actually live or operate — a suburban yard,
+// Antenna builder: hang the antenna wherever you actually live or operate — a suburban yard,
 // a farm, a city rooftop, an apartment balcony, an HOA attic, a park, a summit, a car, a boat or
 // a beach. The place sets the supports, the space, the ground, the man-made noise and the losses
 // (all of which feed the simulation), plus the local rules. Then a real bill of materials and the
 // build steps, like an actual weekend project.
-import { S, save, addXp } from './state.js';
+import { S, save } from './state.js';
 import { h, bus, toast, clamp } from './util.js';
-import { maxHeight } from './store.js';
+import { maxHeight } from './limits.js';
 import { ANT_TYPES, FEEDS } from './antenna.js';
 import { targetHz } from './planner.js';
 import { GROUNDS } from './em/models.js';
@@ -19,70 +19,70 @@ const s = (tag, a = {}, ...kids) => { const e = document.createElementNS(NS, tag
 const ALL = ['dipole', 'invv', 'vertical', 'efhw', 'yagi'];
 export const ENVS = {
   suburban: {
-    icon: '🏡', label: 'Suburban yard', scene: 'yard', lot: 140, ground: 'average', noise: 0, loss: () => 0, types: ALL,
+    icon: '', label: 'Suburban yard', scene: 'yard', lot: 140, ground: 'average', noise: 0, loss: () => 0, types: ALL,
     desc: 'A house on a typical lot with a couple of trees.',
     sup: [{ id: 'treeA', kind: 'tree', name: 'Oak', x: 10, h: 45 }, { id: 'house', kind: 'house', name: 'House eave', x: 60, h: 18 }, { id: 'treeB', kind: 'tree', name: 'Maple', x: 125, h: 40 }, { id: 'mast', kind: 'mast', name: 'Mast', x: 85, h: 35 }],
     ends: { a: 'treeA', b: 'treeB', apex: 'mast', low: 'house', vert: null, yagi: 'mast' }, stake: 8,
     rules: ['Check your deed/HOA covenants and local zoning for towers (US: the PRB-1 rule asks towns to "reasonably accommodate" ham antennas — it does not override private covenants).', 'Keep wires well clear of power lines: if it falls, it must not touch one.'],
   },
   rural: {
-    icon: '🚜', label: 'Rural acreage', scene: 'farm', lot: 400, ground: 'good', noise: -6, loss: () => 0, types: ALL,
+    icon: '', label: 'Rural acreage', scene: 'farm', lot: 400, ground: 'good', noise: -6, loss: () => 0, types: ALL,
     desc: 'Space, tall trees and a quiet noise floor — the antenna farm dream.',
     sup: [{ id: 'treeA', kind: 'tree', name: 'Cottonwood', x: 30, h: 70 }, { id: 'barn', kind: 'house', name: 'Barn roof', x: 160, h: 28 }, { id: 'treeB', kind: 'tree', name: 'Oak', x: 360, h: 60 }, { id: 'mast', kind: 'mast', name: 'Tower', x: 250, h: 35 }],
     ends: { a: 'treeA', b: 'treeB', apex: 'mast', low: 'barn', vert: null, yagi: 'mast' }, stake: 8,
     rules: ['Rural noise is often 5–10 dB lower than in town: weak DX that is buried in a city is readable here.', 'Throw lines realistically reach ~60 ft in a tree; above that you need a climber or a tower.', 'Long runs: use low-loss coax (LMR-400 / hardline) or ladder line.'],
   },
   city: {
-    icon: '🏙', label: 'City rooftop', scene: 'city', lot: 90, ground: 'poor', noise: 9, loss: () => 1, types: ALL, floors: 8,
+    icon: '', label: 'City rooftop', scene: 'city', lot: 90, ground: 'poor', noise: 9, loss: () => 1, types: ALL, floors: 8,
     desc: 'Flat roof of a mid-rise building, with permission from the owner.',
     sup: [{ id: 'roofmast', kind: 'mast', name: 'Roof mast', x: 15, h: 20, onRoof: true }, { id: 'stair', kind: 'house', name: 'Stair / elevator housing', x: 75, h: 12, onRoof: true }, { id: 'parapet', kind: 'rail', name: 'Parapet', x: 45, h: 4, onRoof: true }],
     ends: { a: 'roofmast', b: 'stair', apex: 'roofmast', low: 'parapet', vert: 'parapet', yagi: 'roofmast' }, stake: 4, stakeOnRoof: true,
     rules: ['Get written permission from the building owner; roofs have other users (HVAC techs, cellular sites) — do an RF-exposure evaluation (FCC §97.13).', 'City man-made noise (LED lighting, switch-mode supplies, data lines) is the #1 enemy: expect S7–S9 noise on 80/40 m.', 'Bond the mast to the building\'s lightning protection; run coax down a riser, not over the parapet edge.', 'The roof height is a huge plus on VHF/UHF.'],
   },
   apartment: {
-    icon: '🏢', label: 'Apartment balcony', scene: 'apartment', lot: 14, ground: 'poor', noise: 10, loss: () => 3, types: ['vertical', 'efhw', 'invv', 'dipole'], floors: 4,
+    icon: '', label: 'Apartment balcony', scene: 'apartment', lot: 14, ground: 'poor', noise: 10, loss: () => 3, types: ['vertical', 'efhw', 'invv', 'dipole'], floors: 4,
     desc: 'A balcony a few floors up. Small, stealthy and noisy — but very doable.',
     sup: [{ id: 'rail', kind: 'rail', name: 'Balcony railing', x: 2, h: 4, onFloor: true }, { id: 'pole', kind: 'pole', name: 'Painter\'s-pole mast', x: 12, h: 12, onFloor: true }, { id: 'tree', kind: 'tree', name: 'Courtyard tree', x: 70, h: 45 }],
     ends: { a: 'pole', b: 'tree', efA: 'tree', apex: 'pole', low: 'rail', vert: 'rail', yagi: 'pole' }, stake: 4, stakeOnFloor: true,
     rules: ['Check your lease: many forbid "external antennas". Stealth options: a thin wire to a tree, a vertical on a clamp that comes down after the session, a magnetic loop.', 'US: the FCC OTARD rule protects TV dishes and broadband antennas — NOT amateur antennas.', 'Concrete and rebar detune and absorb (~3 dB); the building\'s electronics add noise. Use a common-mode choke at the feed and run lower power to avoid interfering with neighbours.', 'FT8 and CW go a long way from a compromise antenna. On VHF your floor height is a real advantage.'],
   },
   hoa: {
-    icon: '🏘', label: 'HOA / condo (stealth)', scene: 'attic', lot: 46, ground: 'average', noise: 4, loss: (f) => (f > 50 ? 4 : 3), types: ['dipole', 'invv', 'vertical', 'efhw'],
+    icon: '', label: 'HOA / condo (stealth)', scene: 'attic', lot: 46, ground: 'average', noise: 4, loss: (f) => (f > 50 ? 4 : 3), types: ['dipole', 'invv', 'vertical', 'efhw'],
     desc: 'No visible antennas allowed: an attic dipole and a "flagpole" vertical.',
     sup: [{ id: 'gableA', kind: 'attic', name: 'Attic gable (west)', x: 0, h: 17 }, { id: 'ridge', kind: 'attic', name: 'Attic ridge', x: 23, h: 24 }, { id: 'gableB', kind: 'attic', name: 'Attic gable (east)', x: 46, h: 17 }, { id: 'flag', kind: 'pole', name: 'Flagpole', x: 70, h: 25 }],
     ends: { a: 'gableA', b: 'gableB', apex: 'ridge', low: 'gableB', vert: null, yagi: 'flag' }, stake: 9,
     rules: ['HOA covenants (CC&Rs) can legally ban outdoor antennas; PRB-1 does not override them. Stealth is the answer.', 'Indoors, wiring, ducts and foil insulation detune the antenna (2–5 %) and cost ~3 dB. Re-sweep after installing — the dip moves.', 'Bend the ends of an attic dipole along the rafters if it\'s too long — it still works.', 'A flagpole with a hidden vertical (and radials under the lawn) is the classic stealth DX antenna.'],
   },
   park: {
-    icon: '🌲', label: 'Park (POTA)', scene: 'park', lot: 150, ground: 'average', noise: -5, loss: () => 0, types: ALL,
+    icon: '', label: 'Park (POTA)', scene: 'park', lot: 150, ground: 'average', noise: -5, loss: () => 0, types: ALL,
     desc: 'Parks On The Air: a picnic table, trees and a battery.',
     sup: [{ id: 'treeA', kind: 'tree', name: 'Pine', x: 10, h: 50 }, { id: 'pole', kind: 'pole', name: 'Fibreglass pole (31 ft)', x: 70, h: 31 }, { id: 'table', kind: 'table', name: 'Picnic table', x: 85, h: 3 }, { id: 'treeB', kind: 'tree', name: 'Oak', x: 140, h: 40 }],
     ends: { a: 'treeA', b: 'treeB', apex: 'pole', low: 'table', vert: null, yagi: 'pole' }, stake: 6,
     rules: ['Leave no trace: no nails, no climbing, soft rope around branches; don\'t string wire across trails.', 'Parks are quiet — your noise floor is far lower than at home.', 'A POTA activation needs 10 contacts from inside the park boundary.', 'Operating abroad? Check reciprocal licensing (CEPT T/R 61-01 in Europe, IARP in the Americas).'],
   },
   summit: {
-    icon: '⛰', label: 'Mountain summit (SOTA)', scene: 'summit', lot: 70, ground: 'poor', noise: -10, loss: () => 0, types: ['invv', 'efhw', 'vertical', 'dipole'],
+    icon: '', label: 'Mountain summit (SOTA)', scene: 'summit', lot: 70, ground: 'poor', noise: -10, loss: () => 0, types: ['invv', 'efhw', 'vertical', 'dipole'],
     desc: 'Summits On The Air: a 20 ft pole on rocky ground with the world below you.',
     sup: [{ id: 'cairnA', kind: 'rock', name: 'Rock (west)', x: 0, h: 4 }, { id: 'pole', kind: 'pole', name: 'Fibreglass pole (20 ft)', x: 35, h: 20 }, { id: 'cairnB', kind: 'rock', name: 'Rock (east)', x: 70, h: 4 }],
     ends: { a: 'pole', b: 'cairnB', apex: 'pole', low: 'cairnB', vert: null, yagi: 'pole' }, stake: 3,
     rules: ['The ground falls away in every direction: the effective height for low-angle radiation is huge — free dB toward DX. Load your real location in the Site planner to see it.', 'Rocky ground is a poor reflector: verticals need elevated radials.', 'Weight matters: thin wire, a 6 m / 20 ft fibreglass pole, a 2–3 Ah LiFePO4.', 'Watch the weather — lightning on a summit is not a joke. Pack up early.'],
   },
   vehicle: {
-    icon: '🚙', label: 'Vehicle (mobile)', scene: 'vehicle', lot: 15, ground: 'average', noise: 3, loss: (f) => (f < 5 ? 12 : f < 10 ? 8 : f < 22 ? 4 : f < 30 ? 2 : 0), types: ['vertical'],
+    icon: '', label: 'Vehicle (mobile)', scene: 'vehicle', lot: 15, ground: 'average', noise: 3, loss: (f) => (f < 5 ? 12 : f < 10 ? 8 : f < 22 ? 4 : f < 30 ? 2 : 0), types: ['vertical'],
     desc: 'A loaded HF whip on the car — or a 5/8 λ magmount for VHF.',
     sup: [{ id: 'car', kind: 'car', name: 'Trunk-lip mount', x: 8, h: 4 }],
     ends: { a: 'car', b: 'car', apex: 'car', low: 'car', vert: 'car', yagi: 'car' }, stake: 3,
     rules: ['An HF mobile whip is a shortened, loaded vertical: ~−8 dB on 40 m, −4 dB on 20 m versus a full-size antenna (the sim applies this). Bandwidth is narrow — retune when you QSY.', 'Bond the hood, trunk lid and exhaust to the body; put ferrites on noisy wiring (fuel pump, LED lights).', 'Mount on the roof centre for VHF; check overhead clearance (garages, drive-throughs).', 'Many places restrict using a radio while driving — the passenger operates or you pull over.'],
   },
   boat: {
-    icon: '⛵', label: 'Sailboat', scene: 'boat', lot: 40, ground: 'salt', noise: -6, loss: () => 0, types: ['vertical', 'efhw'],
+    icon: '', label: 'Sailboat', scene: 'boat', lot: 40, ground: 'salt', noise: -6, loss: () => 0, types: ['vertical', 'efhw'],
     desc: 'Insulated backstay or a wire up the mast, over salt water.',
     sup: [{ id: 'mast', kind: 'boatmast', name: 'Mast', x: 16, h: 48 }, { id: 'stern', kind: 'rail', name: 'Stern rail', x: 38, h: 6 }],
     ends: { a: 'mast', b: 'stern', apex: 'mast', low: 'stern', vert: 'stern', yagi: 'mast' }, stake: 6,
     rules: ['Salt water is an almost perfect ground: a vertical over the sea has superb low-angle gain — DXpeditions set up at the water\'s edge for this.', 'The classic: insulators in the backstay, an automatic tuner at its base, and a copper-foil counterpoise to the keel / seawater.', 'Marine HF (ITU maritime service) needs a ship station licence and its own channels; ham bands need your amateur licence (and permission in foreign waters).'],
   },
   beach: {
-    icon: '🏖', label: 'Beach / island trip', scene: 'beach', lot: 140, ground: 'salt', noise: -4, loss: () => 0, types: ALL,
+    icon: '', label: 'Beach / island trip', scene: 'beach', lot: 140, ground: 'salt', noise: -4, loss: () => 0, types: ALL,
     desc: 'A vertical at the water\'s edge — the DXpedition secret.',
     sup: [{ id: 'palmA', kind: 'tree', name: 'Palm', x: 15, h: 32 }, { id: 'pole', kind: 'pole', name: 'Fibreglass pole (31 ft)', x: 110, h: 31 }, { id: 'palmB', kind: 'tree', name: 'Palm', x: 70, h: 28 }],
     ends: { a: 'palmA', b: 'palmB', apex: 'pole', low: 'palmB', vert: null, yagi: 'pole' }, stake: 6,
@@ -202,7 +202,7 @@ function finish(out, a = S.antenna) {
   if (a.type !== 'vertical' && out.ok && out.height < 6) { out.notes.unshift(['bad', `The feed point would be only ${Math.max(0, out.height)} ft up — on the ground, practically. Hang it from a taller support, or use the pole as the centre of an inverted-V.`]); out.ok = false; }
   out.agl ??= out.height;
   const m = Y().sup.find((p) => p.kind === 'mast');
-  if (m && m.h > mastH()) out.notes.push(['warn', `Your mast/tower only reaches ${mastH()} ft (buy a taller one at the Hamfest).`]);
+  if (m && m.h > mastH()) out.notes.push(['warn', `Your mast/tower only reaches ${mastH()} ft (choose a taller support in Simulation mode).`]);
   return out;
 }
 
@@ -348,19 +348,19 @@ function render() {
         h('h4', {}, 'Supports & space'),
         E.floors ? h('label', { class: 'small' }, E.scene === 'apartment' ? 'Your floor ' : 'Building floors ', num(y, 'floor', 1, 60), ` (≈ ${(y.floor || 1) * 10} ft up)`) : null,
         h('table', { class: 'tbl small' }, h('tr', {}, h('th', {}, ''), h('th', {}, 'Height ft'), h('th', {}, 'Position ft')),
-          ...y.sup.map((p) => h('tr', {}, h('td', {}, `${{ tree: /palm/i.test(p.name) ? '🌴' : '🌳', house: '🏠', mast: '🗼', pole: '🎣', rail: '🚧', attic: '📐', table: '🪑', rock: '🪨', car: '🚙', boatmast: '⛵' }[p.kind] || '•'} ${p.name}${baseOf(p) ? ` (+${baseOf(p)} ft base)` : ''}`),
+          ...y.sup.map((p) => h('tr', {}, h('td', {}, `${{ tree: /palm/i.test(p.name) ? '' : '', house: '', mast: '', pole: '', rail: '', attic: '', table: '', rock: '', car: '', boatmast: '' }[p.kind] || '•'} ${p.name}${baseOf(p) ? ` (+${baseOf(p)} ft base)` : ''}`),
             h('td', {}, p.kind === 'mast' ? h('span', {}, num(p, 'h', 10, mastH()), h('span', { class: 'tiny muted' }, ` max ${mastH()}`)) : num(p, 'h', 2, 120)), h('td', {}, num(p, 'x', 0, y.lot))))),
         h('label', { class: 'small' }, `${E.scene === 'apartment' ? 'Balcony' : E.scene === 'boat' ? 'Boat' : E.scene === 'attic' ? 'Attic' : E.scene === 'city' ? 'Roof' : 'Usable'} width `, num(y, 'lot', 8, 600), ' ft  ', h('button', { class: 'link small', onclick: () => { ys.envs[ys.env] = envState(ys.env); save(); render(); } }, 'reset this place')),
         h('h4', {}, `Mounting the ${ANT_TYPES[a.type].label.split(' (')[0].toLowerCase()}`),
         h('div', { class: 'row wrap' }, ...mounts),
-        h('ul', { class: 'rb-checks' }, ...g.notes.map(([kk, t]) => h('li', { class: kk }, `${kk === 'ok' ? '✓' : kk === 'warn' ? '⚠' : '✗'} ${t}`))),
+        h('ul', { class: 'rb-checks' }, ...g.notes.map(([kk, t]) => h('li', { class: kk }, `${kk === 'ok' ? '✓' : kk === 'warn' ? '' : '✗'} ${t}`))),
         hang,
-        h('h4', {}, `📜 Rules & tips for ${E.label.toLowerCase()}`),
+        h('h4', {}, `Rules & tips for ${E.label.toLowerCase()}`),
         h('ul', { class: 'small env-rules' }, ...E.rules.map((r) => h('li', {}, r)))),
       h('div', {},
-        h('h4', {}, `🧾 Bill of materials ≈ $${Math.round(B.total)}`),
+        h('h4', {}, `Bill of materials ≈ $${Math.round(B.total)}`),
         h('table', { class: 'tbl small' }, ...B.items.map(([q, w, usd]) => h('tr', {}, h('td', { class: 'mono' }, q), h('td', {}, w), h('td', { class: 'muted' }, `$${Math.round(usd)}`)))),
-        h('h4', {}, `🔧 Build steps (${done}/${STEPS.length})`),
-        h('ol', { class: 'yard-steps' }, ...STEPS.map(([kk, t, d]) => { const c = h('input', { type: 'checkbox', checked: !!st[kk] }); c.onchange = () => { st[kk] = c.checked; save(); if (STEPS.every(([k2]) => st[k2]) && !st.xp) { st.xp = 1; addXp(20, 'antenna built'); toast('🔧 Antenna project complete! +20 XP', 'good'); } render(); }; return h('li', { class: st[kk] ? 'done' : '' }, h('label', {}, c, ' ', h('b', {}, t)), h('div', { class: 'tiny muted' }, d)); })),
+        h('h4', {}, `Build steps (${done}/${STEPS.length})`),
+        h('ol', { class: 'yard-steps' }, ...STEPS.map(([kk, t, d]) => { const c = h('input', { type: 'checkbox', checked: !!st[kk] }); c.onchange = () => { st[kk] = c.checked; save(); if (STEPS.every(([k2]) => st[k2]) && !st.xp) { st.xp = 1; toast('Antenna project complete.', 'good'); } render(); }; return h('li', { class: st[kk] ? 'done' : '' }, h('label', {}, c, ' ', h('b', {}, t)), h('div', { class: 'tiny muted' }, d)); })),
         h('p', { class: 'tiny muted' }, `Design frequency ${(targetHz() / 1e6).toFixed(3)} MHz. Prices are typical US retail, for planning.`)))));
 }

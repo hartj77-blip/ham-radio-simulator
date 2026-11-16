@@ -3,47 +3,65 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ham Shack Simulator</title>
-  <meta name="description" content="A realistic in-browser amateur (ham) radio simulator: wire your shack, build antennas, tune the bands, earn your license and compete in contests.">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📻</text></svg>">
+  <title>Ham Radio Simulator</title>
+  <meta name="description" content="Amateur radio training and station simulation in the browser: wire a station, design and tune antennas, search the bands, study propagation and the license material, and operate.">
+  <meta name="theme-color" content="#0b0f14">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230b0f14'/><path d='M16 12v14M11 26h10M8 6l8 6 8-6' stroke='%2341b8e8' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Share+Tech+Mono&display=swap">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body data-tab="radio">
-  <header id="topbar">
-    <div class="brand">📻 <b>Ham Shack</b> Simulator</div>
-    <div id="station-id"></div>
-    <div id="solar"></div>
-    <div id="clock"></div>
-    <div id="xp"></div>
-  </header>
-  <nav id="tabs"></nav>
-  <div id="guide-bar"></div>
-  <main>
-    <section id="tab-shack" class="tab" hidden></section>
-    <section id="tab-antenna" class="tab" hidden></section>
-    <section id="tab-workbench" class="tab" hidden></section>
-    <section id="tab-rigbuilder" class="tab" hidden></section>
-    <section id="tab-radio" class="tab" hidden>
-      <div id="finder"></div>
-      <div id="radio-panel"></div>
-      <div id="net-panel"></div>
-      <div id="scanner-panel"></div>
-      <div id="operating"></div>
-      <div id="map-panel"></div>
-      <div id="world-panel"></div>
-    </section>
-    <section id="tab-contest" class="tab" hidden></section>
-    <section id="tab-license" class="tab" hidden></section>
-    <section id="tab-logbook" class="tab" hidden></section>
-    <section id="tab-store" class="tab" hidden></section>
-    <section id="tab-help" class="tab" hidden></section>
-    <section id="ht-panel"></section>
-  </main>
+<body data-tab="radio" data-mode="training">
+  <aside id="sidebar">
+    <div class="brand">
+      <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v13M8 22h8M5 4l7 5 7-5"/><path d="M4.5 12a10 10 0 0 1 0-8M19.5 12a10 10 0 0 0 0-8"/></svg></span>
+      <span class="brand-text"><b>Ham Radio</b><span>Simulator</span></span>
+    </div>
+    <nav id="tabs"></nav>
+    <div class="side-foot" id="side-foot"></div>
+  </aside>
+  <div id="shell">
+    <header id="topbar">
+      <button class="icon-btn menu-btn" id="menu-btn" title="Menu" aria-label="Menu"></button>
+      <div class="tb-title"><span id="page-eyebrow" class="eyebrow"></span><h1 id="page-title"></h1></div>
+      <div id="mode-switch" class="seg mode-seg" role="tablist" aria-label="Mode"></div>
+      <div class="tb-tools" id="tb-tools"></div>
+    </header>
+    <div id="statusbar">
+      <div id="station-id"></div>
+      <div id="solar"></div>
+      <div id="clock"></div>
+      <div id="xp"></div>
+    </div>
+    <main>
+      <section id="tab-course" class="tab" hidden></section>
+      <section id="tab-library" class="tab" hidden></section>
+      <section id="tab-shack" class="tab" hidden></section>
+      <section id="tab-antenna" class="tab" hidden></section>
+      <section id="tab-workbench" class="tab" hidden></section>
+      <section id="tab-rigbuilder" class="tab" hidden></section>
+      <section id="tab-radio" class="tab" hidden>
+        <div id="free-console" hidden></div>
+        <div id="finder"></div>
+        <div id="radio-panel"></div>
+        <div id="map-panel"></div>
+        <div id="net-panel"></div>
+        <div id="scanner-panel"></div>
+        <div id="operating"></div>
+        <div id="world-panel"></div>
+      </section>
+      <section id="tab-contest" class="tab" hidden></section>
+      <section id="tab-license" class="tab" hidden></section>
+      <section id="tab-logbook" class="tab" hidden></section>
+      <section id="tab-help" class="tab" hidden></section>
+      <section id="ht-panel"></section>
+    </main>
+  </div>
+  <aside id="coach" hidden></aside>
   <div id="toasts"></div>
   <div id="modal" hidden></div>
-  <noscript>This game needs JavaScript.</noscript>
+  <noscript>This application requires JavaScript.</noscript>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
