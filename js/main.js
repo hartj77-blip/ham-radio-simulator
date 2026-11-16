@@ -31,11 +31,12 @@ import { elmer } from './elmer.js';
 import { openSettings, applySettings } from './settings.js';
 import { MISSION, REAL, SIMULATED, SOURCES, REFERENCES } from './data/sources.js';
 import { initFeedback, openFeedback } from './feedback.js';
+import { initHistory } from './history.js';
 import './manualui.js';
 
 // [id, label, icon, group]
 const TABS = [
-  ['course', 'Course', 'grad', 'Learn'], ['library', 'Reference library', 'book', 'Learn'], ['license', 'License study', 'badge', 'Learn'],
+  ['course', 'Course', 'grad', 'Learn'], ['library', 'Reference library', 'book', 'Learn'], ['license', 'License study', 'badge', 'Learn'], ['history', 'Radio history', 'clock', 'Learn'],
   ['shack', 'Station wiring', 'plug', 'Build'], ['antenna', 'Antenna', 'antenna', 'Build'], ['workbench', 'Antenna workbench', 'flask', 'Build'], ['rigbuilder', 'Equipment', 'layers', 'Build'],
   ['radio', 'Radio', 'radio', 'Operate'], ['logbook', 'Logbook', 'log', 'Operate'], ['contest', 'Contest practice', 'trophy', 'Operate'],
   ['help', 'Help', 'help', 'Support'],
@@ -188,6 +189,7 @@ function init() {
   initLogbookUI($('#tab-logbook'));
   initCourse($('#tab-course'));
   initLibrary($('#tab-library'));
+  initHistory($('#tab-history'));
   helpTab($('#tab-help'));
   header(); solarBanner(); clock();
   world.setFreq(S.radio.freq);

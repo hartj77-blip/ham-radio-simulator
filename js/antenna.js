@@ -4,6 +4,7 @@ import { h, $, clamp, toast, bus } from './util.js';
 import { BANDS, bandOf, bandByName } from './data/bandplan.js';
 import { elmer } from './elmer.js';
 import { openDesigner } from './autodesign.js';
+import { openStationPlan } from './advisor.js';
 import { icon } from './icons.js';
 import { buildModel, segment } from './em/models.js';
 import { dayFactor, simDate } from './propagation.js';
@@ -276,6 +277,7 @@ function render() {
       h('span', { class: 'dc-icon', html: icon('pin') }),
       h('span', { class: 'dc-text' }, h('b', {}, 'Find my location & design the best antenna'), h('span', {}, 'Band, type, height, orientation and exact length for your site — in one click.')),
       h('span', { class: 'dc-go', html: icon('arrowRight') })),
+    h('button', { class: 'btn ghost small plan-link', id: 'station-plan-btn', onclick: () => openStationPlan() }, h('span', { html: icon('compass') }), 'Station plan for my location: what to build here and why'),
     h('h3', {}, 'Build your antenna'),
     h('label', {}, 'Antenna type', typeSel),
     h('p', { class: 'muted small' }, T.desc),
