@@ -7,9 +7,50 @@ import { dayFactor, interp, simDate, distanceKm } from './propagation.js';
 import { stateBy } from './data/world.js';
 import { net } from './net.js';
 import { mapTarget, targetCard } from './modes.js';
+import { IONO, layerAt, ionoLive } from './iono.js';
+import { save } from './state.js';
 
 const LAND_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json';
 let land = null, landTried = false, cv, ctx, nightImg = null, nightAt = 0, hover = null, root;
+
+// Live ionosphere overlays (NOAA GloTEC / D-RAP).
+export const LAYERS = {
+  none: { label: 'Off' },
+  muf: { label: 'MUF (3000 km)', unit: 'MHz', lo: 3, hi: 35, ticks: [5, 10, 14, 21, 28], note: 'Highest frequency that one 3000 km F2 hop can use. Bands below the MUF are open; above it signals pass into space.' },
+  fof2: { label: 'foF2', unit: 'MHz', lo: 1, hi: 14, ticks: [2, 4, 7, 10, 13], note: 'Critical frequency: the highest frequency reflected straight down (NVIS). Bands below foF2 work for local, high-angle contacts.' },
+  tec: { label: 'TEC', unit: 'TECU', lo: 0, hi: 60, ticks: [10, 20, 30, 40, 50], note: 'Total electron content of the column above each point (1 TECU = 10¹⁶ electrons/m²). More electrons, higher MUF.' },
+  drap: { label: 'Absorption', unit: 'MHz', lo: 0, hi: 15, ticks: [3, 6, 9, 12], note: 'D-RAP: highest frequency losing 1 dB to the daytime D layer. It jumps during solar flares (radio blackouts): low bands go silent first.' },
+};
+// perceptual ramp (dark blue → teal → green → yellow → red)
+const RAMP = [[20, 40, 110], [30, 110, 170], [40, 170, 160], [120, 200, 90], [230, 210, 60], [240, 120, 40], [210, 40, 50]];
+export function rampColor(t) {
+  t = Math.max(0, Math.min(1, t)) * (RAMP.length - 1);
+  const i = Math.min(RAMP.length - 2, Math.floor(t)), f = t - i;
+  return RAMP[i].map((c, k) => Math.round(c + (RAMP[i + 1][k] - c) * f));
+}
+let ionoImg = null, ionoKey = '';
+function ionoLayer(kind, W, H) {
+  const L = LAYERS[kind];
+  const key = `${kind}|${IONO.time}|${IONO.drapTime}|${W}`;
+  if (ionoImg && ionoKey === key) return ionoImg;
+  const cw = 180, ch = 90;
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const x = c.getContext('2d'), img = x.createImageData(cw, ch), px = img.data;
+  for (let py = 0; py < ch; py++) for (let qx = 0; qx < cw; qx++) {
+    const lat = 90 - (py + 0.5) / ch * 180, lon = (qx + 0.5) / cw * 360 - 180;
+    const v = layerAt(kind, lat, lon);
+    const i = (py * cw + qx) * 4;
+    if (!Number.isFinite(v)) continue;
+    const t = (v - L.lo) / (L.hi - L.lo);
+    const [r, g, b] = rampColor(t);
+    px[i] = r; px[i + 1] = g; px[i + 2] = b;
+    px[i + 3] = kind === 'drap' ? Math.round(Math.min(1, v / 4) * 170) : 120;
+  }
+  x.putImageData(img, 0, 0);
+  ionoImg = c; ionoKey = key;
+  return c;
+}
+const mapLayer = () => (S.settings.mapLayer ?? 'muf');
 
 // Minimal TopoJSON decoder for the land object.
 function decodeTopo(topo) {
@@ -39,9 +80,25 @@ export function initMapUI(el) {
   root = el;
   cv = h('canvas', { class: 'pmap', title: 'Click a station to tune to it, or any location for a path analysis' });
   const tbox = h('div', { class: 'map-target' });
+  const layerSeg = h('div', { class: 'seg layer-seg' }), layerInfo = h('div', { class: 'layer-info' });
   root.append(h('div', { class: 'card map-card' },
     h('div', { class: 'card-head' }, h('div', {}, h('h3', {}, 'Propagation map'), h('div', { class: 'muted tiny' }, 'Greyline, active stations and path analysis. Click any location to analyse the path; in Free Play this also tunes the radio.')), h('span', { class: 'muted tiny', id: 'map-legend' }, '')),
+    h('div', { class: 'map-layers' }, h('span', { class: 'ctl-title' }, 'LIVE IONOSPHERE'), layerSeg, layerInfo),
     cv, tbox));
+  const drawLayerSeg = () => {
+    layerSeg.innerHTML = '';
+    for (const [k, L] of Object.entries(LAYERS)) layerSeg.append(h('button', { class: mapLayer() === k ? 'active' : '', onclick: () => { S.settings.mapLayer = k; save(); drawLayerSeg(); } }, L.label));
+    const L = LAYERS[mapLayer()];
+    layerInfo.innerHTML = '';
+    if (mapLayer() === 'none') return;
+    if (!ionoLive() && mapLayer() !== 'drap') { layerInfo.append(h('span', { class: 'tiny muted' }, IONO.error || (S.settings.hour != null ? 'Live data applies to real time only — time warp is on.' : S.settings.liveIono === false ? 'Live ionosphere data is turned off in Settings.' : 'Loading live data from NOAA…'))); return; }
+    const grad = `linear-gradient(90deg, ${[0, 1, 2, 3, 4, 5, 6].map((i) => `rgb(${rampColor(i / 6).join(',')})`).join(', ')})`;
+    layerInfo.append(h('div', { class: 'ramp' }, h('div', { class: 'ramp-bar', style: { background: grad } }),
+      h('div', { class: 'ramp-ticks' }, ...L.ticks.map((t) => h('span', { style: { left: `${((t - L.lo) / (L.hi - L.lo)) * 100}%` } }, t)), h('span', { class: 'unit' }, L.unit))),
+      h('span', { class: 'tiny muted' }, `${L.note} NOAA SWPC ${mapLayer() === 'drap' ? `D-RAP, ${IONO.drapTime || ''}` : `GloTEC, ${IONO.time ? IONO.time.slice(11, 16) + ' UTC' : ''}`}.`));
+  };
+  drawLayerSeg();
+  bus.on('iono', drawLayerSeg);
   bus.on('target', (t) => { tbox.innerHTML = ''; tbox.append(targetCard(t)); });
   ctx = cv.getContext('2d');
   cv.addEventListener('mousemove', (e) => { hover = { x: e.offsetX, y: e.offsetY }; });
@@ -113,7 +170,10 @@ export function drawMap() {
       ctx.fill('evenodd'); ctx.stroke();
     }
   }
-  ctx.imageSmoothingEnabled = true; ctx.drawImage(nightLayer(W, H), 0, 0, W, H);
+  ctx.imageSmoothingEnabled = true;
+  const lk = mapLayer();
+  if (lk !== 'none' && ((lk === 'drap' && IONO.drap) || (lk !== 'drap' && ionoLive()))) ctx.drawImage(ionoLayer(lk, W, H), 0, 0, W, H);
+  ctx.drawImage(nightLayer(W, H), 0, 0, W, H);
   // stations
   const me = player();
   const [mx, my] = proj(me.lat, me.lon, W, H);
@@ -174,6 +234,16 @@ export function drawMap() {
   }
   const rh = hover ? pickRoster(hover.x, hover.y) : null;
   if (rh) { ctx.font = '12px system-ui'; const lbl = `${rh.call} (${rh.state}) · ${(rh.freq / 1e6).toFixed(3)} ${rh.mode}${rh.tx ? ' · ON AIR' : ''} — click to join`; const w = ctx.measureText(lbl).width + 12; ctx.fillStyle = 'rgba(40,10,35,0.9)'; ctx.fillRect(Math.min(hover.x + 10, W - w - 4), hover.y - 24, w, 20); ctx.fillStyle = '#fff'; ctx.fillText(lbl, Math.min(hover.x + 10, W - w - 4) + 6, hover.y - 10); }
+  // live value under the cursor
+  if (hover && lk !== 'none' && !(hv) && (ionoLive() || lk === 'drap')) {
+    const hl = 90 - hover.y / H * 180, hn = hover.x / W * 360 - 180, v = layerAt(lk, hl, hn);
+    if (Number.isFinite(v)) {
+      const t = `${LAYERS[lk].label} ${v.toFixed(lk === 'tec' ? 0 : 1)} ${LAYERS[lk].unit}`;
+      ctx.font = '11px "JetBrains Mono", monospace'; const tw = ctx.measureText(t).width + 12;
+      const tx3 = Math.min(hover.x + 12, W - tw - 4), ty3 = Math.max(16, hover.y - 10);
+      ctx.fillStyle = 'rgba(8,13,19,0.88)'; ctx.fillRect(tx3, ty3 - 13, tw, 18); ctx.fillStyle = '#e4e9ef'; ctx.fillText(t, tx3 + 6, ty3);
+    }
+  }
   // analysed target
   const tg = mapTarget.t;
   if (tg) {

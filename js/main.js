@@ -5,7 +5,8 @@ import { icon } from './icons.js';
 import { stateBy } from './data/world.js';
 import { audio } from './audio.js';
 import { world } from './world.js';
-import { SUN, bandConditions, simDate, grid } from './propagation.js';
+import { SUN, bandConditions, simDate, grid, mufAt } from './propagation.js';
+import { startIono, IONO, blackout } from './iono.js';
 import { initShackUI, shackTick } from './shack.js';
 import { initAntennaUI } from './antenna.js';
 import { initRadioUI, rxUpdate, drawFrame, tuneBy, setFreq, setMode, updateDisplay } from './radio.js';
@@ -53,7 +54,10 @@ function solarBanner() {
   const st = stateBy(S.op.state);
   const bc = bandConditions(st);
   const cls = (c) => `bc-${c.toLowerCase()}`;
-  $('#solar').innerHTML = `${SUN.live ? '<span class="live-dot" title="Live data from the NOAA Space Weather Prediction Center">LIVE</span>' : ''}<span class="sb-item" title="Solar Flux Index (10.7 cm)"><span class="sb-k">SFI</span><b>${SUN.sfi}</b></span><span class="sb-item" title="A-index (daily geomagnetic)"><span class="sb-k">A</span><b>${SUN.a}</b></span><span class="sb-item" title="K-index (3-hour geomagnetic)"><span class="sb-k">K</span><b class="${SUN.k >= 5 ? 'bad' : SUN.k >= 4 ? 'warn' : ''}">${SUN.k}</b></span>`
+  const mq = st ? mufAt(st) : null;
+  const ionoHtml = mq && mq.live ? `<span class="sb-item" title="Live from NOAA GloTEC (${IONO.time?.slice(11, 16)} UTC): MUF for a 3000 km hop and critical frequency over your location"><span class="sb-k">MUF</span><b>${mq.muf.toFixed(1)}</b><span class="sb-k">foF2</span><b>${mq.foF2.toFixed(1)}</b></span>` : '';
+  const bo = blackout() ? `<span class="sb-item" title="NOAA: ${IONO.xray} / ${IONO.proton}"><b class="bad">HF absorption event</b></span>` : '';
+  $('#solar').innerHTML = `${SUN.live ? '<span class="live-dot" title="Live data from the NOAA Space Weather Prediction Center">LIVE</span>' : ''}<span class="sb-item" title="Solar Flux Index (10.7 cm)"><span class="sb-k">SFI</span><b>${SUN.sfi}</b></span><span class="sb-item" title="A-index (daily geomagnetic)"><span class="sb-k">A</span><b>${SUN.a}</b></span><span class="sb-item" title="K-index (3-hour geomagnetic)"><span class="sb-k">K</span><b class="${SUN.k >= 5 ? 'bad' : SUN.k >= 4 ? 'warn' : ''}">${SUN.k}</b></span>${ionoHtml}${bo}`
     + `<span class="bc-group">${bc.map((b) => `<span class="bc" title="${b.name}: day ${b.day} / night ${b.night}"><span class="sb-k">${b.name.replace('-', '–')}</span><b class="${cls(b.now)}">${b.now}</b></span>`).join('')}`
     + (SUN.es ? '<span class="bc" title="Sporadic-E is likely today on 6 m and 10 m"><span class="sb-k">Es</span><b class="bc-good">Likely</b></span>' : '') + '</span>';
 }
@@ -112,7 +116,7 @@ function helpTab(el) {
         h('p', { class: 'small muted' }, 'Audio, display size and touch layout, mode and guidance, PTT key and CW speed, time and space weather, location, and backup/restore of your data.'),
         h('button', { class: 'btn primary', onclick: () => openSettings() }, 'Open settings')),
       h('div', { class: 'card' }, h('h3', {}, 'About the models'),
-        h('p', { class: 'small' }, 'A sun-driven ionosphere model (MUF, D-layer absorption, skip, K-index and aurora); antenna impedance from a Method-of-Moments solver with height, ground, radials and coax loss including mismatch; a receiver chain with IF filtering, AGC, band noise and static; FCC Part 97 privileges by license class; and simulated operators who answer only when they can actually hear you.'),
+        h('p', { class: 'small' }, 'Live ionosphere from NOAA SWPC: measured foF2 and layer height (GloTEC, every 10 minutes) set the MUF along every path, and D-RAP absorption is applied during solar flares and proton events. A sun-driven model fills in when live data is unavailable or time warp is on (MUF, D-layer absorption, skip, K-index and aurora); antenna impedance from a Method-of-Moments solver with height, ground, radials and coax loss including mismatch; a receiver chain with IF filtering, AGC, band noise and static; FCC Part 97 privileges by license class; and simulated operators who answer only when they can actually hear you.'),
         h('p', { class: 'small muted' }, 'Exam questions are original practice questions covering the official topics — study the current NCVEC pool before a real VE session. Callsigns are randomly generated.')),
     ));
 }
@@ -159,6 +163,8 @@ function init() {
   initWorldView($('#world-panel'));
   initScannerUI($('#scanner-panel'));
   startRealWorld();
+  startIono();
+  bus.on('iono', () => { solarBanner(); world.bandCache = {}; });
   bus.on('realworld', (k) => { if (k === 'sun') { solarBanner(); world.bandCache = {}; } if (k === 'wx') clock(); });
   initOperatingUI($('#operating'));
   initNetUI($('#net-panel'));

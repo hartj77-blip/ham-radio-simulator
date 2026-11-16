@@ -87,6 +87,7 @@ export function openSettings(tab = 'audio') {
       hour.oninput = () => { live.checked = false; apply(); }; live.onchange = apply;
       pane.append(
         row('Real UTC time', live, 'Propagation follows the real sun: low bands open at night, high bands by day.'),
+        row('Live ionosphere data', check('liveIono', () => bus.emit('iono-toggle')), 'Use the measured ionosphere from NOAA (GloTEC foF2/MUF every 10 minutes, D-RAP flare absorption). Off = modelled from the solar flux only. Applies at real time, not during time warp.'),
         row('Time warp', h('span', { class: 'row' }, hour, lbl), 'Practice night-time 80 m or a daytime 10 m opening.'),
         row('Space weather', h('div', { class: 'row wrap' },
           h('button', { class: 'btn small', onclick: () => { if (net.online) return toast('Online, everyone shares the real space weather — go offline to experiment.', 'warn'); SUN.randomize(); world.repopulate(); bus.emit('solar'); toast(`Practice space weather: SFI ${SUN.sfi}, K ${SUN.k}`, 'info'); } }, 'Random (practice)'),

@@ -870,3 +870,15 @@ body.ht-view .fb-fab { left: 14px; bottom: auto; top: 10px; width: 34px; height:
 .design-why dt { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; padding-top: 3px; }
 .design-why dd { margin: 0; color: var(--text-2); line-height: 1.55; }
 @media (max-width: 600px) { .design-why { grid-template-columns: 1fr; } .design-why dd { margin-bottom: 6px; } }
+
+/* ---------- live ionosphere layers ---------- */
+.map-layers { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.map-layers .ctl-title { margin: 0; color: var(--muted); }
+.layer-seg button { padding: 4px 10px; font-size: 0.78rem; }
+.layer-info { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; flex: 1; min-width: 260px; }
+.layer-info .tiny { flex: 1; min-width: 220px; line-height: 1.4; }
+.ramp { width: 220px; flex: none; }
+.ramp-bar { height: 8px; border-radius: 4px; border: 1px solid var(--line-2); }
+.ramp-ticks { position: relative; height: 14px; font-family: var(--mono); font-size: 0.66rem; color: var(--muted); }
+.ramp-ticks span { position: absolute; top: 2px; transform: translateX(-50%); }
+.ramp-ticks .unit { right: 0; left: auto !important; transform: none; color: var(--faint); }
