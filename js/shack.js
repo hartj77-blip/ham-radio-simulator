@@ -192,6 +192,7 @@ function draw() {
   svg.append(s('rect', { x: 10, y: 410, width: 930, height: 18, class: 'desk' }));
   svg.append(s('line', { x1: 945, y1: 0, x2: 945, y2: 560, class: 'wall' }));
   svg.append(s('text', { x: 1000, y: 30, class: 'svgt', 'text-anchor': 'middle' }, 'OUTSIDE'));
+  svg.append(s('path', { d: 'M996 175 C 1030 175 1020 80 1035 40', class: 'cable-casing coax' }));
   svg.append(s('path', { d: 'M996 175 C 1030 175 1020 80 1035 40', class: 'coax-out' }));
   svg.append(s('text', { x: 1010, y: 300, class: 'svgt small', 'text-anchor': 'middle', transform: 'rotate(90 1010 300)' }, S.antenna.built ? 'feedline to antenna ✓' : 'feedline (no antenna up)'));
   svg.append(s('path', { d: 'M720 527 L 940 527 L 940 556', class: 'gnd-wire' }));
@@ -244,10 +245,15 @@ function draw() {
     const a = P[c[0]], b = P[c[1]];
     const kind = a.t === 'coax' ? 'coax' : a.t === 'lead' || a.t === 'post' ? ((a.t === 'lead' ? a : b).pol === '+' ? 'dcred' : 'dcblk') : a.t === 'gnd' || a.t === 'gbus' ? 'gndc' : 'cord';
     const sag = Math.max(40, Math.abs(a.x - b.x) * 0.25);
-    const path = s('path', { d: `M${a.x} ${a.y} C ${a.x} ${a.y + sag}, ${b.x} ${b.y + sag}, ${b.x} ${b.y}`, class: `cable ${kind}` });
-    path.onclick = () => { S.shack.conn = S.shack.conn.filter((x) => x !== c); save(); audio.click(); draw(); bus.emit('shack'); };
-    path.append(s('title', {}, 'Click to unplug'));
-    svg.append(path);
+    const d = `M${a.x} ${a.y} C ${a.x} ${a.y + sag}, ${b.x} ${b.y + sag}, ${b.x} ${b.y}`;
+    // Light casing underneath keeps dark coax/black leads visible on the dark room.
+    const g = s('g', { class: `cable-g ${kind}` });
+    g.append(s('path', { d, class: `cable-casing ${kind}` }));
+    const path = s('path', { d, class: `cable ${kind}` });
+    g.onclick = () => { S.shack.conn = S.shack.conn.filter((x) => x !== c); save(); audio.click(); draw(); bus.emit('shack'); };
+    g.append(s('title', {}, 'Click to unplug'));
+    g.append(path);
+    svg.append(g);
   }
   for (const p of PORTS) {
     const used = partners(p.id).length > 0;
