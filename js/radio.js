@@ -11,8 +11,9 @@ import { elmer } from './elmer.js';
 import { ui as opUi, txState } from './operating.js';
 import { net } from './net.js';
 import { owns, maxPower } from './store.js';
+import { mountMaster, render as renderMaster } from './masterview.js';
 import { serviceOf, SERVICE_REGIONS } from './services.js';
-import { rig } from './rigs.js';
+import { rig , rigRx, gearOf } from './rigs.js';
 import { RW, WX_CHANNELS, HEAR } from './realworld.js';
 import { hashStr } from './util.js';
 const regionOf = (hz) => bandOf(hz) || serviceOf(hz);
@@ -29,7 +30,7 @@ export function setFreq(hz, opts = {}) {
   const r = R();
   const old = bandOf(r.freq), oldReg = regionOf(r.freq);
   const [rxLo, rxHi] = rig().rx;
-  if (hz < rxLo || hz > rxHi) toast(`Your ${rig().name} receives ${(rxLo / 1e6).toFixed(1)}–${rxHi / 1e6} MHz.`, 'warn', 3500);
+  if (!rigRx(hz)) toast(`Your ${rig().name} receives ${(rxLo / 1e6).toFixed(1)}–${rxHi / 1e6} MHz.`, 'warn', 3500);
   r.freq = Math.round(clamp(hz, rxLo, rxHi));
   if (Math.abs(r.freq - 10e6) < 3000 || Math.abs(r.freq - 15e6) < 3000 || Math.abs(r.freq - 5e6) < 3000) (S.flags ||= {}).wwv = 1;
   const nb = bandOf(r.freq);
@@ -65,9 +66,11 @@ export function setMode(m) {
   if ((m === 'USB' || m === 'LSB') && m !== SIDEBAND_FOR(R().freq)) elmer('sideband');
   save(); updateDisplay();
 }
+export function reapplyMode() { applyMode(); }
 function applyMode() {
   const r = R();
-  audio.setMode(r.mode, r.filter[r.mode], r.pitch);
+  audio.setMode(r.mode, r.filter[r.mode], r.pitch, rig().ifs ? r.ifShift || 0 : 0);
+  audio.setNotch(r.notch && rig().notch ? r.notchHz || 1000 : null);
   for (const id of [...audio.voices.keys()]) audio.remove(id);
 }
 
@@ -105,9 +108,10 @@ function toneFor(st) {
 
 function inPassband(tone) {
   const r = R(), w = r.filter[r.mode];
-  if (r.mode === 'CW') return Math.abs(tone - r.pitch) < w / 2 + 40;
+  const sh = rig().ifs ? r.ifShift || 0 : 0;
+  if (r.mode === 'CW') return Math.abs(tone - r.pitch - sh) < w / 2 + 40;
   if (r.mode === 'AM') return tone > 50 && tone < w / 2;
-  return tone > 200 && tone < 250 + w;
+  return tone > 200 + sh && tone < 250 + w + sh;
 }
 
 // Called ~10x per second.
@@ -126,12 +130,13 @@ export function rxUpdate() {
   }
   audio.setAF(r.af);
   const d = dialHz(), f = d / 1e6;
-  const att = r.rfAtt;
+  const att = r.rfAtt + (1 - (r.rfGain ?? 1)) * 30; // ATT pad + RF gain backed off
   const sys = rs.antennaOk ? system(d) : null;
   let nf = -132;
   if (rs.antennaOk && sys) nf = Math.max(-132, bandNoiseDbm(f, player()) + sys.effDb - sys.totalLoss);
   nf -= att;
-  nf = Math.max(nf, -132 - (rig().quietRx || 0));
+  nf = Math.max(nf, -132 - (rig().quietRx || 0) - [0, 6, 9][r.preamp || 0] * (f > 14 ? 1 : 0.3));
+  if (f < 10) nf += gearOf('psu').noiseDb || 0; // switching-supply hash on the low bands
   const bw = r.mode === 'CW' ? r.filter.CW : r.mode === 'FM' ? 12000 : r.mode === 'WFM' ? 150000 : r.mode === 'AM' ? r.filter.AM / 2 : r.filter[r.mode];
   const nBW = nf + 10 * Math.log10(bw / 2400);
   rx.noiseDbm = nf;
@@ -170,12 +175,13 @@ export function rxUpdate() {
       const shift = r.mode === 'USB' ? off : r.mode === 'LSB' ? -off : r.mode === 'CW' ? r.pitch + off - 1200 : Math.abs(off);
       const center = r.mode === 'CW' ? r.pitch + off + (st.sb === 'USB' ? 1200 : -1200)
         : (st.sb === 'USB' ? 1 : -1) * (r.mode === 'LSB' ? -1 : 1) * 1200 + shift;
-      audible = r.mode !== 'FM' && center > 150 && center < 3100;
+      const sh = rig().ifs ? r.ifShift || 0 : 0;
+      audible = r.mode !== 'FM' && center > 150 + sh && center < 3100 + sh;
       intelligible = sameSb && r.mode !== 'CW' && Math.abs(off) < 350;
       audio.setVoice(st.id, { tone: clamp(center * 0.6, 150, 3000) });
     }
     const snr = dbm - nBW;
-    sigs.push({ st, dbm, snr, audible, intelligible, off });
+    sigs.push({ st, dbm, snr, audible, intelligible, off, tone });
     if (audible) {
       const rms = NREF * db2amp(snr);
       if (rms > maxRms) maxRms = rms;
@@ -199,10 +205,14 @@ export function rxUpdate() {
   }
   // AGC (fast attack, slow decay)
   const target = clamp(0.28 / maxRms, 0.02, 1);
-  agc = target < agc ? target : agc + (target - agc) * 0.08;
-  audio.setNoise(noiseRms * agc * (r.nr && (owns('dsp') || rig().dsp) ? 0.55 : 1));
+  const spd = r.agcSpd || 'mid';
+  if (spd === 'off') agc = 0.7; // no AGC: strong signals blast, weak ones vanish — ride the RF gain
+  else agc = target < agc ? target : agc + (target - agc) * ({ fast: 0.3, mid: 0.08, slow: 0.025 }[spd] || 0.08);
+  rx.agcDb = 20 * Math.log10(agc); rx.att = att; rx.bw = bw;
+  audio.setNoise(noiseRms * agc * (r.nr && (owns('dsp') || rig().dsp) ? 0.55 : 1) * (S.settings.noiseLvl ?? 1));
   for (const s of sigs) {
     let rms = s.audible && open ? NREF * db2amp(s.snr) * agc : 0;
+    if (r.notch && rig().notch && s.tone > 0 && Math.abs(s.tone - (r.notchHz || 1000)) < 70 && ['cw', 'cwtone', 'amtone'].includes(s.st.tx.kind) || (r.notch && rig().notch && s.st.mode === 'CW' && Math.abs(s.tone - (r.notchHz || 1000)) < 70)) rms *= 0.04;
     if ((r.mode === 'FM' || r.mode === 'WFM') && (s.st.mode === 'FM' || s.st.mode === 'WFM') && s.audible) rms = open ? 0.25 : 0;
     if (s.st.tx.kind === 'stream') {
       const lvl = s.audible && open ? clamp((s.intelligible ? 1 : 0.35) * (s.st.mode === 'WFM' ? clamp((s.snr - 3) / 12, 0, 1) * 1.2 : NREF * db2amp(s.snr) * agc / 0.12), 0, 1.5) : 0;
@@ -223,7 +233,7 @@ export function rxUpdate() {
   // QRN static crashes on the low bands
   // (real thunderstorms nearby — from the live weather — make it much worse)
   const qrn = (f < 2.5 ? 0.08 : f < 5 ? 0.05 : f < 8 ? 0.025 : f < 15 ? 0.006 : 0) * (RW.wx?.storm ? 4 : 1);
-  if (rs.antennaOk && r.mode !== 'FM' && r.mode !== 'WFM' && chance(qrn)) audio.crash(NREF * agc * rand(2, 8));
+  if (rs.antennaOk && S.settings.qrn !== false && r.mode !== 'FM' && r.mode !== 'WFM' && chance(qrn)) audio.crash(NREF * agc * rand(2, 8) * (r.nb ? 0.12 : 1)); // the noise blanker gates impulse noise
   audio.streamGC();
   // S-meter
   const sm = Math.max(nf, strongDbm);
@@ -242,7 +252,7 @@ function speakIfNeeded(s, vol) {
   tx.speaking = true;
   const st = s.st;
   const pitch = clamp(st.pitch + s.off / 450 * (R().mode === 'LSB' ? -1 : 1), 0.2, 2);
-  audio.speak(tx.say, { lang: st.op.lang, seed: st.seed, rate: (st.rate || 1) * (S.settings.ttsRate || 1), pitch, volume: vol }).then(() => {
+  (S.settings.tts === false ? new Promise((res) => setTimeout(res, Math.min(9000, 400 + (tx.say || '').length * 55))) : audio.speak(tx.say, { lang: st.op.lang, seed: st.seed, rate: (st.rate || 1) * (S.settings.ttsRate || 1), pitch, volume: vol })).then(() => {
     tx.speaking = false; tx.end = Math.min(tx.end, now());
     if (tx.courtesy) courtesy();
   });
@@ -346,7 +356,12 @@ export function initRadioUI(el) {
 
   const mtuner = h('div', { id: 'mtuner' });
 
-  el.append(h('div', { class: 'rig' },
+  const mvBtn = h('button', { class: `btn small ${S.settings.master ? 'active' : ''}`, id: 'master-btn', title: 'Show every control and the signal chain inside the radio', onclick: () => { S.settings.master = !S.settings.master; save(); mvBtn.classList.toggle('active', S.settings.master); renderMaster(); } }, '🎛 Master view');
+  const rg0 = rig();
+  el.append(h('div', { class: 'rig-bar row spread' },
+    h('div', { class: 'rig-badge' }, h('span', { class: 'rig-maker' }, (rg0.maker || 'HamShack').toUpperCase()), h('span', { class: 'rig-model' }, rg0.name.replace(rg0.maker || '', '').trim()), h('span', { class: 'tiny muted' }, ` ${rg0.cls}`)),
+    h('div', { class: 'row' }, h('button', { class: 'btn small', onclick: () => bus.emit('goto', 'rigbuilder') }, '🧰 Change gear'), mvBtn)));
+  el.append(h('div', { class: `rig look-${rg0.look || 'classic'}` },
     h('div', { class: 'rig-top' },
       h('div', { class: 'rig-left' }, meterCv, h('div', { class: 'muted tiny center' }, 'click meter: S / PO / SWR')),
       lcd,
@@ -368,6 +383,8 @@ export function initRadioUI(el) {
         rotator, mtuner, h('div', { id: 'antswitch' })),
     ),
   ));
+  const mv = h('div', { id: 'master-view', class: 'master-view' });
+  el.append(mv); mountMaster(mv);
   fillFilters();
   updateDisplay();
   if (radioListeners) return;
@@ -485,7 +502,7 @@ export function updateDisplay() {
   const swr = rs.powered ? effectiveSwr(r.freq) : 0;
   lcd.className = 'lcd-panel' + (rs.powered ? ' on' : '');
   lcd.innerHTML = rs.powered ? `
-    <div class="lcd-row small"><span>VFO-A</span><span>${band ? band.name : serviceOf(r.freq)?.label || 'GEN'}</span><span class="${r.atuOn ? 'hl' : 'dim'}">ATU${r.atuOn && r.atuTunedFreq && Math.abs(r.freq - r.atuTunedFreq) < Math.max(8000, r.freq * 0.005) ? '✓' : ''}</span><span class="${r.rfAtt ? 'hl' : 'dim'}">ATT</span><span>${r.power}W</span><span id="lcd-tx" class="dim">TX</span></div>
+    <div class="lcd-row small"><span>VFO-A${r.split ? ' <b class="hl">SPLIT</b>' : ''}</span>${r.preamp ? `<span class="hl">P.AMP${r.preamp}</span>` : ''}${r.nb ? '<span class="hl">NB</span>' : ''}${r.notch && rig().notch ? '<span class="hl">NOTCH</span>' : ''}<span>${band ? band.name : serviceOf(r.freq)?.label || 'GEN'}</span><span class="${r.atuOn ? 'hl' : 'dim'}">ATU${r.atuOn && r.atuTunedFreq && Math.abs(r.freq - r.atuTunedFreq) < Math.max(8000, r.freq * 0.005) ? '✓' : ''}</span><span class="${r.rfAtt ? 'hl' : 'dim'}">ATT</span><span>${r.power}W</span><span id="lcd-tx" class="dim">TX</span></div>
     <div class="lcd-freq">${fmtFreq(r.freq)}<span class="unit">MHz</span></div>
     <div class="lcd-row"><span class="mode">${r.mode}</span><span>FIL ${r.filter[r.mode] >= 1000 ? (r.filter[r.mode] / 1000) + 'k' : r.filter[r.mode]}</span>
       <span class="${r.ritOn ? 'hl' : 'dim'}">RIT ${r.rit >= 0 ? '+' : ''}${(r.rit / 1000).toFixed(2)}</span>

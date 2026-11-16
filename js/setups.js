@@ -44,6 +44,9 @@ export function applySetup(id, { quiet } = {}) {
     return false;
   }
   S.rig = p.rig;
+  // Station accessories that suit the setup: an amplifier needs a tuner & meter rated for it.
+  const amp = p.needs.some((n) => /^amp/.test(n));
+  S.gear = { ...(S.gear || {}), tuner: amp ? (freePlay() || (S.owned || []).includes('gear-tuner-at2k') ? 'at2k' : 'gen300') : (S.gear?.tuner || 'gen300'), meter: amp && (freePlay() || (S.owned || []).includes('gear-meter-cn901')) ? 'cn901' : S.gear?.meter || 'gen200', amp: 'none' };
   wireStation();
   const a = S.antenna;
   Object.assign(a, { type: p.ant.type, length: cutFor(p.ant.type, p.ant.band), height: p.ant.height ?? a.height, feed: p.ant.feed, feedLen: p.ant.feedLen, radials: p.ant.radials ?? a.radials, axis: p.ant.axis ?? a.axis, heading: p.ant.heading ?? a.heading, built: true, spliced: 0, sizedBy: 'setup' });
@@ -92,7 +95,7 @@ export function applyLook() {
   b.dataset.face = face;
   b.dataset.lcd = S.settings.lcd || 'green';
   const P = S.settings.panels || {};
-  for (const [k, sel] of Object.entries({ players: '#net-panel', scanner: '#scanner-panel', logger: '#operating', map: '#map-panel', finder: '#finder' })) {
+  for (const [k, sel] of Object.entries({ players: '#net-panel', scanner: '#scanner-panel', logger: '#operating', map: '#map-panel', world: '#world-panel', finder: '#finder' })) {
     const el = document.querySelector(sel);
     if (el) el.hidden = P[k] === false;
   }
@@ -155,7 +158,7 @@ export function openStation(tab = 'setups') {
         sel('face', [['auto', 'Match radio model'], ['graphite', 'Graphite'], ['black', 'Black'], ['silver', 'Silver'], ['retro', 'Retro wood & cream']], 'Faceplate'),
         sel('lcd', [['green', 'Green'], ['amber', 'Amber'], ['blue', 'Ice blue'], ['white', 'Paper white']], 'Display colour'),
         h('h4', {}, 'Radio tab panels'),
-        h('div', { class: 'row wrap' }, chk('finder', 'Find bar'), chk('players', 'Real players'), chk('scanner', 'What\'s on the air'), chk('logger', 'Logger'), chk('map', 'Propagation map')),
+        h('div', { class: 'row wrap' }, chk('finder', 'Find bar'), chk('players', 'Real players'), chk('scanner', 'What\'s on the air'), chk('logger', 'Logger'), chk('map', 'Propagation map'), chk('world', 'World view')),
         h('h4', {}, 'Pro tools'),
         h('label', { class: 'inline' }, lab, ' Lab readouts on the band scope (signal / noise dBm, SNR, path, distance)'),
         h('br'), h('label', { class: 'inline' }, ex, ' Explain mode — hover any control to learn what it does'));

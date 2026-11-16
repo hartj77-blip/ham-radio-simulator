@@ -3,6 +3,7 @@ import { S, save, addXp } from './state.js';
 import { h, toast, bus, $ } from './util.js';
 import { elmer } from './elmer.js';
 import { audio } from './audio.js';
+import { rig, gearOf } from './rigs.js';
 
 const DEV = {
   psu: { x: 30, y: 290, w: 180, h: 120, label: '13.8 V DC · 30 A power supply' },
@@ -103,6 +104,7 @@ export function initShackUI(el) {
   root = el;
   render();
   bus.on('antenna', () => renderStatus());
+  bus.on('rig', () => draw()); bus.on('gear', () => draw());
 }
 
 function checkPowerUp() {
@@ -172,7 +174,16 @@ function clickPort(id) {
 const NS = 'http://www.w3.org/2000/svg';
 const s = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
 
+function gearLabels() {
+  const t = (s) => s.replace(/^Generic /, '');
+  DEV.psu.label = `${t(gearOf('psu').name)} · ${gearOf('psu').amps} A`;
+  DEV.rig.label = rig().name;
+  DEV.swr.label = t(gearOf('meter').name);
+  DEV.atu.label = gearOf('tuner').usd ? t(gearOf('tuner').name) : 'Tuner (bypassed)';
+  DEV.mic.label = 'Mic'; DEV.key.label = gearOf('key').iambic ? 'Paddle' : 'Key';
+}
 function draw() {
+  gearLabels();
   svg.innerHTML = '';
   svg.append(s('rect', { x: 0, y: 0, width: 1040, height: 560, class: 'shack-bg' }));
   svg.append(s('rect', { x: 10, y: 410, width: 930, height: 18, class: 'desk' }));
