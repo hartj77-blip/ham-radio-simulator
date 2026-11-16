@@ -6,6 +6,7 @@ import { maxPower } from './limits.js';
 import { bandByName } from './data/bandplan.js';
 import { wireStation } from './shack.js';
 import { ANT_TYPES } from './antenna.js';
+import { modelLcd } from './faceplate.js';
 
 const K = { dipole: 468, invv: 455, vertical: 234, efhw: 456, yagi: 445 };
 export const cutFor = (type, band) => { const b = bandByName(band); const f = (b.lo + b.hi) / 2e6; return Math.round((K[type] / f) * 100) / 100; };
@@ -70,9 +71,9 @@ export function loadSlot(i) {
 // ------------------------------------------------------------------ appearance & panels
 export function applyLook() {
   const b = document.body;
-  const face = S.settings.face && S.settings.face !== 'auto' ? S.settings.face : rig().face;
+  const face = S.settings.face && S.settings.face !== 'auto' ? S.settings.face : 'model';
   b.dataset.face = face;
-  b.dataset.lcd = S.settings.lcd || 'green';
+  b.dataset.lcd = S.settings.lcd && S.settings.lcd !== 'auto' ? S.settings.lcd : modelLcd();
   const P = S.settings.panels || {};
   for (const [k, sel] of Object.entries({ players: '#net-panel', scanner: '#scanner-panel', logger: '#operating', map: '#map-panel', world: '#world-panel', finder: '#finder' })) {
     const el = document.querySelector(sel);
@@ -116,7 +117,7 @@ export function openStation(tab = 'setups') {
       const ex = h('input', { type: 'checkbox', checked: !!S.settings.explain }); ex.onchange = () => { S.settings.explain = ex.checked; save(); bus.emit('explain'); };
       body.append(
         sel('face', [['auto', 'Match radio model'], ['graphite', 'Graphite'], ['black', 'Black'], ['silver', 'Silver'], ['retro', 'Retro wood & cream']], 'Faceplate'),
-        sel('lcd', [['green', 'Green'], ['amber', 'Amber'], ['blue', 'Ice blue'], ['white', 'Paper white']], 'Display colour'),
+        sel('lcd', [['auto', 'Match radio model'], ['green', 'Green'], ['amber', 'Amber'], ['blue', 'Ice blue'], ['white', 'Paper white']], 'Display colour'),
         h('h4', {}, 'Radio page panels'),
         h('div', { class: 'row wrap' }, chk('finder', 'Find bar'), chk('players', 'Online operators'), chk('scanner', 'Signals near you'), chk('logger', 'Logger'), chk('map', 'Propagation map'), chk('world', 'World view')),
         h('h4', {}, 'Engineering'),

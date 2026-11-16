@@ -894,3 +894,108 @@ body.ht-view .fb-fab { left: 14px; bottom: auto; top: 10px; width: 34px; height:
 .about-card .tbl a:hover { text-decoration: underline; }
 .welcome-safe { font-size: 0.86rem; margin: 0; }
 @media (max-width: 900px) { .real-sim { grid-template-columns: 1fr; } }
+
+/* =====================================================================
+   Faceplates: replicas of radio classes (generic, no branding)
+   ===================================================================== */
+.rig.fp { display: grid; gap: 12px 14px; align-items: start; background: linear-gradient(180deg, color-mix(in srgb, var(--body) 86%, #fff), var(--body) 18%, var(--body)); border: 1px solid var(--edge); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 18px 40px rgba(0, 0, 0, 0.4); }
+.rig.fp .rig-top, .rig.fp .rig-mid { display: contents; }
+.rig.fp .rig-left { grid-area: meter; }
+.rig.fp .lcd-panel { grid-area: lcd; position: relative; z-index: 1; }
+.rig.fp .rig-right { grid-area: knob; align-self: center; }
+.rig.fp .wf-wrap { grid-area: scope; margin: 0; position: relative; z-index: 1; }
+.rig.fp .rig-controls { grid-area: ctl; }
+.rig.fp .meter, .rig.fp .lcd-panel, .rig.fp .wf-wrap { position: relative; z-index: 1; }
+.fp-keys { grid-area: keys; display: flex; flex-direction: column; gap: 7px; }
+.fp-knobs { grid-area: knobs; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.fp-knobs:empty { display: none; }
+.fp-badge { grid-area: badge; display: flex; flex-direction: column; gap: 2px; align-self: start; padding-top: 2px; }
+.fp-badge b { font-family: var(--mono); font-size: 0.95rem; letter-spacing: 0.12em; color: var(--ink, color-mix(in srgb, var(--edge) 30%, #e8ecf0)); }
+.fp-badge span { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink, color-mix(in srgb, var(--edge) 50%, #9aa4ae)); opacity: 0.85; line-height: 1.25; }
+.fp-bezel { display: none; }
+.fp-key { position: relative; display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 4px 8px; background: linear-gradient(180deg, color-mix(in srgb, var(--key) 80%, #fff), var(--key) 30%); color: #dfe5ec; border: 1px solid rgba(0, 0, 0, 0.6); border-radius: 6px; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.05em; cursor: pointer; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06); white-space: nowrap; }
+.fp-key:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.55); }
+.fp-key .led { width: 5px; height: 5px; border-radius: 50%; background: #2a2418; flex: none; }
+.fp-key.on .led { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.fp-key[data-act="power"].on .led { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+.fp-knob { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: ns-resize; touch-action: none; user-select: none; }
+.fp-knob .cap { width: 46px; height: 46px; border-radius: 50%; position: relative; background: radial-gradient(circle at 38% 30%, #4b525a, #15181b 72%); border: 2px solid #0b0d0f; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.55), inset 0 0 0 3px rgba(255, 255, 255, 0.04); transition: transform 0.08s; }
+.fp-knob .cap i { position: absolute; left: 50%; top: 5px; width: 2px; height: 12px; margin-left: -1px; background: #e9edf2; border-radius: 1px; }
+.fp-knob .lbl { font-size: 0.6rem; font-weight: 600; letter-spacing: 0.08em; color: var(--ink, #aab3bd); }
+.fp-knob .val { font-family: var(--mono); font-size: 0.62rem; color: var(--ink, #7f8a96); opacity: 0.8; min-height: 0.8em; }
+.fp-titlebar { display: none; }
+.rig.fp .rig-right .vfo-knob { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6), inset 0 0 0 6px color-mix(in srgb, var(--body) 80%, #000), inset 0 0 0 7px var(--edge); }
+
+/* touchscreen SDR base: key column, glass screen holding meter/display/scope, big VFO, knob column */
+@media (min-width: 1000px) {
+  .rig.fp-touch { grid-template-columns: 96px minmax(210px, 250px) 1fr 220px; grid-template-areas: "badge meter lcd knob" "keys scope scope knob" "keys scope scope knobs" "ctl ctl ctl ctl"; }
+  .rig.fp-touch .fp-bezel, .rig.fp-contest .fp-bezel, .rig.fp-portable .fp-bezel { display: block; grid-area: 1 / 2 / 4 / 4; margin: -8px; border-radius: 10px; background: #050608; box-shadow: inset 0 0 0 2px #000, inset 0 0 0 4px color-mix(in srgb, var(--edge) 60%, #000), 0 1px 0 rgba(255, 255, 255, 0.08); }
+  .rig.fp-touch .fp-knobs { flex-direction: row; align-self: end; }
+  .rig.fp-touch .meter, .rig.fp-contest .meter, .rig.fp-portable .meter { border: none; border-radius: 4px; }
+  .rig.fp-touch .lcd-panel, .rig.fp-contest .lcd-panel, .rig.fp-portable .lcd-panel { border: none; min-height: 0; }
+  .rig.fp-touch .rig-left .muted, .rig.fp-contest .rig-left .muted, .rig.fp-portable .rig-left .muted { display: none; }
+
+  /* knob-panel base: classic LCD window, key row and rotary controls under the display */
+  .rig.fp-classic { grid-template-columns: 104px minmax(220px, 280px) 1fr 230px; grid-template-areas: "badge meter lcd knob" "keys keys keys knob" "knobs knobs knobs knob" "scope scope scope scope" "ctl ctl ctl ctl"; }
+  .rig.fp-classic .fp-keys { flex-direction: row; flex-wrap: wrap; }
+  .rig.fp-classic .fp-key { flex: 1 0 74px; }
+  .rig.fp-classic .fp-knobs { justify-content: flex-start; padding-left: 4px; }
+
+  /* dual-receiver flagship: wide panadapter screen, two key columns */
+  .rig.fp-contest { grid-template-columns: 170px minmax(220px, 270px) 1fr 230px; grid-template-areas: "badge meter lcd knob" "keys scope scope knob" "keys scope scope knobs" "ctl ctl ctl ctl"; }
+  .rig.fp-contest .fp-keys { display: grid; grid-template-columns: 1fr 1fr; align-content: start; }
+  .rig.fp-contest .waterfall { height: 340px; }
+  .rig.fp-contest .fp-knobs { align-self: end; }
+
+  /* mini mobile: small body, narrow LCD, no scope */
+  .rig.fp-mobile { max-width: 900px; margin-left: auto; margin-right: auto; grid-template-columns: 1fr 240px 190px; grid-template-areas: "badge badge knob" "lcd meter knob" "keys keys knobs" "scope scope scope" "ctl ctl ctl"; }
+  .rig.fp-mobile .fp-keys { flex-direction: row; flex-wrap: wrap; }
+  .rig.fp-mobile .fp-key { flex: 1 0 70px; }
+  .rig.fp-mobile .lcd-freq { font-size: 2.1rem; }
+  .rig.fp-mobile .rig-controls { grid-template-columns: 1fr 1fr; }
+
+  /* portable field radio: compact touchscreen */
+  .rig.fp-portable { max-width: 1080px; margin-left: auto; margin-right: auto; grid-template-columns: 88px minmax(190px, 220px) 1fr 200px; grid-template-areas: "badge meter lcd knob" "keys scope scope knob" "keys scope scope knobs" "ctl ctl ctl ctl"; }
+  .rig.fp-portable .waterfall { height: 230px; }
+  .rig.fp-portable .rig-controls { grid-template-columns: 1fr 1fr; }
+
+  /* PC software receiver: application window */
+  .rig.fp-sdr { border-radius: 8px; padding-top: 0; grid-template-columns: 1fr 300px; grid-template-areas: "title title" "lcd meter" "lcd knob" "scope scope" "keys keys" "ctl ctl"; background: #14181d; }
+  .rig.fp-sdr .rig-controls { grid-template-columns: 1.3fr 1fr 1.1fr; }
+  .rig.fp-sdr::before, .rig.fp-sdr::after { display: none; }
+  .rig.fp-sdr .fp-titlebar { grid-area: title; display: flex; align-items: center; gap: 14px; margin: 0 -14px; padding: 7px 12px; background: #0d1014; border-bottom: 1px solid #262c34; border-radius: 8px 8px 0 0; font-size: 0.76rem; color: #9aa6b3; }
+  .fp-titlebar .dots { display: flex; gap: 6px; } .fp-titlebar .dots i { width: 10px; height: 10px; border-radius: 50%; background: #3a4048; }
+  .fp-titlebar .menu { margin-left: auto; color: #6c7783; letter-spacing: 0.02em; word-spacing: 6px; }
+  .rig.fp-sdr .fp-badge { display: none; }
+  .rig.fp-sdr .vfo-knob { display: none; }
+  .rig.fp-sdr .rig-right { grid-area: knob; align-self: start; }
+  .rig.fp-sdr .rig-left .muted { display: none; }
+  .rig.fp-sdr .fp-keys { flex-direction: row; }
+  .rig.fp-sdr .fp-key { border-radius: 4px; background: #232930; box-shadow: none; border-color: #313840; }
+  .rig.fp-sdr .rbtn, .rig.fp-sdr .ctl-group { border-radius: 4px; }
+  .rig.fp-sdr .rbtn::before { display: none; }
+  .rig.fp-sdr .waterfall { height: 360px; }
+}
+@media (max-width: 999px) {
+  .rig.fp { grid-template-columns: 1fr; grid-template-areas: "badge" "lcd" "meter" "knob" "scope" "keys" "knobs" "ctl"; }
+  .rig.fp .fp-keys { flex-direction: row; flex-wrap: wrap; }
+  .rig.fp .fp-key { flex: 1 0 70px; }
+  .rig.fp-sdr .fp-titlebar { display: none; }
+}
+
+.rig.fp .no-scope-msg { padding: 14px 18px; font-size: 0.86rem; }
+.rig-controls .tx-group[hidden] { display: none; }
+
+/* ---------- operating guides ---------- */
+.manual { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; }
+.man-toc { display: flex; flex-direction: column; gap: 1px; max-height: 72vh; overflow-y: auto; border-right: 1px solid var(--line); padding-right: 12px; }
+.man-toc .lib-item.sub { padding-left: 18px; font-size: 0.78rem; color: var(--muted); }
+.man-toc select { margin-top: 6px; width: 100%; }
+.man-content { max-height: 72vh; overflow-y: auto; padding-right: 6px; }
+.man-content h2 { margin: 2px 0 6px; }
+.man-content section { margin-top: 18px; }
+.man-content section h3 { font-size: 1rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.man-content .prose { margin-top: 8px; font-size: 0.9rem; }
+.man-specs { margin: 14px 0 6px; } .man-specs th { width: 150px; text-transform: none; letter-spacing: 0; font-size: 0.8rem; }
+.man-note { margin: 14px 0 0; }
+@media (max-width: 760px) { .manual { grid-template-columns: 1fr; } .man-toc { max-height: 200px; border-right: none; border-bottom: 1px solid var(--line); } }

@@ -474,6 +474,7 @@ function onKey(e) {
   const PK = S.settings.pttKey || ' ';
   if (e.key === PK && !e.repeat) { e.preventDefault(); if (!spaceHeld) { spaceHeld = true; pttDown(); } return; }
   if (e.key === PK) { e.preventDefault(); return; }
+  if (e.target.type === 'range') return; // arrow keys adjust the focused slider, not the VFO
   if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); bus.emit('tune', 1); }
   if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); bus.emit('tune', -1); }
 }

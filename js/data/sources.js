@@ -54,5 +54,5 @@ export const REFERENCES = [
   ['Shimazaki (1955) / Dudeney (1983)', 'Relation between F2-layer height and the M(3000)F2 factor', null],
   ['HFTA, Dean Straw N6BV (ARRL Antenna Book)', 'Concept of the simplified terrain assessment', 'https://www.arrl.org/arrl-antenna-book'],
   ['NFPA 70 (NEC) Article 810', 'Antenna grounding and lightning-protection guidance in the library', 'https://www.nfpa.org'],
-  ['Manufacturer specifications', 'Equipment page figures; product names identify equipment only, with no affiliation or endorsement', null],
+  ['Published equipment specifications', 'Typical figures for each class of radio and accessory. Equipment uses generic names and model codes; it is not affiliated with or endorsed by any manufacturer', null],
 ];
