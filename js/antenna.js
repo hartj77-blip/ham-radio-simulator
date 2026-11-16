@@ -1,5 +1,5 @@
 // Antenna + feedline model and the Antenna Workshop UI.
-import { S, save, addXp } from './state.js';
+import { S, save } from './state.js';
 import { h, $, clamp, toast, bus } from './util.js';
 import { BANDS, bandOf, bandByName } from './data/bandplan.js';
 import { elmer } from './elmer.js';
@@ -9,7 +9,7 @@ import { stateBy } from './data/world.js';
 import { RW } from './realworld.js';
 const STATE_POS = () => stateBy(S.op.state) || stateBy('KS');
 import { runSolver } from './em/client.js';
-import { antOwned, feedOwned, maxHeight, owns } from './store.js';
+import { antOwned, feedOwned, maxHeight, owns } from './limits.js';
 import { mountYard, siteMaxHeight } from './yard.js';
 import { mountPlanner, autoSize, targetHz, P as planP, antDefaults } from './planner.js';
 
@@ -194,7 +194,7 @@ export function netGain(fHz, brg, distKm, mode) {
 
 // ---------------------------------------------------------------- UI
 let root, svgBox, canvas, info, controls;
-let analyzer = { band: '20m', atRig: true };
+export const analyzer = { band: '20m', atRig: true };
 
 export function initAntennaUI(el) {
   root = el;
@@ -211,19 +211,19 @@ function render() {
   const a = S.antenna;
   const T = ANT_TYPES[a.type];
   root.innerHTML = '';
-  const typeSel = h('select', { id: 'ant-type' }, ...Object.entries(ANT_TYPES).map(([k, t]) => h('option', { value: k, selected: k === a.type, disabled: !antOwned(k) }, t.label + (antOwned(k) ? '' : ' 🔒 (Hamfest)'))));
+  const typeSel = h('select', { id: 'ant-type' }, ...Object.entries(ANT_TYPES).map(([k, t]) => h('option', { value: k, selected: k === a.type }, t.label)));
   typeSel.onchange = () => { a.type = typeSel.value; a.length = 0; save(); render(); bus.emit('antenna'); };
 
   antDefaults(a);
   // A new antenna starts ~10% long, like a real wire kit — you size it (and it isn't counted as sized until you do).
-  if (!a.length) { a.length = Math.round(T.k / (targetHz() / 1e6) * ((S.gameMode || 'career') === 'career' ? 1.1 : 1) * 100) / 100; a.sizedBy = null; }
+  if (!a.length) { a.length = Math.round(T.k / (targetHz() / 1e6) * (S.mode === 'training' ? 1.1 : 1) * 100) / 100; a.sizedBy = null; }
   // Wire length: adjust freely (in real life: let out / reel in wire at the end insulators).
   const setLen = (v) => { a.length = clamp(Math.round(v * 100) / 100, 0.5, 600); lenIn.value = a.length.toFixed(2); $('#ant-len-now').textContent = fmtLen(a.length); save(); renderInfo(); bus.emit('antenna'); };
   const lenIn = h('input', { type: 'number', id: 'ant-len', min: 0.5, max: 600, step: 0.01, value: a.length.toFixed(2) });
   lenIn.onchange = () => {
     const v = parseFloat(lenIn.value); if (!(v > 0.3 && v < 600)) { lenIn.value = a.length.toFixed(2); return; }
     a.sizedBy = 'hand'; setLen(v); elmer('cut_wire');
-    if (S.helper?.tutorial && (S.gameMode || 'career') === 'career' && a.type === 'dipole' && (a.length < 60 || a.length > 72) && planP().band === '40m') bus.emit('helper-mistake', 'cut-off', a.length);
+    if (S.mode === 'training' && a.type === 'dipole' && (a.length < 60 || a.length > 72) && planP().band === '40m') bus.emit('helper-mistake', 'cut-off', a.length);
   };
   const step = (ft, lbl) => h('button', { class: 'btn small', onclick: () => { a.sizedBy = 'hand'; setLen(a.length + ft); } }, lbl);
   const designBand = h('select', { id: 'ant-band' }, ...BANDS.map((b) => h('option', { value: b.name, selected: b.name === planP().band }, b.name)));
@@ -231,15 +231,15 @@ function render() {
   const sizeMsg = h('span', { class: 'muted tiny' }, `≈ ${(T.k / (targetHz() / 1e6)).toFixed(1)} ft by the formula`);
   let sizing = false;
   const sizeBtn = h('button', { class: 'btn primary', id: 'ant-autosize', onclick: async () => {
-    if (sizing) return; sizing = true; sizeBtn.disabled = true; sizeMsg.textContent = '⏳ solving with the MoM engine…';
+    if (sizing) return; sizing = true; sizeBtn.disabled = true; sizeMsg.textContent = 'solving with the MoM engine…';
     try {
-      const L = await autoSize(a, targetHz(), (p) => { sizeMsg.textContent = `⏳ solving… ${Math.round(p * 100)}%`; });
+      const L = await autoSize(a, targetHz(), (p) => { sizeMsg.textContent = `solving… ${Math.round(p * 100)}%`; });
       a.sizedBy = 'auto'; setLen(L); analyzer.band = planP().band;
-      sizeMsg.textContent = `✅ ${L.toFixed(2)} ft resonates at ${(targetHz() / 1e6).toFixed(3)} MHz at ${a.type === 'vertical' ? 'ground level' : a.height + ' ft'} (formula said ${(T.k / (targetHz() / 1e6)).toFixed(2)})`;
+      sizeMsg.textContent = `${L.toFixed(2)} ft resonates at ${(targetHz() / 1e6).toFixed(3)} MHz at ${a.type === 'vertical' ? 'ground level' : a.height + ' ft'} (formula said ${(T.k / (targetHz() / 1e6)).toFixed(2)})`;
       elmer('cut_wire'); renderInfo();
     } catch (e) { sizeMsg.textContent = `Solver error: ${e.message}`; }
     sizing = false; sizeBtn.disabled = false;
-  } }, '🎯 Auto-size');
+  } }, 'Auto-size');
 
   if (a.height > siteMaxHeight()) a.height = siteMaxHeight();
   const setH = (v) => { a.height = clamp(Math.round(v), 3, siteMaxHeight()); height.value = a.height; hLbl.textContent = `${a.height} ft`; save(); renderInfo(); bus.emit('antenna'); };
@@ -253,11 +253,11 @@ function render() {
   axis.onchange = () => { a.axis = +axis.value; save(); renderInfo(); bus.emit('antenna'); };
   const radials = h('select', {}, ...Object.keys(RADIAL_LOSS).map((n) => h('option', { value: n, selected: +n === a.radials }, `${n} radials`)));
   radials.onchange = () => { a.radials = +radials.value; save(); renderInfo(); bus.emit('antenna'); };
-  const heading = h('input', { type: 'range', min: 0, max: 359, value: a.heading, disabled: a.built && !owns('rotator'), title: a.built && !owns('rotator') ? 'Buy a rotator to turn the beam while it is up' : '' });
+  const heading = h('input', { type: 'range', min: 0, max: 359, value: a.heading, });
   const headLbl = h('span', {}, `${a.heading}°`);
   heading.oninput = () => { a.heading = +heading.value; headLbl.textContent = `${a.heading}°`; save(); renderInfo(); bus.emit('antenna'); };
 
-  const feed = h('select', {}, ...Object.entries(FEEDS).map(([k, v]) => h('option', { value: k, selected: k === a.feed, disabled: !feedOwned(k) }, `${k} — ${v[2]}${feedOwned(k) ? '' : ' 🔒'}`)));
+  const feed = h('select', {}, ...Object.entries(FEEDS).map(([k, v]) => h('option', { value: k, selected: k === a.feed }, `${k} — ${v[2]}`)));
   feed.onchange = () => { a.feed = feed.value; save(); renderInfo(); };
   const feedLen = h('input', { type: 'number', min: 10, max: 400, step: 5, value: a.feedLen });
   feedLen.onchange = () => { a.feedLen = clamp(+feedLen.value || 50, 3, 500); save(); renderInfo(); };
@@ -265,15 +265,15 @@ function render() {
   const raise = h('button', { class: 'btn primary big', onclick: () => {
     if (!a.length) return toast('Set a wire length first.', 'warn');
     a.built = !a.built; S.radio.atuTunedFreq = null; S.radio.atuExtTunedFreq = null; save(); render(); bus.emit('antenna');
-    if (a.built) { toast('⬆ Antenna is up! Connect the feedline through the wall entry in the Shack, then check SWR.', 'good'); addXp(10, 'antenna raised'); elmer('antenna_up'); }
-  } }, a.built ? '⬇ Take antenna down' : '⬆ Raise antenna');
+    if (a.built) { toast('Antenna is up! Connect the feedline through the wall entry on the Station wiring page, then check SWR.', 'good'); elmer('antenna_up'); }
+  } }, a.built ? 'Take antenna down' : 'Raise antenna');
 
 
   controls = h('div', { class: 'ant-controls card' },
     h('h3', {}, 'Build your antenna'),
     h('label', {}, 'Antenna type', typeSel),
     h('p', { class: 'muted small' }, T.desc),
-    h('div', { class: 'formula' }, h('details', {}, h('summary', {}, '📐 Elmer\'s formula (exam material)'), h('code', {}, T.formula),
+    h('div', { class: 'formula' }, h('details', {}, h('summary', {}, 'Design formula (exam material)'), h('code', {}, T.formula),
       h('p', { class: 'small' }, 'Lower frequency → longer wire. If the SWR dip is BELOW the band, the antenna is too LONG: shorten it. Dip above the band: too short — lengthen it.'))),
     h('fieldset', {}, h('legend', {}, a.type === 'vertical' ? 'Radiator length' : a.type === 'yagi' ? 'Driven element length' : 'Wire length'),
       h('div', { class: 'row' }, h('label', { class: 'inline' }, 'Design for ', designBand), sizeBtn), sizeMsg,
@@ -297,7 +297,7 @@ function render() {
   canvas.onmouseleave = () => { analyzer.mx = null; drawAnalyzer(); };
   info = h('div', { class: 'ant-info' });
   const an = h('div', { class: 'card analyzer-card' },
-    h('div', { class: 'row spread' }, h('h3', {}, '📟 Antenna analyzer'),
+    h('div', { class: 'row spread' }, h('h3', {}, 'Antenna analyzer'),
       h('div', { class: 'row' }, h('label', { class: 'inline' }, 'Sweep ', bandSel), h('label', { class: 'inline' }, atRig, ' measure at shack end of coax'))),
     canvas, info);
   const planBox = h('div', { id: 'planner' }), yardBox = h('div', { id: 'yard' });
@@ -362,9 +362,9 @@ function drawAnalyzer() {
   let advice;
   const fRes = min.f;
   if (min.swr > 3) advice = `<b>No usable resonance near ${band.name}.</b> This antenna isn't designed for this band${ANT_TYPES[ant.type].harm !== 'none' ? ' (or its harmonics)' : ''}. A tuner might help a little, at a cost.`;
-  else if (inBand) advice = `👍 Resonant in-band at <b>${(fRes / 1e6).toFixed(3)} MHz</b> (SWR ${min.swr.toFixed(2)}:1).`;
-  else if (fRes < band.lo) advice = `SWR dip at ${(fRes / 1e6).toFixed(3)} MHz is <b>below</b> the band → the antenna is <b>too long</b>. Shorten it about <b>${fmtDelta(ant.length * (1 - fRes / ((band.lo + band.hi) / 2)))}</b> (or press 🎯 Auto-size).`;
-  else advice = `SWR dip at ${(fRes / 1e6).toFixed(3)} MHz is <b>above</b> the band → the antenna is <b>too short</b>. Lengthen it about <b>${fmtDelta(ant.length * (fRes / ((band.lo + band.hi) / 2) - 1))}</b> (or press 🎯 Auto-size).`;
+  else if (inBand) advice = `Resonant in-band at <b>${(fRes / 1e6).toFixed(3)} MHz</b> (SWR ${min.swr.toFixed(2)}:1).`;
+  else if (fRes < band.lo) advice = `SWR dip at ${(fRes / 1e6).toFixed(3)} MHz is <b>below</b> the band → the antenna is <b>too long</b>. Shorten it about <b>${fmtDelta(ant.length * (1 - fRes / ((band.lo + band.hi) / 2)))}</b> (or press Auto-size).`;
+  else advice = `SWR dip at ${(fRes / 1e6).toFixed(3)} MHz is <b>above</b> the band → the antenna is <b>too short</b>. Lengthen it about <b>${fmtDelta(ant.length * (fRes / ((band.lo + band.hi) / 2) - 1))}</b> (or press Auto-size).`;
   const s = mk.sys;
   info.innerHTML = `
     <div class="readouts">
@@ -376,7 +376,7 @@ function drawAnalyzer() {
       <div><span>Height</span><b>${heightWl(ant, mk.f / 1e6).toFixed(2)} λ</b></div>
     </div>
     <p class="advice">${advice}</p>
-    <p class="tiny ${momReady() ? 'ok' : 'muted'}">${momReady() ? `✓ Impedance from the Method-of-Moments solver (same engine as the Workbench)${['dipole', 'invv', 'efhw'].includes(ant.type) ? ', insulated #14 wire' : ''}.` : '⏳ Running the Method-of-Moments solver… (showing a quick estimate meanwhile)'}</p>
+    <p class="tiny ${momReady() ? 'ok' : 'muted'}">${momReady() ? `✓ Impedance from the Method-of-Moments solver (same engine as the Workbench)${['dipole', 'invv', 'efhw'].includes(ant.type) ? ', insulated #14 wire' : ''}.` : 'Running the Method-of-Moments solver… (showing a quick estimate meanwhile)'}</p>
     ${analyzer.atRig ? '<p class="muted small">Measuring at the rig end: coax loss makes SWR look better than it really is at the antenna. Untick to see the true feed-point SWR.</p>' : ''}`;
 }
 
@@ -498,6 +498,6 @@ function drawSvg() {
     ${wxPrecip(W, H)}
     <rect x="0" y="0" width="${W}" height="46" fill="rgba(0,0,0,0.35)"/>
     <text x="12" y="19" class="svgt">${ANT_TYPES[a.type].label} — ${a.length ? fmtLen(a.length) : 'uncut wire'}${a.type !== 'vertical' ? ` · ${a.height} ft up${a.height > 35 ? (a.height > 50 ? ' (tower)' : ' (mast)') : ' (trees)'}` : ` · ${a.radials} radials`}</text>
-    <text x="12" y="37" class="svgt">${a.built ? '✅ installed' : '🔧 on the ground (not installed)'} · ${a.feedLen} ft ${a.feed} · local time ${Math.floor(solarH)}:${String(Math.floor((solarH % 1) * 60)).padStart(2, '0')}${RW.wx ? ` · live weather: ${RW.wx.desc}, ${RW.wx.tempF}°F${RW.wx.windKt != null ? `, wind ${RW.wx.windKt} kt` : ''}` : ''}</text>
+    <text x="12" y="37" class="svgt">${a.built ? 'installed' : 'on the ground (not installed)'} · ${a.feedLen} ft ${a.feed} · local time ${Math.floor(solarH)}:${String(Math.floor((solarH % 1) * 60)).padStart(2, '0')}${RW.wx ? ` · live weather: ${RW.wx.desc}, ${RW.wx.tempF}°F${RW.wx.windKt != null ? `, wind ${RW.wx.windKt} kt` : ''}` : ''}</text>
   </svg>`;
 }

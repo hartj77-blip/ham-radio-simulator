@@ -11,7 +11,6 @@ import { rig, rigRx, RIGS, isHT } from './rigs.js';
 import { sUnits } from './propagation.js';
 import { net } from './net.js';
 import { openStation, applySetup } from './setups.js';
-import { owns, freePlay } from './store.js';
 import { audio } from './audio.js';
 
 export const isPhone = () => window.matchMedia('(max-width: 760px)').matches || (window.matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600);
@@ -77,7 +76,7 @@ export function phoneStart() {
   (S.owned ||= []).includes('rig-ht') || S.owned.push('rig-ht');
   (S.owned).includes('rig-uv5r') || S.owned.push('rig-uv5r');
   save();
-  if (S.gameMode !== 'listener') { applySetup('ht', { quiet: true }); S.rig = 'uv5r'; save(); bus.emit('rig'); }
+  { applySetup('ht', { quiet: true }); S.rig = 'uv5r'; save(); bus.emit('rig'); }
 }
 
 // ------------------------------------------------------------------ menu system (on the LCD)
@@ -96,7 +95,7 @@ function saveMem() {
   const n = prompt('Channel name (up to 6 characters):', `CH${(S.htMem || []).length + 1}`);
   if (!n) return;
   (S.htMem ||= []).push({ name: n.toUpperCase().slice(0, 6), f: S.radio.freq, mode: S.radio.mode, off: S.radio.rptOffset, tone: S.radio.toneHz });
-  save(); toast(`💾 Saved to memory ${S.htMem.length}.`, 'good', 2000);
+  save(); toast(`Saved to memory ${S.htMem.length}.`, 'good', 2000);
 }
 function menuKey(k) {
   const ht = HT();
@@ -166,7 +165,7 @@ export function initHT(el) {
   root.style.setProperty('--ht-accent', look.accent);
   root.dataset.lcd = look.lcd;
   const beep = () => { if (HT().beep) audio.beep(HT().menu ? 1500 : 1200, 0.03, 0.08); };
-  const key = (lbl, fn, cls = '', sub = '') => h('button', { class: `ht-key ${cls}`, onclick: (e) => { audio.init(); if (/fn|menu/.test(cls)) entry = ''; if (HT().lock && !/lock/.test(cls)) { toast('🔒 Keypad locked — hold # to unlock.', 'info', 1500); return; } beep(); fn(e); } }, lbl, sub ? h('small', {}, sub) : null);
+  const key = (lbl, fn, cls = '', sub = '') => h('button', { class: `ht-key ${cls}`, onclick: (e) => { audio.init(); if (/fn|menu/.test(cls)) entry = ''; if (HT().lock && !/lock/.test(cls)) { toast('Keypad locked — hold # to unlock.', 'info', 1500); return; } beep(); fn(e); } }, lbl, sub ? h('small', {}, sub) : null);
   const ptt = h('button', { class: 'ht-ptt', 'aria-label': 'Push to talk' }, 'PTT');
   const down = (e) => { e.preventDefault(); audio.init(); if (scanning) toggleScan(); if (!r.tx.length) return toast('Receive-only radio.', 'warn', 2000); pttDown(); ptt.classList.add('on'); };
   const up = (e) => { e.preventDefault(); if (txState.ptt) pttUp(); ptt.classList.remove('on'); };
@@ -201,20 +200,20 @@ export function initHT(el) {
   lcd = h('div', { class: 'ht-lcd' });
   const call0 = () => S.call || 'N0CALL';
   const quick = h('div', { class: 'ht-quick' },
-    ...[['📢 Listening', () => `§${call0()}§ listening.`], ['👋 CQ', () => `CQ CQ, this is §${call0()}§, monitoring.`], ['✅ Roger', () => `Roger, thanks. §${call0()}§.`], ['73', () => `{73|Seventy three}, §${call0()}§ clear.`]]
+    ...[['Listening', () => `§${call0()}§ listening.`], ['CQ', () => `CQ CQ, this is §${call0()}§, monitoring.`], ['Roger', () => `Roger, thanks. §${call0()}§.`], ['73', () => `{73|Seventy three}, §${call0()}§ clear.`]]
       .map(([l, t]) => h('button', { class: 'ht-chip', onclick: () => { audio.init(); sendVoice(t()); } }, l)));
   const htModels = Object.entries(RIGS).filter(([, x]) => x.look === 'ht');
   const menu = h('details', { class: 'ht-menu' }, h('summary', {}, '☰'),
     h('div', { class: 'ht-menu-list' },
       h('div', { class: 'tiny muted' }, 'Handheld model'),
-      ...htModels.map(([id, x]) => h('button', { class: S.rig === id ? 'sel' : '', disabled: !owns(`rig-${id}`) && !freePlay(), onclick: () => { S.rig = id; HT().txp = 'H'; S.radio.power = x.maxW; save(); bus.emit('rig'); toast(`📟 ${x.name}`, 'good', 2000); } }, `${S.rig === id ? '● ' : ''}${x.name}${!owns(`rig-${id}`) && !freePlay() ? ` 🔒 ₵${x.price}` : ''}`)),
+      ...htModels.map(([id, x]) => h('button', { class: S.rig === id ? 'sel' : '', onclick: () => { S.rig = id; HT().txp = 'H'; S.radio.power = x.maxW; save(); bus.emit('rig'); toast(`${x.name}`, 'good', 2000); } }, `${S.rig === id ? '● ' : ''}${x.name}`)),
       h('hr'),
-      h('button', { onclick: () => showHT(false) }, '🏠 Full station view'),
-      h('button', { onclick: () => { showHT(false); bus.emit('goto', 'license'); } }, `🪪 License & study (${licName()})`),
-      h('button', { onclick: () => { showHT(false); bus.emit('goto', 'logbook'); } }, '📒 Logbook'),
-      h('button', { onclick: () => { showHT(false); bus.emit('goto', 'rigbuilder'); } }, '🧰 Rig builder'),
-      h('button', { onclick: () => openStation('setups') }, '⚡ Station setups'),
-      h('button', { onclick: () => bus.emit('open-settings') }, '⚙ Settings')));
+      h('button', { onclick: () => showHT(false) }, 'Full station view'),
+      h('button', { onclick: () => { showHT(false); bus.emit('goto', 'license'); } }, `License & study (${licName()})`),
+      h('button', { onclick: () => { showHT(false); bus.emit('goto', 'logbook'); } }, 'Logbook'),
+      h('button', { onclick: () => { showHT(false); bus.emit('goto', 'rigbuilder'); } }, 'Equipment'),
+      h('button', { onclick: () => openStation('setups') }, 'Station setups'),
+      h('button', { onclick: () => bus.emit('open-settings') }, 'Settings')));
 
   const isUV = look.keys === 'uv';
   root.append(h('div', { class: `ht-wrap ${S.settings.leftHand ? 'left' : ''}` },
@@ -226,13 +225,13 @@ export function initHT(el) {
       lcd,
       h('div', { class: 'ht-model' }, r.name.replace(r.maker || '', '').trim()),
       h('div', { class: 'ht-row4' }, key('VFO/MR', () => { const ht = HT(); ht.mr[ht.act] = !ht.mr[ht.act]; if (ht.mr[ht.act]) selectCh(ht.ch[ht.act]); else draw(); }, 'fn'),
-        key('A/B', () => { store(); HT().act = HT().act === 'a' ? 'b' : 'a'; load(); draw(); }, 'fn'), key('BAND', band, 'fn'), key('🔦', () => document.body.classList.toggle('ht-torch-on'), 'fn')),
+        key('A/B', () => { store(); HT().act = HT().act === 'a' ? 'b' : 'a'; load(); draw(); }, 'fn'), key('BAND', band, 'fn'), key('', () => document.body.classList.toggle('ht-torch-on'), 'fn')),
       h('div', { class: 'ht-row4' }, key('MENU', () => menuKey('MENU'), 'menu'), key('▲', () => arrow(1), 'arr'), key('▼', () => arrow(-1), 'arr'), key('EXIT', () => { if (HT().menu) menuKey('EXIT'); else { entry = ''; draw(); } }, 'menu')),
       h('div', { class: 'ht-pad' }, ...['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => key(d, () => digit(d), '', ['', '', 'TX.P', '', 'T.R', '', 'SFT', '', 'R.CTCS', ''][+d] || '')),
         key('*', toggleScan, 'scan', 'SCAN'), key('0', () => digit('0')), lockK)),
     h('div', { class: 'ht-extra' },
       h('div', { class: 'row' }, h('label', { class: 'ht-sl' }, 'SQL ', (() => { const s = h('input', { type: 'range', min: 0, max: 1, step: 0.02, value: S.radio.sql }); s.oninput = () => { S.radio.sql = +s.value; save(); }; return s; })()),
-        h('button', { class: 'ht-chip', onclick: () => { if (!net.online) { S.settings.autoOnline = true; save(); document.querySelector('#net-card button.primary')?.click(); } else toast(`On the air with ${net.roster.length} other player(s).`, 'info', 2500); } }, net.online ? `🌐 ${net.roster.length} online` : '🌐 Go online')),
+        h('button', { class: 'ht-chip', onclick: () => { if (!net.online) { S.settings.autoOnline = true; save(); document.querySelector('#net-card button.primary')?.click(); } else toast(`On the air with ${net.roster.length} other player(s).`, 'info', 2500); } }, net.online ? `${net.roster.length} online` : 'Go online')),
       quick,
       h('div', { class: 'ht-sub', id: 'ht-sub' }, ''))));
   if (htListeners) return;
@@ -257,17 +256,17 @@ function draw() {
     const ch = L.find((c) => Math.abs(c.f - v.f) < 1000);
     const chNo = ch ? L.indexOf(ch) + 1 : null;
     const main = act && entry ? `<span class="ht-entry">${ht.mr[k] ? 'CH-' + entry.padEnd(2, '_') : (entry + '______').slice(0, 6).replace(/(\d{3})(.)/, '$1.$2')}</span>` : mr && ch ? ch.name : fmt(v.f);
-    return `<div class="ht-line ${act ? 'act' : ''}"><span class="ht-ab">${act ? '▶' : '&nbsp;'}${k.toUpperCase()}</span><span class="ht-ico">${v.off ? (v.off < 0 ? '−' : '+') : ''}${v.tone ? 'CT' : ''}${v.mode !== 'FM' ? v.mode[0] : ''}</span><span class="ht-big">${main}</span><span class="ht-chno">${mr && chNo ? chNo : ''}</span></div>`;
+    return `<div class="ht-line ${act ? 'act' : ''}"><span class="ht-ab">${act ? '' : '&nbsp;'}${k.toUpperCase()}</span><span class="ht-ico">${v.off ? (v.off < 0 ? '−' : '+') : ''}${v.tone ? 'CT' : ''}${v.mode !== 'FM' ? v.mode[0] : ''}</span><span class="ht-big">${main}</span><span class="ht-chno">${mr && chNo ? chNo : ''}</span></div>`;
   };
   let body;
   if (ht.menu) {
     const m = ht.menu, [name, , get] = MENU[m.i];
-    body = `<div class="ht-line act"><span class="ht-ab">${m.i + 1}</span><span class="ht-big">${name}</span></div><div class="ht-line"><span class="ht-ab">${m.edit ? '▶' : ''}</span><span class="ht-big ${m.edit ? 'blink' : ''}">${m.edit ? m.vals[m.v] : get()}</span></div>`;
+    body = `<div class="ht-line act"><span class="ht-ab">${m.i + 1}</span><span class="ht-big">${name}</span></div><div class="ht-line"><span class="ht-ab">${m.edit ? '' : ''}</span><span class="ht-big ${m.edit ? 'blink' : ''}">${m.edit ? m.vals[m.v] : get()}</span></div>`;
   } else body = line('a') + line('b');
   lcd.innerHTML = `
-    <div class="ht-lcd-top"><span class="ht-sm">${Array.from({ length: 6 }, (_, i) => `<i class="${i < Math.ceil((tx ? 10 : bars) * 0.6) ? 'on' : ''}"></i>`).join('')}</span><span>${tx ? '<b class="ht-tx">TX</b>' : busy ? 'RX' : ''}</span><span>${ht.txp === 'L' ? 'L' : 'H'}</span><span>${scanning ? 'SCAN' : ''}</span><span>${ht.lock ? '🔒' : ''}</span><span>${ht.fmRadio ? 'FM' : ''}</span><span class="ht-batt">▮▮▮▯</span></div>
+    <div class="ht-lcd-top"><span class="ht-sm">${Array.from({ length: 6 }, (_, i) => `<i class="${i < Math.ceil((tx ? 10 : bars) * 0.6) ? 'on' : ''}"></i>`).join('')}</span><span>${tx ? '<b class="ht-tx">TX</b>' : busy ? 'RX' : ''}</span><span>${ht.txp === 'L' ? 'L' : 'H'}</span><span>${scanning ? 'SCAN' : ''}</span><span>${ht.lock ? '' : ''}</span><span>${ht.fmRadio ? 'FM' : ''}</span><span class="ht-batt">▮▮▮▯</span></div>
     ${body}
-    <div class="ht-note">${tx ? `${Math.round(txState.watts)} W → ${(txState.freq / 1e6).toFixed(3)}` : (L.find((c) => Math.abs(c.f - r.freq) < 1000)?.note || s.text)}${!S.license ? ' · 🔒 listen only' : ''}</div>`;
+    <div class="ht-note">${tx ? `${Math.round(txState.watts)} W → ${(txState.freq / 1e6).toFixed(3)}` : (L.find((c) => Math.abs(c.f - r.freq) < 1000)?.note || s.text)}${!S.license ? ' · listen only' : ''}</div>`;
   lcd.classList.toggle('lit', tx || busy || !!entry || !!ht.menu);
   const led = document.getElementById('ht-led');
   if (led) led.className = `ht-led ${tx ? 'tx' : busy ? 'rx' : ''}`;

@@ -1,5 +1,5 @@
 // The Shack: wire up the station (power, coax, ground, mic, key).
-import { S, save, addXp } from './state.js';
+import { S, save } from './state.js';
 import { h, toast, bus, $ } from './util.js';
 import { elmer } from './elmer.js';
 import { audio } from './audio.js';
@@ -78,10 +78,10 @@ export function rigStatus() {
     break;
   }
   const issues = [];
-  if (!dcOK) issues.push(dcRev ? '⚠ DC power leads are connected with reversed polarity!' : 'Connect the radio\'s DC leads to the power supply (red → +, black → −).');
+  if (!dcOK) issues.push(dcRev ? 'DC power leads are connected with reversed polarity!' : 'Connect the radio\'s DC leads to the power supply (red → +, black → −).');
   if (sh.fuseBlown) issues.push('The radio\'s fuse is blown. Fix the wiring and replace it.');
   if (end === 'open') issues.push('No antenna or dummy load is connected to the radio\'s ANT jack.');
-  if (end === 'antenna' && !S.antenna.built) issues.push('The wall feedthrough goes outside — but no antenna is installed yet (Antenna tab).');
+  if (end === 'antenna' && !S.antenna.built) issues.push('The wall feedthrough goes outside — but no antenna is installed yet (Antenna page).');
   if (!toBus('rig_gnd')) issues.push('Bond the radio\'s GND terminal to the ground bus.');
   if (!toBus('arr_gnd')) issues.push('The lightning arrestor isn\'t grounded.');
   if (hasTuner && !toBus('atu_gnd')) issues.push('Ground the tuner chassis too.');
@@ -114,12 +114,12 @@ function checkPowerUp() {
   if (st.dcRev && !sh.fuseBlown) {
     sh.fuseBlown = true; sh.rigOn = false; S.stats.fuses++; save();
     audio.beep(120, 0.15, 0.4);
-    toast('💥 <b>POP!</b> The radio\'s inline fuse blew. Reverse polarity!', 'bad');
+    toast('<b>POP!</b> The radio\'s inline fuse blew. Reverse polarity!', 'bad');
     elmer('fuse_blown', true);
     bus.emit('helper-mistake', 'fuse');
   } else if (st.powered) {
     audio.beep(1200, 0.05, 0.1);
-    if (!S.tips.includes('shack_on')) { S.tips.push('shack_on'); addXp(15, 'station on the air'); }
+    if (!S.tips.includes('shack_on')) { S.tips.push('shack_on'); }
   }
 }
 
@@ -131,10 +131,10 @@ function render() {
   statusBox = h('div', { class: 'card shack-status' });
   const tools = h('div', { class: 'row' },
     h('button', { class: 'btn', onclick: () => { if (confirm('Disconnect every cable?')) { S.shack.conn = []; S.shack.rigOn = false; save(); draw(); } } }, 'Unplug everything'),
-    h('button', { class: 'btn', title: 'Skip the wiring lesson', onclick: autoWire }, '⚡ Auto-wire (skip lesson)'),
+    h('button', { class: 'btn', title: 'Skip the wiring lesson', onclick: autoWire }, 'Auto-wire (skip lesson)'),
   );
   root.append(h('div', { class: 'shack-grid' },
-    h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', {}, '🔌 Wire up your station'), tools),
+    h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', {}, 'Wire up your station'), tools),
       h('p', { class: 'muted small' }, 'Click a connector, then click where the cable should go. Click a cable to unplug it. Coax runs from the radio\'s ANT jack through optional meter/tuner to the wall feedthrough (antenna) or the dummy load.'),
       svg),
     statusBox));
@@ -263,7 +263,7 @@ function renderStatus() {
   if (!statusBox) return;
   const st = rigStatus();
   statusBox.innerHTML = '';
-  const item = (ok, txt) => h('li', { class: ok ? 'ok' : 'todo' }, ok ? '✅ ' : '⬜ ', txt);
+  const item = (ok, txt) => h('li', { class: ok ? 'ok' : 'todo' }, ok ? '' : '', txt);
   statusBox.append(...[
     h('h3', {}, 'Station checklist'),
     h('ul', { class: 'checklist' },
@@ -276,11 +276,11 @@ function renderStatus() {
       item(st.key, 'Paddle plugged in'),
       item(st.powered, 'Power supply ON and radio ON'),
     ),
-    st.issues.length ? h('div', { class: 'issues' }, h('b', {}, 'Next: '), st.issues[0]) : h('div', { class: 'good-box' }, '🎉 Station is ready. Head to the Radio tab!'),
+    st.issues.length ? h('div', { class: 'issues' }, h('b', {}, 'Next: '), st.issues[0]) : h('div', { class: 'good-box' }, 'Station is ready. Go to the Radio page.'),
     S.shack.fuseBlown ? h('button', { class: 'btn warn', onclick: () => {
       if (rigStatus().dcRev) return toast('Fix the reversed polarity first, or the new fuse will blow too!', 'bad');
-      S.shack.fuseBlown = false; save(); toast('Fuse replaced with the same 25 A rating. 👍', 'good'); draw();
-    } }, '🔧 Replace fuse') : null,
+      S.shack.fuseBlown = false; save(); toast('Fuse replaced with the same 25 A rating.', 'good'); draw();
+    } }, 'Replace fuse') : null,
   ].filter(Boolean));
 }
 
