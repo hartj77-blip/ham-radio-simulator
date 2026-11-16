@@ -63,10 +63,16 @@ function merged(lic, cls) {
 const LN = { T: 'Technician', G: 'General', E: 'Extra' };
 
 // Returns {ok, reason, code}
+// Licence-free and personal radio services (FCC Part 95): audible here, but not for amateur radios.
+const PART95_TX = [
+  { lo: 26.965e6, hi: 27.405e6, name: 'CB radio', rule: 'CB requires a certified CB radio; amateur transceivers may not be used there.' },
+  { lo: 151.8e6, hi: 154.61e6, name: 'MURS', rule: 'MURS is licence-free but only with certified MURS radios, 2 W maximum.' },
+  { lo: 462.55e6, hi: 467.725e6, name: 'FRS/GMRS', rule: 'FRS needs a certified FRS radio; GMRS needs a GMRS licence and a certified GMRS radio. Amateur handhelds are not certified for either.' },
+];
 export function checkTx(lic, hz, mode) {
   const band = bandOf(hz);
   const [a, b] = occupied(hz, mode);
-  if (!band) return { ok: false, code: 'outband', reason: `${(hz / 1e6).toFixed(4)} MHz is not in an amateur band. Transmitting here is illegal.` };
+  if (!band) { const p95 = PART95_TX.find((p) => hz >= p.lo && hz <= p.hi); return { ok: false, code: 'outband', reason: p95 ? `${(hz / 1e6).toFixed(4)} MHz is in the ${p95.name} service, not an amateur band. ${p95.rule} Listen only.` : `${(hz / 1e6).toFixed(4)} MHz is not in an amateur band. Transmitting here is illegal.` }; }
   if (!lic) return { ok: false, code: 'nolicense', reason: 'You need a license to transmit. Pass the Technician exam on the License tab.' };
   const cls = modeClass(mode);
   const ok = merged(lic, cls).some(([lo, hi]) => a >= lo && b <= hi);

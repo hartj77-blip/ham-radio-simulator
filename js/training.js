@@ -12,6 +12,7 @@ import { system, feedZ, analyzer } from './antenna.js';
 import { SUN, bandConditions, mufAt } from './propagation.js';
 import { stateBy } from './data/world.js';
 import { isHT } from './rigs.js';
+import { PLAN_STEP, openStationPlan } from './advisor.js';
 import { audio } from './audio.js';
 
 const T = () => (S.training ||= { step: 0, done: {}, answers: {}, marks: {}, min: false });
@@ -142,6 +143,7 @@ export const STEPS = [
     why: 'The feedline now connects through the wall entry and the radio is connected to a real load.',
     how: 'The button at the bottom of the build panel.',
     done: () => S.antenna.built, praise: 'Antenna is up.' },
+  { ...PLAN_STEP, m: 'antenna', action: ['Open station plan', () => openStationPlan()] },
 
   // ---------------- Module 3: analyzer & tuning
   { m: 'tuning', tab: 'antenna', sel: '.analyzer', title: 'Sweep 40 m with the analyzer', ref: 'antenna-analyzer',
@@ -440,7 +442,7 @@ function render() {
       if (answered != null) body.append(h('div', { class: 'row' }, h('button', { class: 'btn primary small', onclick: () => complete(true) }, 'Continue', h('span', { html: icon('arrowRight') })), opts[answered]?.[1] ? null : h('button', { class: 'btn small', onclick: () => { delete t.answers[t.step]; save(); render(); } }, 'Try again')));
       if (s.sel) body.append(h('div', { class: 'row' }, h('button', { class: 'btn ghost small', onclick: () => highlight(s.tab, s.sel) }, h('span', { html: icon('target') }), 'Show me')));
     } else if (s.kind === 'read') {
-      body.append(h('div', { class: 'row' }, refLink(s.ref, 'Open article'), s.sel ? h('button', { class: 'btn ghost small', onclick: () => highlight(s.tab, s.sel) }, h('span', { html: icon('target') }), 'Show me') : null,
+      body.append(h('div', { class: 'row' }, s.action ? h('button', { class: 'btn small', onclick: s.action[1] }, s.action[0]) : '', refLink(s.ref, 'Open article'), s.sel ? h('button', { class: 'btn ghost small', onclick: () => highlight(s.tab, s.sel) }, h('span', { html: icon('target') }), 'Show me') : null,
         h('button', { class: 'btn primary small', onclick: () => complete(true) }, 'Continue', h('span', { html: icon('arrowRight') }))));
     } else {
       body.append(
