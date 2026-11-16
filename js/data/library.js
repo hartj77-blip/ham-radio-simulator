@@ -4,6 +4,8 @@
 //
 // Shape: { id, cat, title, summary, minutes, html, related: [ids] }
 
+import { RF_LIBRARY } from './library-rf.js';
+
 export const LIBRARY = [
   // ---------------------------------------------------------------- Station
   {
@@ -2031,3 +2033,5 @@ export const LIBRARY = [
 ];
 
 export const libById = (id) => LIBRARY.find((a) => a.id === id);
+
+LIBRARY.push(...RF_LIBRARY);

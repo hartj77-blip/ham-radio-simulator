@@ -1,14 +1,15 @@
 // Transmission lines, matching networks, measurement import. Exact circuit maths.
 export const C0 = 299792458;
 
-// Cable data: Z0 (ohm), velocity factor, matched loss dB/100 ft at 10 MHz and 100 MHz (typical datasheet values).
+// Cable data: Z0 (ohm), velocity factor, matched loss dB/100 ft at 10 MHz and 100 MHz (typical datasheet values;
+// LMR figures from the Times Microwave k1·√f + k2·f datasheet formula, RG figures typical of several makers).
 export const CABLES = {
   'RG-174': { z0: 50, vf: 0.66, l10: 3.3, l100: 10.6 },
   'RG-58': { z0: 50, vf: 0.66, l10: 1.4, l100: 4.9 },
-  'RG-8X': { z0: 50, vf: 0.82, l10: 1.0, l100: 3.7 },
-  'LMR-240': { z0: 50, vf: 0.84, l10: 0.8, l100: 3.0 },
-  'RG-213': { z0: 50, vf: 0.66, l10: 0.65, l100: 2.2 },
-  'LMR-400': { z0: 50, vf: 0.85, l10: 0.42, l100: 1.35 },
+  'RG-8X': { z0: 50, vf: 0.82, l10: 1.0, l100: 3.6 },
+  'LMR-240': { z0: 50, vf: 0.84, l10: 0.77, l100: 2.45 },
+  'RG-213': { z0: 50, vf: 0.66, l10: 0.6, l100: 2.2 },
+  'LMR-400': { z0: 50, vf: 0.85, l10: 0.39, l100: 1.25 },
   'RG-59': { z0: 75, vf: 0.66, l10: 1.1, l100: 3.4 },
   'RG-6': { z0: 75, vf: 0.83, l10: 0.6, l100: 2.0 },
   '300 Ω twinlead': { z0: 300, vf: 0.82, l10: 0.27, l100: 1.2 },
