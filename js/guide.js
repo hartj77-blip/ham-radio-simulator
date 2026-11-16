@@ -35,6 +35,7 @@ export function initGuide(el) {
   render();
   setInterval(check, 2000);
   bus.on('goto-goal', (id) => showMe(GOALS.find((g) => g.id === id)));
+  bus.on('guide-refresh', () => render());
 }
 function check() {
   S.flags ||= {};

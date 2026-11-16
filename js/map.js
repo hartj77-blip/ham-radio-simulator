@@ -33,6 +33,7 @@ async function loadLand() {
   } catch (e) { land = null; }
 }
 
+export const getLand = () => { loadLand(); return land; };
 export function initMapUI(el) {
   root = el;
   cv = h('canvas', { class: 'pmap', title: 'Click a station to tune to it' });
