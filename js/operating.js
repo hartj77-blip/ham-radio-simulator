@@ -14,6 +14,7 @@ import { elmer } from './elmer.js';
 import { net } from './net.js';
 import { distanceKm, bearing } from './propagation.js';
 import { powerLimit , maxPower } from './store.js';
+import { siteEffects } from './yard.js';
 import { rig, rigCanTx, rigMaxW , gearOf } from './rigs.js';
 
 const R = () => S.radio;
@@ -96,7 +97,7 @@ function prepare(modeOverride, quiet) {
   const mg = r.micGain ?? 0.5;
   const talk = mode !== 'CW' && mode !== 'FM' ? (gearOf('mic').talk || 0) + (r.comp ? 2.5 : 0) + (mg < 0.3 ? -4 * (0.3 - mg) / 0.3 : 0) - (mg > 0.85 ? 2 : 0) : 0;
   if (mode !== 'CW' && mode !== 'FM' && mg > 0.85 && !quiet) toast('🔴 ALC overdriven: mic gain too high — your signal is splattering (wide and distorted). Back it off.', 'warn', 5000);
-  const dbm = via === 'dummy' ? -200 : wattsToDbm(watts) + 10 * Math.log10(1 - g * g) + talk;
+  const dbm = via === 'dummy' ? -200 : wattsToDbm(watts) + 10 * Math.log10(1 - g * g) + talk - siteEffects(txf / 1e6).lossDb;
   return { txf, watts, swr, dbm, via, mode };
 }
 

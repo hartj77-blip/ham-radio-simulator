@@ -16,7 +16,7 @@ import { bearing, distanceKm } from './propagation.js';
 import { segment, postZ, GROUNDS, CONDUCTORS } from './em/models.js';
 import { ANT_TYPES, gameModel, RADIAL_LOSS } from './antenna.js';
 import { runSolver } from './em/client.js';
-import { maxHeight } from './store.js';
+import { siteMaxHeight } from './yard.js';
 import { setupCanvas } from './em/plots.js';
 
 const FT = 0.3048, C = 299.792458; // MHz·m
@@ -202,7 +202,7 @@ export function render() {
   const tilt = ter && p.goal !== 'nvis' && Math.abs(ter.slope) >= 0.5 ? -ter.slope : 0; // ground falling away tilts lobes down
   const wantAngle = clamp(goal.angle + tilt, 3, 89);
   const idealH = a.type === 'vertical' ? 0 : heightFor(f, wantAngle);
-  const support = maxHeight();
+  const support = siteMaxHeight();
   const useH = a.type === 'vertical' ? 0 : Math.min(idealH, support);
   const gIdeal = elevGain(a.type, goal.angle, f, idealH * FT, a.ground), gUse = elevGain(a.type, goal.angle, f, useH * FT, a.ground);
   const gNow = elevGain(a.type, goal.angle, f, (a.type === 'vertical' ? 0 : a.height) * FT, a.ground);

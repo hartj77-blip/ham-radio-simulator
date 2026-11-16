@@ -12,6 +12,7 @@ import { ui as opUi, txState } from './operating.js';
 import { net } from './net.js';
 import { owns, maxPower } from './store.js';
 import { mountMaster, render as renderMaster } from './masterview.js';
+import { siteEffects } from './yard.js';
 import { serviceOf, SERVICE_REGIONS } from './services.js';
 import { rig , rigRx, gearOf } from './rigs.js';
 import { RW, WX_CHANNELS, HEAR } from './realworld.js';
@@ -137,6 +138,8 @@ export function rxUpdate() {
   nf -= att;
   nf = Math.max(nf, -132 - (rig().quietRx || 0) - [0, 6, 9][r.preamp || 0] * (f > 14 ? 1 : 0.3));
   if (f < 10) nf += gearOf('psu').noiseDb || 0; // switching-supply hash on the low bands
+  const site = siteEffects(f); // where the antenna is: city noise, building/indoor/mobile losses
+  if (rs.antennaOk) nf += site.noiseDb;
   const bw = r.mode === 'CW' ? r.filter.CW : r.mode === 'FM' ? 12000 : r.mode === 'WFM' ? 150000 : r.mode === 'AM' ? r.filter.AM / 2 : r.filter[r.mode];
   const nBW = nf + 10 * Math.log10(bw / 2400);
   rx.noiseDbm = nf;
@@ -146,7 +149,7 @@ export function rxUpdate() {
   const t = now();
   for (const st of world.stations) {
     if (!st.tx || t > st.tx.end + 0.3 || t < st.tx.start - 0.2) continue;
-    const dbm = world.rxDbm(st) - att;
+    const dbm = world.rxDbm(st) - att - site.lossDb;
     const off = st.freq - d;
     let tone = toneFor(st), audible = false, intelligible = false;
     const ao = Math.abs(off), fmRx = r.mode === 'FM' || r.mode === 'WFM';
