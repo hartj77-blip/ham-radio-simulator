@@ -15,7 +15,9 @@ import { initLogbookUI } from './logbook.js';
 import { initNetUI, net, autoOnline } from './net.js';
 import { initWorkbenchUI } from './workbench.js';
 import { initStoreUI, money, earn } from './store.js';
+import { initRigBuilder } from './rigbuilder.js';
 import { initMapUI, drawMap } from './map.js';
+import { initWorldView } from './worldview.js';
 import { openStation, applySetup, setGameMode, applyLook, loadSlot } from './setups.js';
 import { initGuide, initExplain, initFinder } from './guide.js';
 import { initHelper } from './helper.js';
@@ -24,8 +26,9 @@ import { initHT, showHT, isPhone, phoneStart } from './htview.js';
 import { startRealWorld, RW } from './realworld.js';
 import { initScannerUI } from './services.js';
 import { elmer } from './elmer.js';
+import { openSettings, applySettings } from './settings.js';
 
-const TABS = [['shack', '🔌 Shack'], ['antenna', '📡 Antenna'], ['workbench', '🛠 Workbench'], ['radio', '📻 Radio'], ['contest', '🏆 Contests'], ['license', '🪪 License'], ['logbook', '📒 Logbook'], ['store', '🛒 Hamfest'], ['help', '❔ Help']];
+const TABS = [['shack', '🔌 Shack'], ['antenna', '📡 Antenna'], ['workbench', '🛠 Workbench'], ['rigbuilder', '🧰 Rig builder'], ['radio', '📻 Radio'], ['contest', '🏆 Contests'], ['license', '🪪 License'], ['logbook', '📒 Logbook'], ['store', '🛒 Hamfest'], ['help', '❔ Help']];
 
 function header() {
   const st = stateBy(S.op.state);
@@ -114,16 +117,8 @@ function helpTab(el) {
       h('h3', {}, '📖 Lingo'),
       h('p', { class: 'small' }, 'CQ calling anyone · DE from · K over · KN over (only you) · SK end of contact · 73 best regards · RST signal report · 5NN = 599 · QTH location · QSL confirm · QRZ? who\'s calling · QRL? is this freq busy · QSY change freq · QRS send slower · AGN again · TU thank you · OM old man (any male op) · YL young lady · ES and · FB fine business · HW? how copy? · WX weather · UR your')),
     h('div', { class: 'card' }, h('h3', {}, '⚙ Settings'),
-      h('label', {}, 'QTH (your state) ', qth),
-      h('label', {}, live, ' Real UTC time'), h('label', {}, 'Time warp ', hour, ' ', hourLbl),
-      h('p', { class: 'muted tiny' }, 'Propagation follows the sun: low bands open at night, high bands by day.'),
-      h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { if (net.online) return toast('Online, everyone shares the real space weather — go offline to experiment.', 'warn'); SUN.randomize(); world.repopulate(); solarBanner(); toast(`Practice space weather: SFI ${SUN.sfi}, K ${SUN.k}`, 'info'); } }, '☀ Practice: random space weather'), h('button', { class: 'btn', onclick: () => { SUN.override = false; SUN.key = null; SUN.shared(); world.repopulate(); solarBanner(); } }, '↺ Shared (today\'s) conditions')),
-      h('label', {}, 'AI voice speed ', rate),
-      h('hr'),
-      h('p', { class: 'small' }, h('b', {}, 'Sandbox: '), 'skip the exams and grant yourself a license (for jumping straight into contests).'),
-      h('div', { class: 'row' }, ...['T', 'G', 'E'].map((l) => h('button', { class: 'btn small', onclick: () => sandboxLicense(l) }, `Grant ${licName(l)}`))),
-      h('hr'),
-      h('button', { class: 'btn warn small', onclick: () => { if (confirm('Erase ALL progress (license, log, station)?')) resetAll(); } }, 'Reset everything')),
+      h('p', { class: 'small' }, 'Audio, text size and touch layout, game mode and helpers, PTT key and CW speed, time warp and space weather, your location, and backup/restore of your save.'),
+      h('button', { class: 'btn primary', onclick: () => openSettings() }, '⚙ Open settings')),
     h('div', { class: 'card' }, h('h3', {}, 'ℹ About realism'),
       h('p', { class: 'small' }, 'Under the hood: a sun-driven ionosphere model (MUF, D-layer absorption, skip, K-index aurora), antenna impedance & SWR (feed-point R/X, harmonics, height above ground, radials, coax loss with mismatch), a receiver chain with real IF filtering, AGC, band noise and static crashes, FCC Part 97 privileges by license class, and AI operators who answer only when they can actually hear you.'),
       h('p', { class: 'small muted' }, 'Exam questions are original practice questions covering the official topics — always study the current NCVEC pool before your real VE session. Callsigns are randomly generated.')),
@@ -134,6 +129,7 @@ function init() {
   const nav = $('#tabs');
   for (const [id, label] of TABS) nav.append(h('button', { 'data-tab': id, onclick: () => showTab(id) }, label));
   const tools = h('div', { class: 'top-tools' },
+    h('button', { class: 'btn small', id: 'settings-btn', title: 'Settings', onclick: () => openSettings() }, '⚙'),
     h('button', { class: 'btn small', id: 'station-btn', title: 'Game mode, radio model, one-click setups, saved antennas, appearance', onclick: () => openStation() }, '🎛 Station'),
     h('button', { class: 'btn small', id: 'ht-btn', title: 'Switch between the handheld radio and the full station', onclick: () => showHT(!document.body.classList.contains('ht-view')) }, '📟 Handheld'),
     h('button', { class: `btn small ${S.settings.explain ? 'active' : ''}`, id: 'explain-btn', title: 'Hover any control to learn what it does', onclick: (e) => { S.settings.explain = !S.settings.explain; save(); e.currentTarget.classList.toggle('active', S.settings.explain); toast(S.settings.explain ? '❓ Explain mode on — hover over any control.' : 'Explain mode off.', 'info', 2500); } }, '❓ Explain'));
@@ -146,8 +142,11 @@ function init() {
   initShackUI($('#tab-shack'));
   initAntennaUI($('#tab-antenna'));
   initWorkbenchUI($('#tab-workbench'));
+  initRigBuilder($('#tab-rigbuilder'));
+  bus.on('rig', () => { if (S.rbDraft && S.rbDraft.rig !== S.rig) { S.rbDraft.rig = S.rig; } });
   initRadioUI($('#radio-panel'));
   initMapUI($('#map-panel'));
+  initWorldView($('#world-panel'));
   initScannerUI($('#scanner-panel'));
   startRealWorld();
   bus.on('realworld', (k) => { if (k === 'sun') { solarBanner(); world.bandCache = {}; } if (k === 'wx') clock(); });
@@ -180,7 +179,9 @@ function init() {
   bus.on('ant-slot', (i) => loadSlot(i));
   bus.on('rig', () => { applyLook(); header(); });
   bus.on('explain', () => $('#explain-btn')?.classList.toggle('active', !!S.settings.explain));
-  applyLook();
+  applyLook(); applySettings();
+  bus.on('solar', () => { solarBanner(); clock(); });
+  bus.on('open-settings', () => openSettings());
   bus.on('band', (b) => {
     if (!b) return;
     if (['80m', '160m'].includes(b)) elmer('propagation_day');
@@ -192,7 +193,7 @@ function init() {
   bus.on('shack', () => { header(); updateDisplay(); });
 
   // unlock audio on first interaction
-  const unlock = () => { audio.init(); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
+  const unlock = () => { audio.init(); applySettings(); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
   window.addEventListener('pointerdown', unlock);
   window.addEventListener('keydown', unlock);
 
@@ -208,7 +209,8 @@ function init() {
   else if (S.license && !S.tips.includes('welcome')) elmer('welcome');
   if (S.started) setTimeout(autoOnline, 1500);
   bus.on('view', (v) => { const b = $('#ht-btn'); if (b) b.textContent = v === 'ht' ? '🏠 Full station' : '📟 Handheld'; });
-  if (S.started && (S.settings.view === 'ht' || (isPhone() && S.settings.view !== 'station'))) { if (isPhone()) phoneStart(); showHT(true); }
+  const sv = S.settings.startView || 'auto';
+  if (S.started && (sv === 'ht' || (sv === 'auto' && (S.settings.view === 'ht' || (isPhone() && S.settings.view !== 'station'))))) { if (isPhone()) phoneStart(); showHT(true); }
 }
 
 init();

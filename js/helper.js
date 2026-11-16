@@ -350,6 +350,7 @@ export function initHelper(el) {
   bus.on('helper-mistake', (kind, info) => { if (!H().on) return; const f = MISTAKES[kind]; if (f) { say(f(info), 'warn'); if (H().min) { H().min = false; render(); } } });
   bus.on('rig', render); bus.on('license', render);
   bus.on('helper-say', (html) => say(html, 'answer'));
+  bus.on('helper-refresh', () => render());
   panel.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-act], button.elmer-show');
     if (!b) return;
