@@ -10,6 +10,7 @@ import { schedule, cut } from './morse.js';
 import { netGain, system } from './antenna.js';
 import { rigStatus } from './shack.js';
 import { serviceOf, stationsFor, serviceBehave } from './services.js';
+import { netStations, cwStations, behaveNet, behaveCwPractice, repeaterNet, netCheckinFromPlayer, netsOn } from './activity.js';
 
 let NEXT_ID = 1;
 export const activeContest = () => (world.contest && !['30m', '17m', '12m', '2m'].includes(world.band) ? world.contest : null);
@@ -194,7 +195,7 @@ function rxAntGain(fHz, brg, dist, mode) {
 const txAntGain = rxAntGain;
 
 // ------------------------------------------------------------------ population
-const CASUAL_N = { '160m': 6, '80m': 14, '40m': 22, '30m': 9, '20m': 26, '17m': 11, '15m': 16, '12m': 7, '10m': 14, '6m': 6 };
+const CASUAL_N = { '160m': 10, '80m': 22, '40m': 34, '30m': 14, '20m': 40, '17m': 17, '15m': 25, '12m': 11, '10m': 22, '6m': 10 };
 const US_W = { '160m': 0.9, '80m': 0.85, '40m': 0.75, '30m': 0.6, '20m': 0.45, '17m': 0.45, '15m': 0.45, '12m': 0.45, '10m': 0.5, '6m': 0.8 };
 
 function predictedSnr(op, band, f) {
@@ -295,6 +296,7 @@ function populate(band, contest, shared = false) {
       list.push(p);
     }
   }
+  if (!contest) list.push(...netStations(band), ...cwStations(band, list));
   const beaconF = { '20m': 14100000, '17m': 18110000, '15m': 21150000, '12m': 24930000, '10m': 28200000 }[band.name];
   if (beaconF && !contest) list.push(new Station({ op: BEACONS[0], mode: 'CW', freq: beaconF, band: band.name, role: 'beacon', wpm: 22, powerDbm: 50, antGain: 2, slot: Object.keys({ '20m': 0, '17m': 1, '15m': 2, '12m': 3, '10m': 4 }).indexOf(band.name) }));
   return list;
@@ -326,14 +328,14 @@ function populate2m(band) {
   const me = player();
   const near = (km) => { const a = rand(0, 2 * Math.PI); return { lat: me.lat + Math.cos(a) * km / 111, lon: me.lon + Math.sin(a) * km / 85 }; };
   const st = stateBy(S.op.state) || stateBy('KS');
-  if (!S.local || S.local.state !== S.op.state || S.local.v !== 2) {
+  if (!S.local || S.local.state !== S.op.state || S.local.v !== 3) {
     const d = typeof st.dist === 'number' ? st.dist : 7;
     // seeded by state, so players in the same state share the same local repeater and locals
     S.local = seeded(`local|${S.op.state}`, () => ({
-      v: 2,
+      v: 3,
       state: S.op.state,
       rpt: pick(['W', 'K', 'N']) + d + pick(['RPT', 'ARC', 'MRA', 'EOC', 'VHF', 'SKY']),
-      locals: Array.from({ length: 5 }, () => ({ call: usCall(st), name: pick(['Bob', 'Jim', 'Sue', 'Dave', 'Pat', 'Ken', 'Linda', 'Rick', 'Amy', 'Walt']) })),
+      locals: Array.from({ length: 10 }, () => ({ call: usCall(st), name: pick(['Bob', 'Jim', 'Sue', 'Dave', 'Pat', 'Ken', 'Linda', 'Rick', 'Amy', 'Walt', 'Gary', 'Carol', 'Tom', 'Deb', 'Ann', 'Ray']) })),
     }));
     save();
   }
@@ -357,6 +359,13 @@ const RPT_CHAT = [
   (a, b) => [`§${b.call}§, §${a.call}§.`, `Go ahead ${a.name}.`, `Are we still on for the club meeting Thursday? Seven P M at the library.`, `Affirmative, I'll bring the coax crimper. §${b.call}§.`, `Sounds good. 73, §${a.call}§.`],
   (a) => [`This is §${a.call}§. Reminder, the weekly net is tonight at eight on this repeater. All check-ins welcome. §${a.call}§.`],
   (a, b) => [`§${b.call}§ this is §${a.call}§, how's my audio on the new handheld?`, `${a.name}, you're full quieting, audio sounds great. §${b.call}§.`, `Thanks. Seventy three. §${a.call}§ clear.`],
+  (a, b) => [`§${b.call}§, §${a.call}§, you on frequency?`, `Go ahead ${a.name}.`, `Just wanted to say the swap meet is Saturday at the fairgrounds, gates open at seven.`, `Thanks, I'll be there looking for a power supply. §${b.call}§.`],
+  (a) => [`§${a.call}§ mobile, heading north on the interstate. Anybody around for a chat?`],
+  (a, b) => [`§${b.call}§ from §${a.call}§.`, `Morning ${a.name}, go ahead.`, `How did the antenna work out? Did you get the SWR down?`, `Got it down to about one point three to one after trimming a couple of inches off each leg. Works great now.`, `Glad to hear it. §${a.call}§.`],
+  (a, b) => [`This is §${a.call}§ with a reminder: license exams are this Saturday at the community center, nine A M. Bring a photo ID.`, `Thanks ${a.name}, my nephew is taking his Technician. §${b.call}§.`],
+  (a, b) => [`§${b.call}§ this is §${a.call}§, are you on the air from the new house yet?`, `Just a handheld so far, ${a.name}. The roof antenna goes up this weekend.`, `Let me know if you need a hand with the mast. §${a.call}§.`],
+  (a) => [`§${a.call}§ testing, one, two, three. Testing on the repeater, §${a.call}§.`],
+  (a, b) => [`§${b.call}§ from §${a.call}§, the sky is getting dark out west. Might be time to watch for a SKYWARN activation tonight.`, `Copy that ${a.name}, I'll keep the radio on. §${b.call}§.`],
 ];
 
 // ------------------------------------------------------------------ behaviours
@@ -405,6 +414,8 @@ function behave(st, t) {
     case 'beacon': return behaveBeacon(st, t);
     case 'repeater': return behaveRepeater(st, t);
     case 'simplex': return behaveSimplex(st, t);
+    case 'net': return behaveNet(st, t);
+    case 'cwpractice': return behaveCwPractice(st, t);
     default: return serviceBehave(st, t);
   }
 }
@@ -505,6 +516,7 @@ function behaveRepeater(st, t) {
   if (st.chat && st.chat.length) {
     if (st.chatGap && now() < st.chatGap) return;
     const line = st.chat.shift();
+    if (line.text === '__open__') { st.chatGap = now() + 12; return; }
     st.speaker = line.who;
     st.seed = line.who.seed; st.rate = 1.05;
     const p = phone(line.text);
@@ -524,8 +536,11 @@ function behaveRepeater(st, t) {
     if (now() - st.pq.lastAct > 60) st.pq = null;
     return;
   }
+  st.netOn = netsOn('2m').length > 0;
   if (!tickTimer(st)) return;
-  st.timer = rand(70, 180);
+  const netLines = repeaterNet(st);
+  if (netLines) { st.timer = rand(25, 50); st.chat = netLines; return; }
+  st.timer = rand(30, 90);
   const locals = st.locals.map((l, i) => ({ ...l, seed: 100 + i * 37 }));
   const a = pick(locals), b = pick(locals.filter((x) => x !== a));
   const lines = pick(RPT_CHAT)(a, b);
@@ -603,6 +618,7 @@ export function playerTransmitted(msg) {
   const a = analyze(msg.text);
   msg.a = a;
   if (world.band === '2m' && msg.sb === 'FM') return repeaterInput(msg, a);
+  if (netCheckinFromPlayer(world.stations, msg, a)) return;
   const tol = tolFor(msg);
   const near = world.stations.filter((st) => st.role !== 'beacon' && Math.abs(st.freq - msg.freq) <= tol + (st.role === 'caller' ? 400 : 0));
   // wrong sideband / off frequency hints
@@ -895,6 +911,7 @@ function repeaterInput(msg, a) {
     }
     world.rptAttempts = 0;
     bus.emit('rpt', { opened: true });
+    if (netCheckinFromPlayer([rpt], msg, a)) { (S.flags ||= {}).rpt = 1; rpt.later(0.6, () => bus.emit('courtesy')); return; }
     (S.flags ||= {}).rpt = 1;
     bus.emit('elmer', 'repeater');
     // courtesy tone after you unkey

@@ -9,6 +9,7 @@ import { stateBy } from './data/world.js';
 import { simDate, distanceKm, path as propPath, bandNoiseDbm, sUnits } from './propagation.js';
 import { schedule } from './morse.js';
 import { bandOf } from './data/bandplan.js';
+import { shortRangeStations, behaveChatter } from './activity.js';
 
 export const SERVICE_REGIONS = [
   { name: 'MW', label: 'AM broadcast', lo: 520e3, hi: 1710e3, mode: 'AM', step: 10e3, span: 150e3, def: 1000e3 },
@@ -84,6 +85,7 @@ export function stationsFor(region) {
     // 121.5 guard: occasional ELT test or pilot calling guard
     out.push(mk({ op: { call: 'GUARD', name: 'Emergency/guard 121.5', lat: qth.lat + 1, lon: qth.lon, qth: 'airborne', cont: 'NA', lang: 'en-US' }, mode: 'AM', sb: 'AM', freq: 121.5e6, band: 'AIR', role: 'atc', atc: 'guard', powerDbm: 44, antGain: 0, txHeight: 9000, timer: rand(60, 200) }));
   }
+  out.push(...shortRangeStations(region.name, mk, qth));
   return out;
 }
 
@@ -103,6 +105,7 @@ export function serviceBehave(st, t) {
     case 'atis': return atis(st);
     case 'atc': return atcTraffic(st);
     case 'ems': return ems(st);
+    case 'chatter': return behaveChatter(st);
   }
 }
 
