@@ -1,11 +1,10 @@
 // License tab: study, practice exams, and the VE exam session that earns your license.
-import { S, save, addXp, licName } from './state.js';
+import { S, save, licName } from './state.js';
 import { h, toast, bus, pick, modal } from './util.js';
 import { POOL, EXAM } from './data/questions.js';
 import { newLicenseeCall, STATES } from './data/world.js';
 import { BANDS, privilegeMap } from './data/bandplan.js';
 import { elmer } from './elmer.js';
-import { earn } from './store.js';
 
 let root;
 const ORDER = ['T', 'G', 'E'];
@@ -23,12 +22,12 @@ function render() {
   root.innerHTML = '';
   const lic = S.license;
   const status = h('div', { class: 'card lic-status' },
-    h('h3', {}, '🪪 Your license'),
+    h('h3', {}, 'Your license'),
     h('div', { class: 'lic-big' }, S.call ? h('span', { class: 'callsign' }, S.call) : h('span', { class: 'muted' }, 'No callsign yet'), ' ', h('span', { class: `badge lic-${lic || 'none'}` }, licName())),
     h('p', { class: 'small' }, lic ? 'You may transmit within your privileges (green/blue bars on the radio\'s band scope).' : 'You can listen to everything, and transmit into the dummy load to practice. Pass the Technician exam to get on the air!'),
     privTable(),
   );
-  const study = h('div', { class: 'card' }, h('h3', {}, '📘 Study & exams'),
+  const study = h('div', { class: 'card' }, h('h3', {}, 'Study & exams'),
     h('p', { class: 'muted small' }, 'Real US exams are given by Volunteer Examiners: Technician 35 questions (26 to pass), General 35 (26), Extra 50 (37). Practice questions here follow the same topics. Every lesson Elmer gives you in-game is exam material too!'),
     ...ORDER.map((el) => {
       const E = EXAM[el];
@@ -43,7 +42,7 @@ function render() {
           h('button', { class: 'btn primary', disabled: passed || !canTake(el), title: canTake(el) ? '' : 'Pass the previous element first', onclick: () => exam(el, true) }, passed ? 'Passed' : 'Take VE exam')));
     }),
   );
-  const hist = h('div', { class: 'card' }, h('h3', {}, '📈 Exam history'),
+  const hist = h('div', { class: 'card' }, h('h3', {}, 'Exam history'),
     S.exams.history.length ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Date'), h('th', {}, 'Element'), h('th', {}, 'Type'), h('th', {}, 'Score'), h('th', {}, 'Result')),
       ...S.exams.history.slice(-12).reverse().map((x) => h('tr', {}, h('td', {}, new Date(x.t).toLocaleDateString()), h('td', {}, x.el), h('td', {}, x.real ? 'VE session' : 'practice'), h('td', {}, `${x.score}/${x.n}`), h('td', { class: x.pass ? 'ok' : 'bad' }, x.pass ? 'PASS' : 'fail'))))
       : h('p', { class: 'muted' }, 'No exams taken yet.'));
@@ -83,7 +82,7 @@ function flashcards(el) {
     const q = deck[i % deck.length];
     const answers = shuffle(q.a.map((t, k) => ({ t, ok: k === 0 })));
     box.innerHTML = '';
-    const exp = h('div', { class: 'explain', hidden: true }, h('b', {}, '💡 '), q.exp);
+    const exp = h('div', { class: 'explain', hidden: true }, h('b', {}, ''), q.exp);
     const next = h('button', { class: 'btn primary', hidden: true, onclick: () => { i++; show(); } }, 'Next →');
     box.append(h('div', { class: 'qmeta' }, `${EXAM[el].name} · ${q.sub} · card ${i + 1}`), h('div', { class: 'qtext' }, q.q),
       h('div', { class: 'answers' }, ...answers.map((a, k) => {
@@ -92,7 +91,6 @@ function flashcards(el) {
           if (!exp.hidden) return;
           const s = (S.study[q.id] ||= { ok: 0, bad: 0 });
           a.ok ? s.ok++ : s.bad++;
-          if (a.ok && s.ok === 1) addXp(2, 'study');
           save();
           box.querySelectorAll('.ans').forEach((x, j) => x.classList.add(answers[j].ok ? 'right' : x === b ? 'wrong' : 'dim'));
           exp.hidden = false; next.hidden = false; next.focus();
@@ -116,7 +114,7 @@ function exam(el, real) {
   const show = () => {
     const q = qs[i];
     box.innerHTML = '';
-    box.append(h('div', { class: 'qmeta' }, `${real ? '🏛 VE exam session' : 'Practice'} · Question ${i + 1} of ${n} · pass mark ${passMark}`), h('div', { class: 'qtext' }, q.q),
+    box.append(h('div', { class: 'qmeta' }, `${real ? 'VE exam session' : 'Practice'} · Question ${i + 1} of ${n} · pass mark ${passMark}`), h('div', { class: 'qtext' }, q.q),
       h('div', { class: 'answers' }, ...q.answers.map((a, k) => h('button', { class: `ans ${q.pick === k ? 'picked' : ''}`, onclick: () => { q.pick = k; if (i < n - 1) { i++; } show(); } }, `${'ABCD'[k]}. ${a.t}`))),
       h('div', { class: 'row spread' },
         h('button', { class: 'btn', disabled: i === 0, onclick: () => { i--; show(); } }, '← Back'),
@@ -138,10 +136,9 @@ function exam(el, real) {
     nav.innerHTML = '';
     box.append(h('h2', { class: pass ? 'ok' : 'bad' }, pass ? `PASS — ${score}/${n}` : `Not this time — ${score}/${n} (needed ${passMark})`));
     if (pass && real) grantLicense(el, box);
-    if (pass && !real) addXp(15, 'practice exam');
     box.append(h('h3', {}, 'Review'), ...qs.filter((q) => q.pick == null || !q.answers[q.pick].ok).map((q) => h('div', { class: 'review' },
-      h('div', { class: 'qtext small' }, q.q), h('div', { class: 'ok small' }, '✔ ', q.a[0]), q.pick != null ? h('div', { class: 'bad small' }, '✘ ', q.answers[q.pick].t) : h('div', { class: 'muted small' }, '(unanswered)'), h('div', { class: 'explain small' }, q.exp))));
-    if (score === n) box.append(h('p', {}, '💯 Perfect score!'));
+      h('div', { class: 'qtext small' }, q.q), h('div', { class: 'ok small' }, '✓ ', q.a[0]), q.pick != null ? h('div', { class: 'bad small' }, '✘ ', q.answers[q.pick].t) : h('div', { class: 'muted small' }, '(unanswered)'), h('div', { class: 'explain small' }, q.exp))));
+    if (score === n) box.append(h('p', {}, 'Perfect score!'));
   };
   show();
   close = modal(h('div', {}, h('h2', {}, `${real ? 'VE Exam' : 'Practice exam'}: ${E.name}`), nav, box), { wide: true, onClose: render });
@@ -156,10 +153,10 @@ function grantLicense(el, box) {
     S.call = newLicenseeCall(S.op.state, el);
     msg = `The FCC has issued your callsign: <b>${S.call}</b>`;
   } else msg = `Upgrade to ${licName(el)} is in the FCC database. You may sign "${S.call}/A${el === 'E' ? 'E' : 'G'}" until it appears… (in the sim it\'s instant).`;
-  addXp({ T: 100, G: 150, E: 250 }[el], 'license');
-  earn(100, 'license');
+
+
   save();
-  box.append(h('div', { class: 'good-box' }, h('div', { html: `🎉 ${msg}` }),
+  box.append(h('div', { class: 'good-box' }, h('div', { html: `${msg}` }),
     el === 'E' ? h('button', { class: 'btn', onclick: (e) => { S.call = newLicenseeCall(S.op.state, 'E'); save(); e.target.textContent = `New vanity call: ${S.call}`; bus.emit('license'); } }, 'Apply for a short Extra-class (Group A) callsign') : null));
   elmer('exam_pass', true);
   if (el === 'T') setTimeout(() => elmer('tech_hf', true), 2000);

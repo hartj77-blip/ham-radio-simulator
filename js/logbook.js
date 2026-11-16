@@ -14,13 +14,13 @@ function render() {
   const states = new Set(conf.map((q) => q.truth?.state).filter(Boolean));
   const dxcc = new Set(conf.map((q) => q.truth?.country).filter(Boolean));
   const conts = new Set(conf.map((q) => q.truth?.cont).filter(Boolean));
-  const awards = h('div', { class: 'card awards' }, h('h3', {}, '🏅 Awards'),
+  const awards = h('div', { class: 'card awards' }, h('h3', {}, 'Awards'),
     award('Worked All States (WAS)', states.size, 50),
     award('DXCC (100 countries)', dxcc.size, 100),
     award('Worked All Continents', conts.size, 6),
     h('div', { class: 'was-grid' }, ...STATES.map((s) => h('span', { class: `st ${states.has(s.abbr) ? 'got' : ''}`, title: s.name }, s.abbr))),
     dxcc.size ? h('p', { class: 'small' }, h('b', {}, 'Countries: '), [...dxcc].join(', ')) : null);
-  const exp = h('button', { class: 'btn', onclick: exportAdif }, '⬇ Export ADIF');
+  const exp = h('button', { class: 'btn', onclick: exportAdif }, 'Export ADIF');
   const clr = h('button', { class: 'btn warn small', onclick: () => { if (confirm('Delete the entire logbook?')) { S.log = []; save(); render(); } } }, 'Clear log');
   const list = S.log.slice().reverse().slice(0, 300);
   const tbl = h('table', { class: 'tbl log' },
@@ -29,10 +29,10 @@ function render() {
       h('td', {}, q.time.slice(5, 16).replace('T', ' ')), h('td', {}, h('b', {}, q.call)), h('td', {}, q.band), h('td', {}, q.freq), h('td', {}, q.mode),
       h('td', {}, q.exch ? '' : q.rstS), h('td', {}, q.exch ? Object.values(q.exch).join(' ') : q.rstR),
       h('td', { class: 'small' }, q.exch ? (q.contest || '').split('-')[0].toUpperCase() : [q.name, q.qth].filter(Boolean).join(', ') || (q.truth?.country || '')),
-      h('td', { class: q.status === 'confirmed' ? 'ok' : 'bad' }, q.dupe ? 'dupe' : q.status === 'confirmed' ? '✔ QSL' : q.status === 'partial' ? 'incomplete' : 'NIL'))));
+      h('td', { class: q.status === 'confirmed' ? 'ok' : 'bad' }, q.dupe ? 'dupe' : q.status === 'confirmed' ? '✓ QSL' : q.status === 'partial' ? 'incomplete' : 'NIL'))));
   root.append(h('div', { class: 'log-grid' },
-    h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', {}, `📒 Logbook (${S.log.length} QSOs)`), h('div', { class: 'row' }, exp, clr)),
-      S.log.length ? tbl : h('p', { class: 'muted' }, 'No contacts yet. Make your first QSO on the Radio tab!')),
+    h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', {}, `Logbook (${S.log.length} QSOs)`), h('div', { class: 'row' }, exp, clr)),
+      S.log.length ? tbl : h('p', { class: 'muted' }, 'No contacts yet. Make your first contact on the Radio page.')),
     awards));
 }
 
@@ -45,7 +45,7 @@ function adifField(k, v) { v = String(v ?? ''); return v ? `<${k}:${v.length}>${
 
 function exportAdif() {
   if (!S.log.length) return toast('Nothing to export yet.', 'warn');
-  let out = `Ham Shack Simulator log export\n<ADIF_VER:5>3.1.4 <PROGRAMID:13>HamShack-Sim <EOH>\n`;
+  let out = `Ham Radio Simulator log export\n<ADIF_VER:5>3.1.4 <PROGRAMID:13>HamShack-Sim <EOH>\n`;
   for (const q of S.log) {
     const d = q.time.replace(/[-:]/g, '');
     out += adifField('CALL', q.call) + adifField('QSO_DATE', d.slice(0, 8)) + adifField('TIME_ON', d.slice(9, 13)) + adifField('BAND', q.band.toUpperCase())

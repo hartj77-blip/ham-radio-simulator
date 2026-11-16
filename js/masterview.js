@@ -1,11 +1,11 @@
-// 🎛 Master view: every control on the radio at once (the things real rigs hide in menus and
+// Master view: every control on the radio at once (the things real rigs hide in menus and
 // second-function keys), plus a live look inside the box — the receive and transmit signal chains
 // with the actual numbers flowing through them.
 import { S, save } from './state.js';
 import { h, bus, clamp } from './util.js';
 import { rig, gearOf } from './rigs.js';
 import { rx, reapplyMode, updateDisplay, setFreq, effectiveSwr } from './radio.js';
-import { maxPower, powerChain } from './store.js';
+import { maxPower, powerChain } from './limits.js';
 import { txState } from './operating.js';
 import { rigStatus } from './shack.js';
 import { fmtFreq } from './util.js';
@@ -40,7 +40,7 @@ export function render() {
   r.vfoB ??= r.freq + 5000;
   const grp = (title, ...kids) => h('div', { class: 'ctl-group mv-grp' }, h('div', { class: 'ctl-title' }, title), ...kids);
   root.append(
-    h('div', { class: 'mv-head row spread' }, h('b', {}, `🎛 MASTER VIEW — every control on the ${rg.name}`), h('span', { class: 'muted tiny' }, 'Greyed controls don\'t exist on this model. Double-click a slider to centre it.')),
+    h('div', { class: 'mv-head row spread' }, h('b', {}, `MASTER VIEW — every control on the ${rg.name}`), h('span', { class: 'muted tiny' }, 'Greyed controls don\'t exist on this model. Double-click a slider to centre it.')),
     h('div', { class: 'mv-grid' },
       grp('VFO',
         h('div', { class: 'mv-vfo' }, h('div', {}, h('span', { class: 'tiny muted' }, 'VFO A (RX)'), h('b', { class: 'mono' }, fmtFreq(r.freq))), h('div', {}, h('span', { class: 'tiny muted' }, `VFO B${r.split ? ' (TX)' : ''}`), h('b', { class: 'mono' }, fmtFreq(r.vfoB)))),
@@ -73,7 +73,7 @@ export function render() {
         h('div', { class: 'row' }, tog('COMP', !!r.comp, (v) => { r.comp = v; }, { title: 'Speech processor: ~2.5 dB more average talk power on SSB' }),
           tog('ATU', !!r.atuOn, (v) => { r.atuOn = v; }, { dis: !rg.atu })),
         h('div', { class: 'mv-alc' }, h('span', { class: 'tiny' }, 'ALC'), h('div', { class: 'mv-bar' }, h('i', { id: 'mv-alc' }))),
-        powerChain().limits.length ? h('div', { class: 'tiny warn' }, '⚠ ' + powerChain().limits.join('; ')) : null)),
+        powerChain().limits.length ? h('div', { class: 'tiny warn' }, '' + powerChain().limits.join('; ')) : null)),
     h('div', { class: 'mv-chain' },
       h('div', { class: 'ctl-title' }, 'INSIDE THE RADIO — RECEIVE CHAIN'),
       h('div', { class: 'mv-flow', id: 'mv-rx' }),

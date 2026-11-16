@@ -156,7 +156,7 @@ function wxRadio(st) {
   const line = st.script.shift();
   if (line.alert) {
     // 1050 Hz Warning Alarm Tone (8 s in this sim)
-    st.tx = { kind: 'fmtone', tone: 1050, text: '', show: '🚨 1050 Hz NWR alert tone', start: now(), end: now() + 8, sch: { segs: [{ t0: 0, t1: 8, amp: 1 }], chars: [], dur: 8 } };
+    st.tx = { kind: 'fmtone', tone: 1050, text: '', show: '1050 Hz NWR alert tone', start: now(), end: now() + 8, sch: { segs: [{ t0: 0, t1: 8, amp: 1 }], chars: [], dur: 8 } };
     bus.emit('station-tx', st);
     return;
   }
@@ -313,7 +313,7 @@ function render() {
   S.scanTab ??= 0;
   const body = h('table', { class: 'tbl small scan-tbl' }, h('tr', {}, ...['Station', 'Freq', 'Mode', 'Info', 'Est.', ''].map((x) => h('th', {}, x))), ...tabs[S.scanTab][1]());
   root.append(h('div', { class: 'card scanner' },
-    h('div', { class: 'row spread' }, h('h3', {}, '📡 What\'s on the air near you'),
+    h('div', { class: 'row spread' }, h('h3', {}, 'What\'s on the air near you'),
       h('div', { class: 'row' }, ...tabs.map(([n], i) => h('button', { class: `rbtn ${S.scanTab === i ? 'active' : ''}`, onclick: () => { S.scanTab = i; if (i === 0) wantBroadcast(); if (i === 2) wantAirports(); render(); } }, n)))),
     h('div', { class: 'small muted' }, `Real data: space weather ${RW.sun ? `✓ NOAA SWPC (SFI ${RW.sun.sfi}, Kp ${RW.sun.k})` : st.sun || '…'} · weather ${wx ? `✓ ${wx.source}${wx.station ? ' ' + wx.station : ''}: ${wx.desc}, ${wx.tempF}°F` : st.wx || '…'} · broadcast ${st.broadcast || 'not loaded'} · airports ${st.airports || 'not loaded'}`),
     body));

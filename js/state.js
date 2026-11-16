@@ -9,7 +9,6 @@ export const defaultState = () => ({
   op: { name: '', state: 'KS' },
   license: null, // null | 'T' | 'G' | 'E'
   call: null,
-  xp: 0,
   shack: { conn: [], psuOn: false, rigOn: false, fuseBlown: false, autoWired: false },
   antenna: {
     type: 'dipole', length: 0, height: 30, ground: 'average', wire: 'AWG 14 copper', insulated: true, axis: 0, heading: 45, radials: 4,
@@ -70,12 +69,5 @@ export function resetAll() {
   location.reload();
 }
 
-export function addXp(n, why) {
-  S.xp += n;
-  save();
-  bus.emit('xp', n, why);
-}
-
 export const LIC_NAMES = { T: 'Technician', G: 'General', E: 'Amateur Extra' };
 export function licName(l = S.license) { return l ? LIC_NAMES[l] : 'Unlicensed (SWL)'; }
-export function level(xp = S.xp) { return Math.floor(Math.sqrt(xp / 50)) + 1; }

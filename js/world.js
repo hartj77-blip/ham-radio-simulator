@@ -477,7 +477,7 @@ function behaveCaller(st) {
 }
 
 function onTxEnd(st) {
-  const pat = S.settings.patience || 1; // ⚙ Settings → AI operator patience
+  const pat = S.settings.patience || 1; // Settings → AI operator patience
   if (st.role === 'cq' && (st.st === 'cq')) { st.st = 'listen'; st.timer = rand(3.5, 7) * pat; }
   if (st.role === 'run' && (st.st === 'cq' || st.st === 'tu')) { st.st = 'listen'; st.timer = rand(1.8, 3.2) * pat; }
   if (st.role === 'run' && st.st === 'fakeqso') { st.timer = rand(1.2, 2); }

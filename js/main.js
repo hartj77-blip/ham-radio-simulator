@@ -1,40 +1,49 @@
-// App bootstrap: tabs, header, onboarding, main loops, help & settings.
-import { S, save, resetAll, licName, level } from './state.js';
-import { h, $, $$, bus, toast, modal } from './util.js';
-import { STATES, stateBy } from './data/world.js';
+// App bootstrap: navigation, status bar, modes, main loops, help.
+import { S, save, licName } from './state.js';
+import { h, $, $$, bus, toast } from './util.js';
+import { icon } from './icons.js';
+import { stateBy } from './data/world.js';
 import { audio } from './audio.js';
 import { world } from './world.js';
 import { SUN, bandConditions, simDate, grid } from './propagation.js';
-import { initShackUI, rigStatus, shackTick } from './shack.js';
+import { initShackUI, shackTick } from './shack.js';
 import { initAntennaUI } from './antenna.js';
 import { initRadioUI, rxUpdate, drawFrame, tuneBy, setFreq, setMode, updateDisplay } from './radio.js';
 import { initOperatingUI, txState } from './operating.js';
 import { initContestUI, contestTick } from './contest.js';
-import { initExamUI, sandboxLicense } from './exam.js';
+import { initExamUI } from './exam.js';
 import { initLogbookUI } from './logbook.js';
 import { initNetUI, net, autoOnline } from './net.js';
 import { initWorkbenchUI } from './workbench.js';
-import { initStoreUI, money, earn } from './store.js';
 import { initRigBuilder } from './rigbuilder.js';
 import { initMapUI, drawMap } from './map.js';
 import { initWorldView } from './worldview.js';
-import { openStation, applySetup, setGameMode, applyLook, loadSlot } from './setups.js';
-import { initGuide, initExplain, initFinder } from './guide.js';
-import { initHelper } from './helper.js';
-import { rig } from './rigs.js';
+import { openStation, applyLook, loadSlot } from './setups.js';
+import { initExplain, initFinder } from './guide.js';
+import { initTraining, initCourse } from './training.js';
+import { initLibrary } from './libraryui.js';
+import { MODES, initModes, migrateMode, welcome, initFreeConsole } from './modes.js';
 import { initHT, showHT, isPhone, phoneStart } from './htview.js';
 import { startRealWorld, RW } from './realworld.js';
 import { initScannerUI } from './services.js';
 import { elmer } from './elmer.js';
 import { openSettings, applySettings } from './settings.js';
 
-const TABS = [['shack', '🔌 Shack'], ['antenna', '📡 Antenna'], ['workbench', '🛠 Workbench'], ['rigbuilder', '🧰 Rig builder'], ['radio', '📻 Radio'], ['contest', '🏆 Contests'], ['license', '🪪 License'], ['logbook', '📒 Logbook'], ['store', '🛒 Hamfest'], ['help', '❔ Help']];
+// [id, label, icon, group]
+const TABS = [
+  ['course', 'Course', 'grad', 'Learn'], ['library', 'Reference library', 'book', 'Learn'], ['license', 'License study', 'badge', 'Learn'],
+  ['shack', 'Station wiring', 'plug', 'Build'], ['antenna', 'Antenna', 'antenna', 'Build'], ['workbench', 'Antenna workbench', 'flask', 'Build'], ['rigbuilder', 'Equipment', 'layers', 'Build'],
+  ['radio', 'Radio', 'radio', 'Operate'], ['logbook', 'Logbook', 'log', 'Operate'], ['contest', 'Contest practice', 'trophy', 'Operate'],
+  ['help', 'Help', 'help', 'Support'],
+];
 
 function header() {
   const st = stateBy(S.op.state);
-  $('#station-id').innerHTML = `${S.call ? `<span class="callsign">${S.call}</span>` : '<span class="muted">SWL</span>'} <span class="badge lic-${S.license || 'none'}">${licName()}</span> <span class="badge mode-badge">${{ free: '🧪 Free play', listener: '🎧 Listener' }[S.gameMode] || '🎓 Career'}</span> <span class="muted small">${st ? st.name : ''} · ${st ? grid(st.lat, st.lon).slice(0, 4) : ''}</span>`;
+  $('#station-id').innerHTML = `<span class="sb-item"><span class="sb-k">Station</span>${S.call ? `<span class="callsign">${S.call}</span>` : '<span class="callsign muted">SWL</span>'}</span>`
+    + `<span class="sb-item"><span class="sb-k">License</span><span class="lic lic-${S.license || 'none'}">${licName()}</span></span>`
+    + `<span class="sb-item"><span class="sb-k">QTH</span><span>${st ? st.abbr : ''} ${st ? grid(st.lat, st.lon).slice(0, 4) : ''}</span></span>`;
   const on = net.online ? net.roster.length : null;
-  $('#xp').innerHTML = `${on != null ? `<button class="net-badge" id="net-badge" title="Players online">🌐 ${on} on air${net.roster.some((e) => e.tx) ? ' <span class="onair-dot">●</span>' : ''}</button>` : ''}<span class="wallet-mini">₵ ${money()}</span> Lv ${level()} · ${S.xp} XP`;
+  $('#xp').innerHTML = on != null ? `<button class="net-badge" id="net-badge" title="Operators online">${icon('users')} ${on} online${net.roster.some((e) => e.tx) ? ' <span class="onair-dot"></span>' : ''}</button>` : '';
   const nb = document.getElementById('net-badge');
   if (nb) nb.onclick = () => { showTab('radio'); document.getElementById('net-card')?.scrollIntoView({ behavior: 'smooth' }); };
 }
@@ -43,99 +52,94 @@ function solarBanner() {
   const st = stateBy(S.op.state);
   const bc = bandConditions(st);
   const cls = (c) => `bc-${c.toLowerCase()}`;
-  $('#solar').innerHTML = `${SUN.live ? '<span class="live-dot" title="Live data from NOAA Space Weather Prediction Center">● LIVE</span>' : ''}<span title="Solar Flux Index (10.7 cm)">SFI <b>${SUN.sfi}</b></span> <span title="A-index (daily geomagnetic)">A <b>${SUN.a}</b></span> <span title="K-index (3-hour geomagnetic)">K <b class="${SUN.k >= 5 ? 'bad' : SUN.k >= 4 ? 'warn' : ''}">${SUN.k}</b></span>`
-    + bc.map((b) => `<span class="bc" title="day ${b.day} / night ${b.night}">${b.name} <b class="${cls(b.now)}">${b.now}</b></span>`).join('')
-    + (SUN.es ? ' <span class="bc" title="Sporadic-E is likely today on 6 m and 10 m">Es <b class="bc-good">likely</b></span>' : '');
+  $('#solar').innerHTML = `${SUN.live ? '<span class="live-dot" title="Live data from the NOAA Space Weather Prediction Center">LIVE</span>' : ''}<span class="sb-item" title="Solar Flux Index (10.7 cm)"><span class="sb-k">SFI</span><b>${SUN.sfi}</b></span><span class="sb-item" title="A-index (daily geomagnetic)"><span class="sb-k">A</span><b>${SUN.a}</b></span><span class="sb-item" title="K-index (3-hour geomagnetic)"><span class="sb-k">K</span><b class="${SUN.k >= 5 ? 'bad' : SUN.k >= 4 ? 'warn' : ''}">${SUN.k}</b></span>`
+    + `<span class="bc-group">${bc.map((b) => `<span class="bc" title="${b.name}: day ${b.day} / night ${b.night}"><span class="sb-k">${b.name.replace('-', '–')}</span><b class="${cls(b.now)}">${b.now}</b></span>`).join('')}`
+    + (SUN.es ? '<span class="bc" title="Sporadic-E is likely today on 6 m and 10 m"><span class="sb-k">Es</span><b class="bc-good">Likely</b></span>' : '') + '</span>';
 }
 
 function clock() {
   const d = simDate();
   const w = RW.wx;
-  $('#clock').innerHTML = `${w ? `<span class="wx-mini" title="Live weather: ${w.desc} (${w.source}${w.station ? ', ' + w.station : ''})">${w.storm ? '⛈' : w.snow ? '🌨' : w.rain ? '🌧' : w.fog ? '🌫' : w.cloud > 0.6 ? '☁' : w.cloud > 0.25 ? '⛅' : '☀'} ${w.tempF ?? ''}°F</span> ` : ''}${S.settings.hour != null ? '⏩ ' : ''}${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}<small>Z</small>`;
+  const sky = w ? (w.storm ? 'storms' : w.snow ? 'snow' : w.rain ? 'rain' : w.fog ? 'fog' : w.cloud > 0.6 ? 'overcast' : w.cloud > 0.25 ? 'partly cloudy' : 'clear') : '';
+  $('#clock').innerHTML = `${w ? `<span class="sb-item" title="Live weather: ${w.desc} (${w.source}${w.station ? ', ' + w.station : ''})"><span class="sb-k">WX</span>${w.tempF ?? ''}°F ${sky}</span>` : ''}<span class="sb-item utc"><span class="sb-k">${S.settings.hour != null ? 'UTC set' : 'UTC'}</span><b>${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}</b></span>`;
+}
+
+function modeSwitch() {
+  const el = $('#mode-switch');
+  el.innerHTML = '';
+  for (const [m, x] of Object.entries(MODES)) el.append(h('button', { class: S.mode === m ? 'active' : '', role: 'tab', 'aria-selected': String(S.mode === m), title: x.desc, onclick: () => bus.emit('set-mode', m) }, h('span', { html: icon(x.icon) }), h('span', { class: 'lbl' }, x.label)));
 }
 
 function showTab(t) {
+  if (!TABS.some(([id]) => id === t)) t = 'radio';
   if (document.body.classList.contains('ht-view')) showHT(false);
   document.body.dataset.tab = t;
-  $$('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  document.body.classList.remove('nav-open');
+  $$('#tabs .nav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
   $$('.tab').forEach((s) => { s.hidden = s.id !== `tab-${t}`; });
+  const def = TABS.find(([id]) => id === t);
+  $('#page-title').textContent = def[1];
+  $('#page-eyebrow').textContent = def[3];
   if (t === 'radio') updateDisplay();
-  location.hash = t;
-}
-
-function onboarding() {
-  const name = h('input', { value: S.op.name, placeholder: 'e.g. Jim', size: 14 });
-  const sel = h('select', {}, ...STATES.map((s) => h('option', { value: s.abbr, selected: s.abbr === S.op.state }, s.name)));
-  let close;
-  const finish = (mode) => {
-    S.op.name = name.value.trim(); S.op.state = sel.value; S.started = true; save();
-    audio.init(); close(); header(); solarBanner(); bus.emit('qth'); world.repopulate();
-    if (mode === 'career') { setGameMode('career'); elmer('welcome'); showTab('shack'); }
-    else if (mode === 'listener') { setGameMode('listener'); applySetup('listener', { quiet: true }); toast('🎧 Listener mode: a wideband receiver and a long wire are set up. Use the FIND bar or "What\'s on the air near you".', 'good', 9000); }
-    else { setGameMode('free'); if (!isPhone()) openStation('setups'); }
-    if (isPhone()) { phoneStart(); showHT(true); }
-    applyLook();
-  };
-  const card = (mode, icon, title, text) => h('button', { class: 'mode-card', onclick: () => finish(mode) }, h('div', { class: 'su-icon' }, icon), h('b', {}, title), h('span', { class: 'small' }, text));
-  close = modal(h('div', { class: 'onboard' },
-    h('h1', {}, '📻 Ham Shack Simulator'),
-    h('p', {}, 'A complete radio world in your browser: build and wire a real station, design antennas with an engineering-grade solver, learn the license material, and tune live broadcast, weather, airband and the ham bands — with real players on the air.'),
-    h('div', { class: 'row wrap' }, h('label', {}, 'Your first name ', name), h('label', {}, 'Your QTH (state) ', sel)),
-    h('h3', {}, 'How do you want to start?'),
-    h('div', { class: 'mode-grid' },
-      card('career', '🎓', 'Career (recommended)', 'Start as a listener. Wire the shack, build an antenna, earn your license and credits, upgrade your gear. Guided step by step.'),
-      card('free', '🧪', 'Free play / Lab', 'Everything unlocked. Pick a ready-made station (home, apartment, DX tower, portable, VHF…) and go on the air now.'),
-      card('listener', '🎧', 'Just listen', 'No license needed. Scanner + shortwave receiver: broadcast, WWV, airband, NOAA weather and the ham bands.')),
-    h('p', { class: 'muted small' }, '🔊 Use headphones. Voice works best in Chrome or Edge. You can change mode, radio and setup any time from 🎛 Station. Progress saves in this browser.'),
-  ), { onClose: () => { if (!S.started) { S.started = true; save(); } audio.init(); } });
+  bus.emit('tab', t);
+  if (location.hash.slice(1) !== t) history.replaceState(null, '', `#${t}`);
 }
 
 function helpTab(el) {
-  const hour = h('input', { type: 'range', min: 0, max: 23.5, step: 0.5, value: S.settings.hour ?? new Date().getUTCHours() });
-  const hourLbl = h('span', {}, S.settings.hour == null ? 'real time' : `${S.settings.hour}:00 UTC`);
-  const live = h('input', { type: 'checkbox', checked: S.settings.hour == null });
-  const applyHour = () => { S.settings.hour = live.checked ? null : +hour.value; hourLbl.textContent = S.settings.hour == null ? 'real time' : `${Math.floor(hour.value)}:${hour.value % 1 ? '30' : '00'} UTC`; save(); world.repopulate(); solarBanner(); clock(); };
-  hour.oninput = () => { live.checked = false; applyHour(); };
-  live.onchange = applyHour;
-  const qth = h('select', {}, ...STATES.map((s) => h('option', { value: s.abbr, selected: s.abbr === S.op.state }, s.name)));
-  qth.onchange = () => { S.op.state = qth.value; save(); header(); solarBanner(); bus.emit('qth'); world.repopulate(); };
-  const rate = h('input', { type: 'range', min: 0.7, max: 1.5, step: 0.05, value: S.settings.ttsRate });
-  rate.oninput = () => { S.settings.ttsRate = +rate.value; save(); };
-  el.append(h('div', { class: 'help-grid' },
-    h('div', { class: 'card' }, h('h3', {}, '🚀 Quick start'),
-      h('p', { class: 'small' }, h('b', {}, 'Fastest way on the air: '), 'press ', h('b', {}, '🎛 Station'), ' (top right) → Quick setups, pick a station, done. Follow the 🎯 goal bar for a guided path, turn on ', h('b', {}, '❓ Explain'), ' and hover anything, and use the ', h('b', {}, 'FIND'), ' bar above the radio to jump to something worth hearing.'),
-      h('ol', { class: 'small' },
-        h('li', {}, h('b', {}, 'Shack tab: '), 'connect the radio\'s red/black DC leads to + / − on the power supply, run coax from ANT through the SWR meter and tuner to the wall feedthrough, bond GND terminals to the ground bus, plug in mic and paddle, then switch on the supply and the radio.'),
-        h('li', {}, h('b', {}, 'Antenna tab: '), 'pick a type and cut the wire (dipole ≈ 468 ÷ MHz feet). Raise it and sweep with the analyzer. Lower it to trim.'),
-        h('li', {}, h('b', {}, 'Radio tab: '), 'pick a band, tune with the big knob, mouse wheel, arrow keys or by clicking the waterfall. Voice: 40 m LSB at night, 20 m USB by day. CW: bottom of each band. Try 14.100 for beacons and 146.940 FM for the local repeater (−600 kHz, 100.0 Hz tone).'),
-        h('li', {}, h('b', {}, 'License tab: '), 'study, then take the Technician exam to get a callsign. Before that you can transmit into the dummy load.'),
-        h('li', {}, h('b', {}, 'Make a QSO: '), 'find someone calling CQ, zero-beat them, press F4 (your call). Copy their report/name/QTH into the logger, send F2 (your reply) and F3 (73), then log it (Ctrl+Enter).'),
-        h('li', {}, h('b', {}, 'Contests: '), 'pick an event and race the clock. F1 = CQ, Enter does the next logical thing (ESM).'))),
-    h('div', { class: 'card' }, h('h3', {}, '⌨ Keys'),
-      h('table', { class: 'tbl small' },
-        ...[['Space (hold)', 'Push-to-talk (voice modes)'], ['← → / mouse wheel', 'Tune'], ['F1 … F8', 'Message macros'], ['Enter', 'ESM: send next message / log'], ['Ctrl+Enter', 'Log QSO'], ['Esc', 'Stop sending / wipe logger'], ['Space in call field', 'Jump to next field']].map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v)))),
-      h('h3', {}, '📖 Lingo'),
-      h('p', { class: 'small' }, 'CQ calling anyone · DE from · K over · KN over (only you) · SK end of contact · 73 best regards · RST signal report · 5NN = 599 · QTH location · QSL confirm · QRZ? who\'s calling · QRL? is this freq busy · QSY change freq · QRS send slower · AGN again · TU thank you · OM old man (any male op) · YL young lady · ES and · FB fine business · HW? how copy? · WX weather · UR your')),
-    h('div', { class: 'card' }, h('h3', {}, '⚙ Settings'),
-      h('p', { class: 'small' }, 'Audio, text size and touch layout, game mode and helpers, PTT key and CW speed, time warp and space weather, your location, and backup/restore of your save.'),
-      h('button', { class: 'btn primary', onclick: () => openSettings() }, '⚙ Open settings')),
-    h('div', { class: 'card' }, h('h3', {}, 'ℹ About realism'),
-      h('p', { class: 'small' }, 'Under the hood: a sun-driven ionosphere model (MUF, D-layer absorption, skip, K-index aurora), antenna impedance & SWR (feed-point R/X, harmonics, height above ground, radials, coax loss with mismatch), a receiver chain with real IF filtering, AGC, band noise and static crashes, FCC Part 97 privileges by license class, and AI operators who answer only when they can actually hear you.'),
-      h('p', { class: 'small muted' }, 'Exam questions are original practice questions covering the official topics — always study the current NCVEC pool before your real VE session. Callsigns are randomly generated.')),
-  ));
+  el.append(h('div', { class: 'page-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Support'), h('h1', {}, 'Help'), h('p', { class: 'lead' }, 'How the simulator is organised, keyboard shortcuts and operating abbreviations.'))),
+    h('div', { class: 'help-grid' },
+      h('div', { class: 'card' }, h('h3', {}, 'Modes'),
+        ...Object.entries(MODES).map(([, x]) => h('div', { class: 'help-mode' }, h('span', { class: 'hm-icon', html: icon(x.icon) }), h('div', {}, h('b', {}, x.label), h('p', { class: 'small muted' }, x.desc)))),
+        h('p', { class: 'small' }, 'Switch at any time with the selector at the top of the screen. Your log, license and course progress are kept.')),
+      h('div', { class: 'card' }, h('h3', {}, 'Workflow'),
+        h('ol', { class: 'small steps' },
+          h('li', {}, h('b', {}, 'Station wiring: '), 'connect DC power with correct polarity, run coax from the radio\'s ANT jack through the meter and tuner to the arrestor at the wall, bond every chassis to the ground bus, connect microphone and key, then switch on supply and radio.'),
+          h('li', {}, h('b', {}, 'Antenna: '), 'choose a type, calculate the length (dipole ≈ 468 ÷ MHz ft), set height and feedline, raise it, then sweep with the analyzer and trim to resonance.'),
+          h('li', {}, h('b', {}, 'Radio: '), 'pick a band for the time of day, set the mode (LSB below 10 MHz, USB above), scan with a coarse step and fine-tune. Click the waterfall to jump to a signal.'),
+          h('li', {}, h('b', {}, 'License study: '), 'practise the question pool and take the examination for transmit privileges.'),
+          h('li', {}, h('b', {}, 'Contacts: '), 'answer a CQ with F4, send your exchange with F2 and 73 with F3, then log (Ctrl+Enter).'))),
+      h('div', { class: 'card' }, h('h3', {}, 'Keyboard'),
+        h('table', { class: 'tbl small' },
+          ...[['Space (hold)', 'Push-to-talk (voice modes)'], ['← → / mouse wheel', 'Tune'], ['F1 … F8', 'Message macros'], ['Enter', 'ESM: send next message / log'], ['Ctrl+Enter', 'Log QSO'], ['Esc', 'Stop sending / clear logger'], ['Space in call field', 'Next field']].map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v))))),
+      h('div', { class: 'card' }, h('h3', {}, 'Abbreviations'),
+        h('p', { class: 'small' }, 'CQ calling any station · DE from · K over · KN over, named station only · SK end of contact · 73 best regards · RST signal report · 5NN 599 · QTH location · QSL confirm · QRZ? who is calling · QRL? is this frequency in use · QSY change frequency · QRS send slower · AGN again · TU thank you · ES and · FB fine business · WX weather · UR your'),
+        h('button', { class: 'btn small', onclick: () => bus.emit('library', 'q-codes') }, 'Full Q-code reference')),
+      h('div', { class: 'card' }, h('h3', {}, 'Settings'),
+        h('p', { class: 'small muted' }, 'Audio, display size and touch layout, mode and guidance, PTT key and CW speed, time and space weather, location, and backup/restore of your data.'),
+        h('button', { class: 'btn primary', onclick: () => openSettings() }, 'Open settings')),
+      h('div', { class: 'card' }, h('h3', {}, 'About the models'),
+        h('p', { class: 'small' }, 'A sun-driven ionosphere model (MUF, D-layer absorption, skip, K-index and aurora); antenna impedance from a Method-of-Moments solver with height, ground, radials and coax loss including mismatch; a receiver chain with IF filtering, AGC, band noise and static; FCC Part 97 privileges by license class; and simulated operators who answer only when they can actually hear you.'),
+        h('p', { class: 'small muted' }, 'Exam questions are original practice questions covering the official topics — study the current NCVEC pool before a real VE session. Callsigns are randomly generated.')),
+    ));
+}
+
+function buildChrome() {
+  const nav = $('#tabs');
+  let group = null;
+  for (const [id, label, ic, g] of TABS) {
+    if (g === 'Support') continue;
+    if (g !== group) { group = g; nav.append(h('div', { class: 'nav-group' }, g)); }
+    nav.append(h('button', { class: 'nav-item', 'data-tab': id, onclick: () => showTab(id) }, h('span', { html: icon(ic) }), h('span', {}, label)));
+  }
+  $('#side-foot').append(
+    h('button', { class: 'nav-item', 'data-tab': 'help', onclick: () => showTab('help') }, h('span', { html: icon('help') }), h('span', {}, 'Help')),
+    h('button', { class: 'nav-item', onclick: () => openSettings() }, h('span', { html: icon('settings') }), h('span', {}, 'Settings')));
+  $('#menu-btn').innerHTML = icon('menu');
+  $('#menu-btn').onclick = () => document.body.classList.toggle('nav-open');
+  const tool = (id, ic, label, title, fn) => h('button', { class: 'tool-btn', id, title, onclick: fn }, h('span', { html: icon(ic) }), h('span', { class: 'lbl' }, label));
+  $('#tb-tools').append(
+    tool('station-btn', 'station', 'Station', 'Station presets, radio model, saved antennas, appearance', () => openStation()),
+    tool('ht-btn', 'handheld', 'Handheld', 'Switch between the handheld radio and the full station', () => showHT(!document.body.classList.contains('ht-view'))),
+    tool('explain-btn', 'info', 'Explain', 'Hover any control to learn what it does', (e) => { S.settings.explain = !S.settings.explain; save(); e.currentTarget.classList.toggle('active', S.settings.explain); toast(S.settings.explain ? 'Explain mode on — hover over any control.' : 'Explain mode off.', 'info', 2500); }));
+  $('#explain-btn').classList.toggle('active', !!S.settings.explain);
+  modeSwitch();
 }
 
 function init() {
-  const nav = $('#tabs');
-  for (const [id, label] of TABS) nav.append(h('button', { 'data-tab': id, onclick: () => showTab(id) }, label));
-  const tools = h('div', { class: 'top-tools' },
-    h('button', { class: 'btn small', id: 'settings-btn', title: 'Settings', onclick: () => openSettings() }, '⚙'),
-    h('button', { class: 'btn small', id: 'station-btn', title: 'Game mode, radio model, one-click setups, saved antennas, appearance', onclick: () => openStation() }, '🎛 Station'),
-    h('button', { class: 'btn small', id: 'ht-btn', title: 'Switch between the handheld radio and the full station', onclick: () => showHT(!document.body.classList.contains('ht-view')) }, '📟 Handheld'),
-    h('button', { class: `btn small ${S.settings.explain ? 'active' : ''}`, id: 'explain-btn', title: 'Hover any control to learn what it does', onclick: (e) => { S.settings.explain = !S.settings.explain; save(); e.currentTarget.classList.toggle('active', S.settings.explain); toast(S.settings.explain ? '❓ Explain mode on — hover over any control.' : 'Explain mode off.', 'info', 2500); } }, '❓ Explain'));
-  $('#topbar').append(tools);
-  initGuide($('#guide-bar'));
-  const elmerEl = h('div', { id: 'elmer' }); document.body.append(elmerEl); initHelper(elmerEl);
+  migrateMode();
+  buildChrome();
+  initModes();
+  initTraining($('#coach'));
   initExplain();
   initFinder($('#finder'));
   initHT($('#ht-panel'));
@@ -145,6 +149,7 @@ function init() {
   initRigBuilder($('#tab-rigbuilder'));
   bus.on('rig', () => { if (S.rbDraft && S.rbDraft.rig !== S.rig) { S.rbDraft.rig = S.rig; } });
   initRadioUI($('#radio-panel'));
+  initFreeConsole($('#free-console'));
   initMapUI($('#map-panel'));
   initWorldView($('#world-panel'));
   initScannerUI($('#scanner-panel'));
@@ -155,23 +160,18 @@ function init() {
   initContestUI($('#tab-contest'));
   initExamUI($('#tab-license'));
   initLogbookUI($('#tab-logbook'));
-  initStoreUI($('#tab-store'));
+  initCourse($('#tab-course'));
+  initLibrary($('#tab-library'));
   helpTab($('#tab-help'));
   header(); solarBanner(); clock();
   world.setFreq(S.radio.freq);
-  showTab((location.hash || '').slice(1) || (S.started ? 'radio' : 'shack'));
+  const start = (location.hash || '').slice(1);
+  showTab(start && start !== 'store' ? start : (S.mode === 'training' ? 'course' : 'radio'));
 
-  bus.on('xp', header);
   bus.on('roster', header);
-  bus.on('money', (n, why) => { header(); if (n > 0 && why) toast(`+₵${n} (${why})`, 'good', 2500); });
-  bus.on('logged', (q) => {
-    if (q.status !== 'confirmed' || q.contest) return;
-    const prev = S.log.slice(0, -1).filter((x) => x.status === 'confirmed');
-    const newDx = q.truth?.country && !prev.some((x) => x.truth?.country === q.truth.country);
-    const newSt = q.truth?.state && !prev.some((x) => x.truth?.state === q.truth.state);
-    earn(5 + (newDx ? 15 : 0) + (newSt ? 5 : 0), 'QSO');
-  });
-  bus.on('license', () => { header(); });
+  bus.on('license', header);
+  bus.on('qth', () => { header(); solarBanner(); });
+  bus.on('mode', () => { modeSwitch(); header(); });
   bus.on('goto', showTab);
   bus.on('elmer', (id) => elmer(id));
   bus.on('tune', (n) => tuneBy(n));
@@ -199,16 +199,15 @@ function init() {
 
   setInterval(() => { world.tick(); rxUpdate(); }, 100);
   setInterval(() => { clock(); contestTick(); $('#operating')?.classList.toggle('is-cw', S.radio.mode === 'CW'); }, 1000);
-  setInterval(() => { if (SUN.shared()) { solarBanner(); world.bandCache = {}; } solarBanner(); }, 60000);
+  setInterval(() => { if (SUN.shared()) { world.bandCache = {}; } solarBanner(); }, 60000);
   let last = 0;
   let lastMap = 0;
   const loop = (t) => { if (t - last > 60) { last = t; drawFrame(); } if (t - lastMap > 250) { lastMap = t; drawMap(); shackTick(txState); } requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
 
-  if (!S.started) onboarding();
-  else if (S.license && !S.tips.includes('welcome')) elmer('welcome');
+  if (!S.started) welcome((m) => { header(); solarBanner(); showTab(m === 'training' ? 'shack' : 'radio'); if (isPhone()) { phoneStart(); showHT(true); } });
   if (S.started) setTimeout(autoOnline, 1500);
-  bus.on('view', (v) => { const b = $('#ht-btn'); if (b) b.textContent = v === 'ht' ? '🏠 Full station' : '📟 Handheld'; });
+  bus.on('view', (v) => { const b = $('#ht-btn .lbl'); if (b) b.textContent = v === 'ht' ? 'Full station' : 'Handheld'; });
   const sv = S.settings.startView || 'auto';
   if (S.started && (sv === 'ht' || (sv === 'auto' && (S.settings.view === 'ht' || (isPhone() && S.settings.view !== 'station'))))) { if (isPhone()) phoneStart(); showHT(true); }
 }
@@ -217,7 +216,7 @@ init();
 
 // ------------------------------------------------------------------ always run the newest version
 // A service worker fetches our files network-first (see sw.js), so a new deploy is picked up on the
-// next load instead of after the browser's cache expires. A returning player whose page was loaded
+// next load instead of after the browser's cache expires. A returning user whose page was loaded
 // from stale cache gets one automatic reload when the worker takes over.
 export const appVersion = { modified: null };
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
@@ -234,9 +233,9 @@ async function checkVersion(announce) {
     if (!m) return;
     if (!appVersion.modified) appVersion.modified = m;
     else if (m !== appVersion.modified) {
-      toast(`🆕 A new version of the game is available. <button class="btn small primary" onclick="location.reload()">Reload now</button>`, 'info', 60000);
+      toast('A new version is available. <button class="btn small primary" onclick="location.reload()">Reload now</button>', 'info', 60000);
       appVersion.modified = m;
-    } else if (announce) toast('✓ You have the latest version.', 'good', 3000);
+    } else if (announce) toast('You have the latest version.', 'good', 3000);
   } catch (e) { /* offline */ }
 }
 checkVersion();
@@ -244,7 +243,7 @@ setInterval(checkVersion, 10 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
 bus.on('check-version', () => checkVersion(true));
 
-// debug handle for automated tests / curious players
+// debug handle for automated tests
 import * as _radio from './radio.js';
 import * as _op from './operating.js';
 window.__sim = { S, world, radio: _radio, op: _op, SUN, net, audio, RW };

@@ -104,7 +104,7 @@ for (const r of Object.values(REAL_RIGS)) r.price = cr(r.usd);
 // ---------------------------------------------------------------- station accessories
 export const GEAR = {
   psu: {
-    label: 'Power supply', icon: '🔋', items: {
+    label: 'Power supply', icon: '', items: {
       gen30: { name: 'Generic 30 A switching supply', usd: 90, amps: 30, noiseDb: 1, kind: 'switching', starter: true, desc: 'Gets you on the air. Cheap switchers can add a little hash (birdies) on the low bands.' },
       rs35m: { name: 'Astron RS-35M', usd: 280, amps: 25, peakA: 35, noiseDb: 0, kind: 'linear', desc: 'Heavy, linear, bullet-proof and dead quiet. 25 A continuous, 35 A peak.' },
       dm330: { name: 'Alinco DM-330MV', usd: 170, amps: 30, noiseDb: 0.5, kind: 'switching', desc: 'Light switching supply with a noise-offset knob to move birdies off your frequency.' },
@@ -114,7 +114,7 @@ export const GEAR = {
     },
   },
   tuner: {
-    label: 'Antenna tuner', icon: '🎚', items: {
+    label: 'Antenna tuner', icon: '', items: {
       none: { name: 'None (rig ATU / resonant antennas)', usd: 0, maxW: Infinity, range: 0, starter: true, desc: 'Use the radio\'s internal tuner, if it has one, or a resonant antenna.' },
       gen300: { name: 'Generic 300 W manual T-network', usd: 120, maxW: 300, range: 10, manual: true, starter: true, desc: 'Three knobs: TX, ANT and inductor. Matches most coax-fed wires.' },
       z100: { name: 'LDG Z-100Plus', usd: 160, maxW: 125, range: 10, auto: true, desc: 'Small auto-tuner (memories, latching relays). 125 W max — not for amplifiers.' },
@@ -124,7 +124,7 @@ export const GEAR = {
     },
   },
   meter: {
-    label: 'SWR / watt meter', icon: '📏', items: {
+    label: 'SWR / watt meter', icon: '', items: {
       gen200: { name: 'Generic HF/VHF SWR meter (200 W)', usd: 40, maxW: 200, hi: 150 * M, starter: true, desc: 'Basic cross-needle meter.' },
       cn901: { name: 'Daiwa CN-901HP', usd: 160, maxW: 2000, hi: 150 * M, desc: 'Cross-needle, 20/200/2000 W ranges, PEP hold. The classic.' },
       sx200: { name: 'Diamond SX-200', usd: 150, maxW: 200, hi: 200 * M, desc: '1.8–200 MHz with a single meter. Good for HF + VHF shacks.' },
@@ -132,7 +132,7 @@ export const GEAR = {
     },
   },
   amp: {
-    label: 'Amplifier', icon: '⚡', items: {
+    label: 'Amplifier', icon: '', items: {
       none: { name: 'None', usd: 0, out: 0, drive: 0, starter: true, desc: 'Barefoot (radio power only).' },
       al811h: { name: 'Ameritron AL-811H', usd: 1100, out: 800, drive: 70, mains: 120, mainsA: 15, tube: true, desc: 'Four 811A tubes, 800 W out, runs on 120 V. Needs about 70 W of drive and manual tune-up.' },
       kpa500: { name: 'Elecraft KPA500', usd: 2600, out: 500, drive: 30, mains: 120, mainsA: 10, desc: 'Solid-state, no tune-up, instant band change. 500 W from ~30 W drive.' },
@@ -141,14 +141,14 @@ export const GEAR = {
     },
   },
   mic: {
-    label: 'Microphone', icon: '🎙', items: {
+    label: 'Microphone', icon: '', items: {
       stock: { name: 'Stock hand mic', usd: 0, talk: 0, starter: true, desc: 'The mic that came in the box. Perfectly fine.' },
       heilpr781: { name: 'Heil PR-781 desk mic', usd: 250, talk: 1.5, desc: 'Broadcast-style desk mic with a rising "DX" response — about 1.5 dB more talk power.' },
       heilpro7: { name: 'Heil Pro 7 headset', usd: 230, talk: 2, desc: 'Headset with boom mic: hands free for contesting, consistent mic distance.' },
     },
   },
   key: {
-    label: 'CW key', icon: '🔑', items: {
+    label: 'CW key', icon: '', items: {
       straight: { name: 'Straight key', usd: 40, iambic: false, desc: 'One lever, you form every dit and dah by hand.' },
       gen: { name: 'Generic iambic paddle', usd: 0, iambic: true, starter: true, desc: 'The paddle in the starter kit.' },
       by1: { name: 'Bencher BY-1 iambic paddle', usd: 150, iambic: true, desc: 'Squeeze keying with the rig\'s keyer. The standard paddle.' },
@@ -156,7 +156,7 @@ export const GEAR = {
     },
   },
   arrestor: {
-    label: 'Lightning protection', icon: '⛈', items: {
+    label: 'Lightning protection', icon: '', items: {
       gen: { name: 'Generic gas-tube coax arrestor', usd: 30, starter: true, desc: 'SO-239 gas-discharge arrestor. Bond it to the ground rod.' },
       polyphaser: { name: 'PolyPhaser IS-50UX-C0', usd: 120, desc: 'Quarter-wave stub / gas-tube protector — professional grade.' },
     },
