@@ -14,12 +14,14 @@ export const REAL = [
   ['Live feeds', 'Everything on the Live feeds page is real: web SDR receivers, scanner, air-band and weather audio, broadcast streams and live propagation spot networks, run by their own operators.'],
   ['Spectrum analyzer input', 'When you choose the microphone or browser-tab audio, the analyzer measures that real audio in your browser; nothing is recorded or sent anywhere.'],
   ['Other users', 'People shown online are real users of this app; voice between them travels over the internet (WebRTC), never over the air.'],
+  ['Historic recordings', 'Mission audio on the Radio history page is real NASA archival audio (public domain), streamed from the Internet Archive.'],
   ['Rules and reference data', 'US band edges and license privileges (FCC Part 97), beacon schedule, repeater conventions and equipment specifications are taken from published sources.'],
 ];
 
 export const SIMULATED = [
   ['Radio signals', 'Nothing is transmitted or received over the air. Every signal you hear is computed or synthesized in the browser.'],
-  ['Amateur stations', 'Operators, QSOs, contests, beacons and repeaters are computer-generated; their callsigns are random and do not belong to real people.'],
+  ['Amateur stations', 'Operators, QSOs, contests, nets, beacons and repeaters are computer-generated; their callsigns are random and do not belong to real people.'],
+  ['Short-range radio', 'CB, FRS walkie-talkie, GMRS and MURS conversations are invented. They are listen-only, as amateur radios may not transmit on those services.'],
   ['Propagation', 'Signal strength and path loss come from a simplified model. It is driven by the live data above when available, but it is not a forecast.'],
   ['Antennas', 'Impedance, SWR and patterns come from a numerical (Method-of-Moments) model. Real installations differ by a few percent.'],
   ['Analyzer test signals', 'The spectrum analyzer\'s test signals are synthesized to demonstrate measurement techniques.'],
@@ -43,6 +45,7 @@ export const SOURCES = [
   ['jsDelivr and unpkg', 'Content delivery for the two libraries above', 'https://www.jsdelivr.com', 'Free public CDNs'],
   ['Inter and JetBrains Mono (Google Fonts)', 'Typefaces', 'https://fonts.google.com', 'SIL Open Font License 1.1'],
   ['Web Speech API', 'Synthesized voices and push-to-talk speech recognition', 'https://developer.mozilla.org/docs/Web/API/Web_Speech_API', 'Built into your browser; some browsers (e.g. Chrome) send recognised speech to the vendor\'s servers'],
+  ['NASA Audio Collection (Internet Archive)', 'Historic mission recordings on the Radio history page', 'https://archive.org/details/nasaaudiocollection', 'NASA / US Government works, public domain'],
   ['GitHub Issues', 'Feedback form submissions', 'https://github.com/hartj77-blip/ham-radio-simulator/issues', 'Requires a GitHub account'],
 ];
 

@@ -9,6 +9,7 @@ import { rig } from './rigs.js';
 import { RW, WX_CHANNELS } from './realworld.js';
 import { hashStr } from './util.js';
 import { system } from './antenna.js';
+import { NETS, netActive, nextNet, localHour } from './activity.js';
 
 // ------------------------------------------------------------------ Explain mode
 const HELP = [
@@ -108,5 +109,25 @@ export function initFinder(el) {
     B('Repeater', 'Local 2 m repeater, with offset and tone set', () => { S.radio.rptOffset = -600000; S.radio.toneHz = 100; save(); bus.emit('tune-to', 146940000, 'FM'); toast('Local repeater: 146.940 MHz, −600 kHz offset, 100.0 Hz tone. Say your call to check in!', 'info'); }),
     B('WWV', 'Time signal on 10 MHz', () => { (S.flags ||= {}).wwv = 1; bus.emit('tune-to', 10e6, 'AM'); }),
     B('Weather', 'NOAA Weather Radio', () => bus.emit('tune-to', WX_CHANNELS[hashStr(RW.nws?.office || 'NWS') % 7], 'FM')),
-    B('FM radio', 'FM broadcast band', () => bus.emit('tune-to', S.radio.lastByBand.FM?.f || 98.1e6, 'WFM'))));
+    B('FM radio', 'FM broadcast band', () => bus.emit('tune-to', S.radio.lastByBand.FM?.f || 98.1e6, 'WFM')),
+    B('Nets', 'Scheduled emergency, traffic and weather nets: practise checking in', openNets),
+    B('Slow CW', 'Slow-speed CW stations and a code-practice broadcast', () => { const day = localHour() > 7 && localHour() < 18; bus.emit('tune-to', day ? 7047500 : 3581500, 'CW'); toast(`Code practice on ${day ? '7.0475' : '3.5815'} MHz. Slow-speed stations call CQ nearby in the CW segment, at 8–13 wpm.`, 'info', 6000); }),
+    B('CB 19', 'CB channel 19, highway traffic (listen only)', () => bus.emit('tune-to', 27185000, 'AM')),
+    B('Walkie-talkies', 'FRS channel 1, family walkie-talkies (listen only)', () => bus.emit('tune-to', 462562500, 'FM'))));
+}
+
+bus.on('open-nets', () => openNets());
+function openNets() {
+  let close;
+  const row = (n) => {
+    const on = netActive(n), dh = nextNet(n);
+    return h('tr', { class: on ? 'best' : '' }, h('td', {}, h('b', {}, n.title()), h('div', { class: 'tiny muted' }, n.desc)),
+      h('td', { class: 'mono' }, `${(n.freq / 1e6).toFixed(3)} ${n.mode}`), h('td', {}, n.band),
+      h('td', {}, on ? h('b', { class: 'ok' }, 'On the air now') : `in ${Math.floor(dh)} h ${Math.round((dh % 1) * 60)} min`),
+      h('td', {}, h('button', { class: 'btn small', onclick: () => { close(); if (n.band === '2m') { S.radio.rptOffset = -600000; S.radio.toneHz = 100; save(); } bus.emit('tune-to', n.freq, n.mode); } }, 'Tune')));
+  };
+  close = modal(h('div', {}, h('div', { class: 'eyebrow' }, 'Nets'), h('h2', {}, 'Scheduled nets'),
+    h('p', { class: 'small muted' }, 'A net is an organised on-air meeting run by a net control station. Emergency nets practise for real events; traffic nets pass formal messages. Times are local to your station. To check in, wait until net control asks for check-ins, then transmit your callsign, name and location (hold Space and speak, or type it). Net control will acknowledge you. All nets and stations here are simulated.'),
+    h('table', { class: 'tbl small' }, h('thead', {}, h('tr', {}, h('th', {}, 'Net'), h('th', {}, 'Frequency'), h('th', {}, 'Band'), h('th', {}, 'Status'), h('th', {}))), h('tbody', {}, ...NETS.map(row)))), { wide: true });
+
 }

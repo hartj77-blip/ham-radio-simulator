@@ -1068,3 +1068,72 @@ body.ht-view .fb-fab { left: 14px; bottom: auto; top: 10px; width: 34px; height:
 .feed-player input[type=range] { width: 110px; }
 @media (max-width: 1100px) { .feed-player { left: 12px; right: 12px; bottom: 12px; } }
 @media (max-width: 640px) { .feed-row { grid-template-columns: 24px minmax(0, 1fr); } .feed-actions { grid-column: 1 / -1; justify-content: flex-start; } .feed-player input[type=range] { display: none; } }
+/* ---------- handheld shortcut keys ---------- */
+.ht-key.holding { animation: ht-hold 0.6s linear forwards; }
+@keyframes ht-hold { from { box-shadow: 0 3px 0 #050506, 0 0 0 0 var(--ht-accent, #f39a1e); filter: brightness(1); } to { box-shadow: 0 3px 0 #050506, 0 0 0 3px var(--ht-accent, #f39a1e); filter: brightness(1.35); } }
+.ht-key.alt-done { background: linear-gradient(color-mix(in srgb, var(--ht-accent, #f39a1e) 55%, #34383d), #1d2024); }
+.ht-key.fkey { color: var(--ht-accent, #f39a1e); font-size: 0.95rem; }
+.ht-fn, .ht-rev, .ht-lk { background: #15140f; color: #e8dfc4; padding: 0 3px; border-radius: 2px; font-weight: 800; font-size: 0.66rem; line-height: 1.25; }
+.ht-fn { animation: blink 0.8s steps(2, start) infinite; }
+.ht-tone { font-size: 0.64rem; font-weight: 700; }
+.ht-menu-list .ht-hint { color: var(--ht-accent, #f39a1e); opacity: 0.9; white-space: normal; line-height: 1.35; }
+
+/* ---------- station plan ---------- */
+.station-plan { gap: 14px; }
+.station-plan .sp-status { padding: 8px 12px; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.station-plan .goal-card.sel { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.station-plan .sp-cards { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.station-plan .sp-cards .goal-card { padding: 12px; }
+.station-plan .row.spread h2 { margin-top: 2px; }
+.sp-glance { margin: 0; }
+.station-plan .readouts { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.sp-glance div { background: var(--surface-2); border-color: var(--line-2); }
+.sp-glance b { color: var(--text); }
+.sp-sec { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.sp-sec h4 { margin: 4px 0 0; color: var(--text-2); }
+.sp-sec .readouts { margin: 0; }
+.sp-head { display: flex; align-items: center; gap: 10px; }
+.sp-head h3 { margin: 0; font-size: 1.02rem; }
+.sp-num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent); font-size: 0.75rem; font-weight: 600; font-family: var(--mono); }
+.sp-conds { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sp-conds div { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.82rem; }
+.sp-conds span { color: var(--muted); font-family: var(--mono); font-size: 0.76rem; }
+.sp-terr td, .sp-coax td { white-space: nowrap; }
+.sp-terr td:last-child { white-space: normal; }
+.sp-rigs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.sp-rig { background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.sp-rig.main { border-color: var(--accent-line); }
+.sp-rig p { margin: 6px 0 0; }
+.sp-rig .tiny.muted { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.sp-times th, .sp-times td { vertical-align: top; }
+.sp-sub { display: block; color: var(--muted); font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.sp-band { display: inline-block; font-family: var(--mono); font-size: 0.78rem; padding: 1px 7px; margin: 0 4px 2px 0; border-radius: 4px; border: 1px solid var(--line-2); }
+.sp-band.good { color: var(--ok); border-color: rgba(60, 191, 128, 0.45); background: rgba(60, 191, 128, 0.1); }
+.sp-band.fair { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.sp-band.weak { color: var(--warn); border-color: rgba(227, 166, 59, 0.4); background: rgba(227, 166, 59, 0.08); }
+.sp-band.alt { opacity: 0.75; }
+.sp-rules { margin: 0; padding-left: 18px; color: var(--text-2); }
+.sp-rules li { margin: 4px 0; }
+.sp-reads { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; }
+.sp-reads .link { display: inline-flex; align-items: center; gap: 5px; }
+.sp-reads .link .ic { width: 14px; height: 14px; }
+.station-plan .btn .ic { width: 15px; height: 15px; }
+.station-plan .btn { display: inline-flex; align-items: center; gap: 7px; }
+@media (max-width: 640px) { .sp-conds { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sp-times, .sp-terr, .sp-coax { display: block; overflow-x: auto; } }
+
+/* ---------- radio history ---------- */
+.hist-h { margin: 24px 0 12px; font-size: 1.1rem; }
+.hist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+.hist-card { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.hist-card h3 { margin: 0; font-size: 1.05rem; }
+.hist-card p { margin: 0; color: var(--text-2); }
+.hist-listen { background: var(--bg-2); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text-2); }
+.hist-audio { width: 100%; height: 36px; margin-top: auto; color-scheme: dark; }
+.hist-events { display: flex; flex-direction: column; gap: 2px; }
+.hist-event { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.hist-event p { margin: 4px 0 8px; color: var(--text-2); max-width: 90ch; }
+.he-date { color: var(--accent); font-size: 0.82rem; padding-top: 2px; }
+@media (max-width: 600px) { .hist-event { grid-template-columns: 1fr; gap: 4px; } }
+.sp-glance b { font-size: 0.84rem; }
+
+.plan-link { width: 100%; justify-content: flex-start; margin: -6px 0 14px; }
