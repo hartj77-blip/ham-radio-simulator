@@ -14,6 +14,7 @@ import { ANT_TYPES } from './antenna.js';
 import { wireStation } from './shack.js';
 import { SETUPS, applySetup, cutFor } from './setups.js';
 import { audio } from './audio.js';
+import { openDesigner } from './autodesign.js';
 
 export const MODES = {
   training: { label: 'Training', icon: 'grad', desc: 'A step-by-step course: wire a station, build and tune an antenna, search the bands, learn propagation and make your first contact. Every step explains why it matters.' },
@@ -61,7 +62,9 @@ function autoMatch() {
     let type = a.type;
     if (type === 'yagi' && b.name === '160m') type = 'dipole';
     const L = cutFor(type, b.name);
-    if (Math.abs(a.length - L) > 0.05 || type !== a.type) { a.type = type; a.length = L; a.sizedBy = 'auto'; a.built = true; bus.emit('antenna'); }
+    // Keep an antenna that is already cut for this band (e.g. an exact MoM-solved design); re-cut otherwise.
+    const fits = type === a.type && a.length && Math.abs(a.length - L) / L < 0.08;
+    if (!fits) { a.type = type; a.length = L; a.sizedBy = 'auto'; a.built = true; bus.emit('antenna'); }
   }
   S.radio.atuOn = true;
   S.radio.atuTunedFreq = S.radio.freq;
@@ -80,7 +83,7 @@ export function analyzeTarget(lat, lon) {
     const p = propPath(me, tgt, f);
     const sig = 50 - p.loss; // 100 W, isotropic antennas
     const snr = sig - bandNoiseDbm(f, me);
-    rows.push({ band: b.name, f, snr, loss: p.loss, mode: p.mode, muf: p.muf, tx: rig().tx.includes(b.name) });
+    rows.push({ band: b.name, f, snr, loss: p.loss, mode: p.mode, muf: p.muf, live: p.live, tx: rig().tx.includes(b.name) });
   }
   rows.sort((a, b) => b.snr - a.snr);
   return { lat, lon, dist, brg, rows, best: rows.find((r) => r.snr > 3) || null };
@@ -132,7 +135,7 @@ export function initFreeConsole(el) {
     hour.onchange = () => { world.repopulate(); bus.emit('solar'); };
     el.append(h('div', { class: 'card free-console' },
       h('div', { class: 'fc-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Free Play'), h('h3', {}, 'Station console')),
-        h('div', { class: 'fc-hint' }, h('span', { html: icon('pin') }), 'Click anywhere on the map below to tune to the best band for that location.')),
+        h('div', { class: 'row' }, h('div', { class: 'fc-hint' }, h('span', { html: icon('pin') }), 'Click anywhere on the map below to tune to the best band for that location.'), h('button', { class: 'btn primary small', onclick: () => openDesigner() }, h('span', { html: icon('wand') }), 'Design the best antenna for my location'))),
       h('div', { class: 'fc-grid' },
         field('Station preset', sel(SETUPS.map((p) => [p.id, p.name]), S.setup || 'home', (v) => { applySetup(v, { quiet: true }); autoMatch(); draw(); toast(`Station changed: ${SETUPS.find((p) => p.id === v).name}.`, 'good', 3000); })),
         field('Radio', sel(Object.entries(RIGS).map(([id, r]) => [id, r.name]), S.rig || 'allmode', (v) => { S.rig = v; save(); bus.emit('rig'); autoMatch(); })),
@@ -157,7 +160,7 @@ export function targetCard(t) {
         h('td', {}, h('b', {}, r.band)), h('td', {}, r.mode), h('td', {}, `${r.loss.toFixed(0)} dB`),
         h('td', { class: r.snr > 15 ? 'ok' : r.snr > 3 ? 'warn' : 'bad' }, `${r.snr > 0 ? '+' : ''}${r.snr.toFixed(0)} dB`),
         h('td', {}, r.snr > 3 ? h('button', { class: 'btn ghost small', onclick: () => tuneToTarget(t, r.band) }, 'Tune') : h('span', { class: 'tiny muted' }, 'closed')))))),
-    h('p', { class: 'tiny muted' }, 'Estimate for 100 W between isotropic antennas, from the same ionospheric model the receiver uses. MUF and absorption follow the sun along the path.'));
+    h('p', { class: 'tiny muted' }, `Estimate for 100 W between isotropic antennas, from the same propagation model the receiver uses. ${t.rows.some((r) => r.live) ? 'The F2 layer along the path is the live NOAA GloTEC measurement.' : 'MUF and absorption are modelled from the sun along the path.'}`));
 }
 
 // ------------------------------------------------------------------ welcome
@@ -180,9 +183,10 @@ export function welcome(onDone) {
   close = modal(h('div', { class: 'welcome' },
     h('div', { class: 'eyebrow' }, 'Amateur radio training & station simulation'),
     h('h1', {}, 'Ham Radio Simulator'),
-    h('p', { class: 'lead' }, 'Build a complete amateur radio station in your browser — wiring, antenna design and measurement, receiving and operating — backed by a real ionospheric propagation model and a Method-of-Moments antenna solver.'),
+    h('p', { class: 'lead' }, 'Build a complete amateur radio station in your browser — wiring, antenna design and measurement, receiving and operating — using a propagation model driven by live NOAA ionosphere data and a Method-of-Moments antenna solver.'),
     h('div', { class: 'row welcome-fields' }, h('label', { class: 'fc-field' }, h('span', {}, 'Name'), name), h('label', { class: 'fc-field' }, h('span', {}, 'Location (state)'), sel)),
     h('div', { class: 'mode-grid' }, card('training'), card('simulation'), card('free')),
+    h('div', { class: 'callout welcome-safe' }, 'Nothing here transmits a real radio signal. Practise and experiment freely without interfering with licensed operators. Live data (space weather, ionosphere, weather, broadcast stations) is real; the radio traffic and stations are simulated.'),
     h('p', { class: 'tiny muted' }, 'Headphones recommended. Voice recognition works best in Chrome or Edge. You can change mode at any time from the mode selector at the top of the screen. Progress is saved in this browser.')),
   { wide: true, onClose: () => { if (!S.started) { S.started = true; S.mode ||= 'training'; save(); setAppMode(S.mode, { quiet: true }); } audio.init(); } });
 }
