@@ -10,7 +10,7 @@ import { RW } from './realworld.js';
 const STATE_POS = () => stateBy(S.op.state) || stateBy('KS');
 import { runSolver } from './em/client.js';
 import { antOwned, feedOwned, maxHeight, owns } from './store.js';
-import { mountYard } from './yard.js';
+import { mountYard, siteMaxHeight } from './yard.js';
 import { mountPlanner, autoSize, targetHz, P as planP, antDefaults } from './planner.js';
 
 export const ANT_TYPES = {
@@ -241,9 +241,9 @@ function render() {
     sizing = false; sizeBtn.disabled = false;
   } }, '🎯 Auto-size');
 
-  if (a.height > maxHeight()) a.height = maxHeight();
-  const setH = (v) => { a.height = clamp(Math.round(v), 3, maxHeight()); height.value = a.height; hLbl.textContent = `${a.height} ft`; save(); renderInfo(); bus.emit('antenna'); };
-  const height = h('input', { type: 'range', id: 'ant-height', min: 3, max: maxHeight(), value: a.height, disabled: a.type === 'vertical' });
+  if (a.height > siteMaxHeight()) a.height = siteMaxHeight();
+  const setH = (v) => { a.height = clamp(Math.round(v), 3, siteMaxHeight()); height.value = a.height; hLbl.textContent = `${a.height} ft`; save(); renderInfo(); bus.emit('antenna'); };
+  const height = h('input', { type: 'range', id: 'ant-height', min: 3, max: siteMaxHeight(), value: a.height, disabled: a.type === 'vertical' });
   const hLbl = h('span', {}, `${a.height} ft`);
   height.oninput = () => { a.height = +height.value; hLbl.textContent = `${a.height} ft`; save(); renderInfo(); };
   height.onchange = () => bus.emit('antenna');
@@ -280,7 +280,7 @@ function render() {
       h('div', { class: 'row len-row' }, step(-1, '−1 ft'), step(-1 / 12, '−1 in'), lenIn, h('span', { class: 'small' }, 'ft'), step(1 / 12, '+1 in'), step(1, '+1 ft')),
       h('div', { class: 'small muted' }, h('b', { id: 'ant-len-now' }, fmtLen(a.length)), a.type === 'dipole' || a.type === 'invv' ? ` · each leg ${(a.length / 2).toFixed(2)} ft` : '')),
     a.type !== 'vertical' ? h('fieldset', {}, h('legend', {}, 'Height above ground'),
-      h('div', { class: 'row len-row' }, hStep(-5, '−5'), hStep(-1, '−1'), hLbl, hStep(1, '+1'), hStep(5, '+5'), h('span', { class: 'muted tiny' }, `supports reach ${maxHeight()} ft`)), height)
+      h('div', { class: 'row len-row' }, hStep(-5, '−5'), hStep(-1, '−1'), hLbl, hStep(1, '+1'), hStep(5, '+5'), h('span', { class: 'muted tiny' }, `supports reach ${siteMaxHeight()} ft`)), height)
       : h('label', {}, 'Ground radials', radials),
     a.type === 'yagi' ? h('label', {}, 'Rotator heading ', headLbl, heading) : a.type !== 'vertical' ? h('label', {}, 'Wire orientation', axis) : null,
     h('fieldset', {}, h('legend', {}, 'Feedline'), h('label', {}, 'Coax', feed), h('label', {}, 'Length (ft)', feedLen)),

@@ -574,3 +574,10 @@ body.ht-view #toasts > :nth-last-child(n+2) { display: none; }
 .yard-steps { padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .yard-steps li.done b { text-decoration: line-through; opacity: 0.7; }
 @media (max-width: 1000px) { .yard-grid { grid-template-columns: 1fr; } }
+.env-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.env-btn { display: flex; align-items: center; gap: 6px; border: 1px solid #34465e; background: #17212c; color: var(--text, #dfe6ee); border-radius: 10px; padding: 6px 10px; cursor: pointer; font-size: 0.85rem; min-height: 38px; }
+.env-btn.active { border-color: #ffb347; background: #3a2a14; }
+.env-ic { font-size: 1.2rem; }
+.env-info { gap: 12px; align-items: baseline; margin-bottom: 4px; }
+.env-fx { padding: 3px 8px; border-radius: 6px; background: #0e151c; color: #c9d6e3; }
+.env-rules { padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
