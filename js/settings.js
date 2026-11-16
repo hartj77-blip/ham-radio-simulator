@@ -107,11 +107,14 @@ export function openSettings(tab = 'audio') {
       const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
       file.onchange = async () => { try { const d = JSON.parse(await file.files[0].text()); if (!d || typeof d !== 'object' || !d.radio) throw new Error('not a save file'); localStorage.setItem('hamshack-sim-v1', JSON.stringify(d)); location.reload(); } catch (e) { toast(`Import failed: ${e.message}`, 'bad'); } };
       pane.append(
+        row('App version', h('div', { class: 'row' }, h('span', { class: 'small mono', id: 'app-ver' }, '…'), h('button', { class: 'btn small', onclick: () => bus.emit('check-version') }, '🔄 Check for update'), h('button', { class: 'btn small', onclick: () => location.reload() }, 'Reload')), 'The game updates itself when it\'s online. If something looks out of date, press Reload.'),
         row('Export my save', h('button', { class: 'btn small', onclick: () => download(`hamshack-${S.call || 'save'}-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S, null, 1), 'application/json') }, '⬇ Download'), 'Back up your license, log, gear and settings — or move them to another device.'),
         row('Import a save', h('span', {}, file, h('button', { class: 'btn small', onclick: () => file.click() }, '⬆ Load file…')), 'Replaces the current progress.'),
         row('Reset everything', h('button', { class: 'btn warn small', onclick: () => { if (confirm('Erase ALL progress (license, log, station)?')) resetAll(); } }, 'Reset'), 'Cannot be undone.'));
     }
   };
   draw(tab);
+  const showVer = () => { const el = document.getElementById('app-ver'); if (!el) return; fetch('js/main.js', { method: 'HEAD', cache: 'no-store' }).then((r) => { const lm = r.headers.get('last-modified'); el.textContent = lm ? `updated ${new Date(lm).toLocaleString()}` : 'current'; }).catch(() => { el.textContent = 'offline copy'; }); };
+  body.addEventListener('click', () => setTimeout(showVer, 50)); setTimeout(showVer, 50);
   close = modal(h('div', {}, h('h2', {}, '⚙ Settings'), body), { wide: true });
 }

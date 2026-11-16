@@ -215,6 +215,35 @@ function init() {
 
 init();
 
+// ------------------------------------------------------------------ always run the newest version
+// A service worker fetches our files network-first (see sw.js), so a new deploy is picked up on the
+// next load instead of after the browser's cache expires. A returning player whose page was loaded
+// from stale cache gets one automatic reload when the worker takes over.
+export const appVersion = { modified: null };
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController && S.started && !sessionStorage.getItem('swReloaded')) { sessionStorage.setItem('swReloaded', '1'); location.reload(); }
+  });
+}
+async function checkVersion(announce) {
+  try {
+    const r = await fetch('js/main.js', { method: 'HEAD', cache: 'no-store' });
+    const m = r.headers.get('last-modified') || r.headers.get('etag');
+    if (!m) return;
+    if (!appVersion.modified) appVersion.modified = m;
+    else if (m !== appVersion.modified) {
+      toast(`🆕 A new version of the game is available. <button class="btn small primary" onclick="location.reload()">Reload now</button>`, 'info', 60000);
+      appVersion.modified = m;
+    } else if (announce) toast('✓ You have the latest version.', 'good', 3000);
+  } catch (e) { /* offline */ }
+}
+checkVersion();
+setInterval(checkVersion, 10 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+bus.on('check-version', () => checkVersion(true));
+
 // debug handle for automated tests / curious players
 import * as _radio from './radio.js';
 import * as _op from './operating.js';
