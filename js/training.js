@@ -11,6 +11,7 @@ import { bandOf, bandByName } from './data/bandplan.js';
 import { system, feedZ, analyzer } from './antenna.js';
 import { SUN, bandConditions, mufAt } from './propagation.js';
 import { stateBy } from './data/world.js';
+import { isHT } from './rigs.js';
 import { audio } from './audio.js';
 
 const T = () => (S.training ||= { step: 0, done: {}, answers: {}, marks: {}, min: false });
@@ -114,7 +115,7 @@ export const STEPS = [
     text: 'Press the radio\'s <b>POWER</b> button.',
     why: 'With power, RF path, grounding and accessories in place the station is complete and safe to operate.',
     how: 'Click the round POWER button at the top left of the radio.',
-    done: () => rigStatus().powered, praise: 'The station is wired and powered.' },
+    done: () => rigStatus().powered && !isHT(), praise: 'The station is wired and powered.' },
 
   // ---------------- Module 2: antenna
   { m: 'antenna', tab: 'antenna', sel: '#ant-type', title: 'Select a half-wave dipole', ref: 'antenna-basics',
