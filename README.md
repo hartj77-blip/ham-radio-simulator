@@ -47,7 +47,7 @@ When you hit a situation the exams cover (fuse ratings, grounding, SWR, dipole l
 - **A shared, real-time band:** you hear any online operator who transmits on your frequency, if propagation between your two locations supports it. Audio passes through your filter, AGC and noise. All users share the same simulated stations, space weather and UTC time. Audio is peer-to-peer WebRTC through the free PeerJS broker.
 
 ### The models underneath
-- **Ionosphere:** a sun-position model drives foF2/MUF, D-layer absorption, skip zones, multi-hop paths, K-index and auroral loss, and sporadic-E on 6 m.
+- **Ionosphere:** live NOAA SWPC data: GloTEC foF2/hmF2 (every 10 minutes) sets the MUF along every path, D-RAP absorption is applied during flares and proton events, and the map shows live MUF, foF2, TEC and absorption layers. When offline or in time warp, a sun-position model drives foF2/MUF, D-layer absorption, skip zones, multi-hop paths, K-index and auroral loss, and sporadic-E on 6 m.
 - **Antennas:** feed-point R and X versus frequency, harmonic operation, height above ground, radial ground loss, directional patterns, and coax loss including the extra loss from mismatch.
 - **Receiver:** band noise and static pass through Web Audio IF filters, AGC, FM quieting and squelch.
 - **Rules:** FCC Part 97 privileges by license class and mode, including occupied bandwidth at band edges.

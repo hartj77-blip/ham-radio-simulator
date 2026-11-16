@@ -1,6 +1,7 @@
 // Simplified but physically-motivated HF/VHF propagation model.
 import { clamp, rand, randi, chance, seeded } from './util.js';
 import { S, save } from './state.js';
+import { ionoAt, blackout, drapDb } from './iono.js';
 
 const R = 6371;
 const rad = (d) => (d * Math.PI) / 180;
@@ -76,6 +77,13 @@ export function dayFactor(p, d = simDate()) {
   return clamp((sinEl + 0.08) / 0.38, 0, 1);
 }
 
+const M3000_MODEL = 1 + 2.4 * Math.pow(3000 / 3500, 0.8);
+// MUF for a 3000 km hop over a point: live when available, otherwise modelled.
+export function mufAt(p, d = simDate()) {
+  const io = ionoAt(p.lat, p.lon);
+  return io ? { muf: io.muf3000, foF2: io.foF2, live: true, hmF2: io.hmF2, tec: io.tec } : { muf: foF2(dayFactor(p, d)) * M3000_MODEL, foF2: foF2(dayFactor(p, d)), live: false };
+}
+
 export function foF2(df) {
   const day = 3 + 0.045 * SUN.sfi, night = 2.0 + 0.017 * SUN.sfi;
   return (night + (day - night) * df) * (1 - 0.05 * Math.max(0, SUN.k - 3));
@@ -105,21 +113,28 @@ export function path(a, b, fMHz, d = simDate()) {
   // sample control points along the path; MUF limited by worst point
   let muf = Infinity, absorb = 0;
   const pts = hops === 1 ? [0.5] : Array.from({ length: hops }, (_, i) => (i + 0.5) / hops);
+  // Live NOAA GloTEC data (when available) replaces the modelled F2 layer at each control point;
+  // its M(3000) factor (from hmF2) rescales the hop-length factor M.
+  const live = [];
   for (const f of pts) {
     const p = interp(a, b, f);
     const df = dayFactor(p, d);
-    muf = Math.min(muf, foF2(df) * M);
+    const io = ionoAt(p.lat, p.lon);
+    live.push(io);
+    muf = Math.min(muf, io ? io.foF2 * M * (io.m3000 / M3000_MODEL) : foF2(df) * M);
     absorb += df * Math.sqrt(SUN.sfi / 100) * 420 / (fMHz * fMHz);
   }
   // also absorption at endpoints for low bands
   absorb += 0.5 * (dayFactor(a, d) + dayFactor(b, d)) * 120 / (fMHz * fMHz);
+  // Solar flare / proton event in progress: add the measured D-RAP absorption (two D-layer passes per hop).
+  if (blackout()) for (const f of pts) { const p = interp(a, b, f); absorb += 2 * drapDb(p.lat, p.lon, fMHz); }
   let over = fMHz > muf ? (fMHz / muf - 1) * 140 : 0;
   // polar/aurora
   const maxLat = Math.max(...[0.25, 0.5, 0.75].map((f) => Math.abs(interp(a, b, f).lat)));
   const kLoss = SUN.k * 1.2 + (maxLat > 55 ? SUN.k * 4 : 0);
   const sky = fspl + absorb + over + (hops - 1) * 4 + kLoss + 8 + (fMHz < 3 ? 22 : 0); // MW skywave: lossy ground reflections, polarization
   const loss = Math.min(sky, ground);
-  return { loss, muf, dist, mode: ground < sky ? 'ground' : `${hops}F2` };
+  return { loss, muf, dist, mode: ground < sky ? 'ground' : `${hops}F2`, live: live.some(Boolean) };
 }
 
 // Band noise in dBm (2.4 kHz bandwidth) at the player's location.
@@ -145,16 +160,17 @@ export function bandConditions(where) {
   const groups = [['80m-40m', 5.3], ['30m-20m', 12], ['17m-15m', 19.5], ['12m-10m', 26.5]];
   const out = [];
   const df = dayFactor(where);
+  const io = where ? ionoAt(where.lat, where.lon) : null;
   for (const [name, f] of groups) {
-    const test = (dff) => {
-      const muf = foF2(dff) * 3.4;
+    const test = (dff, now) => {
+      const muf = now && io ? io.foF2 * 3.4 * (io.m3000 / M3000_MODEL) : foF2(dff) * 3.4;
       const absorb = dff * Math.sqrt(SUN.sfi / 100) * 420 / (f * f);
       if (f > muf * 1.05) return 'Closed';
       const margin = muf / f;
       const sc = (margin > 1.4 ? 2 : margin > 1.1 ? 1 : 0) - (absorb > 12 ? 2 : absorb > 5 ? 1 : 0) - (SUN.k >= 5 ? 1 : 0);
       return sc >= 2 ? 'Good' : sc >= 1 ? 'Fair' : 'Poor';
     };
-    out.push({ name, day: test(1), night: test(0), now: test(df) });
+    out.push({ name, day: test(1), night: test(0), now: test(df, true) });
   }
   return out;
 }

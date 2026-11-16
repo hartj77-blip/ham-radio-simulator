@@ -83,7 +83,7 @@ export function analyzeTarget(lat, lon) {
     const p = propPath(me, tgt, f);
     const sig = 50 - p.loss; // 100 W, isotropic antennas
     const snr = sig - bandNoiseDbm(f, me);
-    rows.push({ band: b.name, f, snr, loss: p.loss, mode: p.mode, muf: p.muf, tx: rig().tx.includes(b.name) });
+    rows.push({ band: b.name, f, snr, loss: p.loss, mode: p.mode, muf: p.muf, live: p.live, tx: rig().tx.includes(b.name) });
   }
   rows.sort((a, b) => b.snr - a.snr);
   return { lat, lon, dist, brg, rows, best: rows.find((r) => r.snr > 3) || null };
@@ -160,7 +160,7 @@ export function targetCard(t) {
         h('td', {}, h('b', {}, r.band)), h('td', {}, r.mode), h('td', {}, `${r.loss.toFixed(0)} dB`),
         h('td', { class: r.snr > 15 ? 'ok' : r.snr > 3 ? 'warn' : 'bad' }, `${r.snr > 0 ? '+' : ''}${r.snr.toFixed(0)} dB`),
         h('td', {}, r.snr > 3 ? h('button', { class: 'btn ghost small', onclick: () => tuneToTarget(t, r.band) }, 'Tune') : h('span', { class: 'tiny muted' }, 'closed')))))),
-    h('p', { class: 'tiny muted' }, 'Estimate for 100 W between isotropic antennas, from the same ionospheric model the receiver uses. MUF and absorption follow the sun along the path.'));
+    h('p', { class: 'tiny muted' }, `Estimate for 100 W between isotropic antennas, from the same propagation model the receiver uses. ${t.rows.some((r) => r.live) ? 'The F2 layer along the path is the live NOAA GloTEC measurement.' : 'MUF and absorption are modelled from the sun along the path.'}`));
 }
 
 // ------------------------------------------------------------------ welcome

@@ -9,7 +9,7 @@ import { rigStatus, isConnected } from './shack.js';
 import { world } from './world.js';
 import { bandOf, bandByName } from './data/bandplan.js';
 import { system, feedZ, analyzer } from './antenna.js';
-import { SUN, bandConditions } from './propagation.js';
+import { SUN, bandConditions, mufAt } from './propagation.js';
 import { stateBy } from './data/world.js';
 import { audio } from './audio.js';
 
@@ -243,8 +243,12 @@ export const STEPS = [
     text: 'Using the band-condition readout in the status bar (it uses the time of day at your location), which group of bands is in the best condition now?',
     options: () => { const best = bestBandGroup(); return ['80m-40m', '30m-20m', '17m-15m', '12m-10m'].map((g) => [g.replace('-', '–'), best.includes(g)]); },
     explain: 'By day the D layer absorbs the low bands and the higher MUF opens the high bands. At night absorption disappears and the MUF falls, so the low bands carry long distance and the high bands close.' },
+  { m: 'propagation', kind: 'quiz', tab: 'radio', sel: '#map-panel', title: 'Use the live MUF', ref: 'ionosphere',
+    text: () => { const q = mufAt(stateBy(S.op.state)); return `${q.live ? 'NOAA\'s live measurement' : 'The model'} puts the <b>MUF for a 3000 km hop</b> over your location at <b>${q.muf.toFixed(1)} MHz</b> right now (shown in the status bar and as the MUF layer on the map). Which is the <b>highest</b> band that can support a 3000 km contact from here?`; },
+    options: () => { const m = mufAt(stateBy(S.op.state)).muf; const bands = [['80 m (3.5 MHz)', 3.5], ['40 m (7 MHz)', 7], ['20 m (14 MHz)', 14], ['15 m (21 MHz)', 21], ['10 m (28 MHz)', 28]]; const best = bands.filter(([, f]) => f < m).pop()?.[1] ?? 3.5; return bands.map(([l, f]) => [l, f === best]); },
+    explain: 'Signals below the MUF are refracted back to Earth; above it they pass through the F2 layer into space. Operators work just below the MUF, where absorption is lowest — the classic rule is about 85% of the MUF (the "optimum working frequency").' },
   { m: 'propagation', kind: 'read', tab: 'radio', sel: '#map-panel', title: 'Study the propagation map', ref: 'greyline',
-    text: 'On the Radio page, find the propagation map. Locate the day/night terminator (the greyline) and click a spot to see the path analysis: distance, bearing and the best band to that location.' },
+    text: 'On the Radio page, find the propagation map. Switch the live layers between MUF, foF2, TEC and absorption and compare them with the day/night terminator (the greyline). Then click a spot to see the path analysis: distance, bearing and the best band to that location.' },
 
   // ---------------- Module 6: licensing
   { m: 'license', tab: 'license', sel: '.exam-row button', title: 'Study 10 question-pool cards', ref: 'licensing',
