@@ -44,7 +44,7 @@ function ionoLayer(kind, W, H) {
     const t = (v - L.lo) / (L.hi - L.lo);
     const [r, g, b] = rampColor(t);
     px[i] = r; px[i + 1] = g; px[i + 2] = b;
-    px[i + 3] = kind === 'drap' ? Math.round(Math.min(1, v / 4) * 170) : 120;
+    px[i + 3] = kind === 'drap' ? Math.round(Math.min(1, v / 4) * 140) : 95;
   }
   x.putImageData(img, 0, 0);
   ionoImg = c; ionoKey = key;
@@ -136,7 +136,7 @@ function nightLayer(W, H) {
     const lat = 90 - (py + 0.5) / ch * 180, lon = (qx + 0.5) / cw * 360 - 180;
     const df = dayFactor({ lat, lon }, d);
     const i = (py * cw + qx) * 4;
-    const night = 0.6 * (1 - df), grey = df > 0.02 && df < 0.35 ? 0.12 * (1 - Math.abs(df - 0.18) / 0.17) : 0;
+    const night = 0.5 * (1 - df), grey = df > 0.02 && df < 0.35 ? 0.12 * (1 - Math.abs(df - 0.18) / 0.17) : 0;
     const a = night + grey;
     // night: deep blue-black; greyline: warm amber tint
     px[i] = Math.round((2 * night + 230 * grey) / Math.max(a, 1e-6)); px[i + 1] = Math.round((6 * night + 150 * grey) / Math.max(a, 1e-6)); px[i + 2] = Math.round((18 * night + 60 * grey) / Math.max(a, 1e-6));
@@ -145,6 +145,24 @@ function nightLayer(W, H) {
   x.putImageData(img, 0, 0);
   nightImg = c; nightAt = now();
   return c;
+}
+
+// Land as Path2Ds, rebuilt only when the map width changes. `fill` is the closed polygons;
+// `coast` leaves out the seams the data adds where a polygon is cut at the ±180° meridian or
+// closed along the south pole, so they don't show as straight lines across the map.
+let landP = null, landPW = 0, landPSrc = null;
+const seam = ([lo1, la1], [lo2, la2]) => Math.abs(lo2 - lo1) > 180 || (Math.abs(lo1) > 179.9 && Math.abs(lo2) > 179.9) || (la1 < -89.9 && la2 < -89.9);
+function landPath(W, H) {
+  if (!land) return null;
+  if (landP && landPW === W && landPSrc === land) return landP;
+  const fill = new Path2D(), coast = new Path2D();
+  for (const poly of land) for (const r of poly) r.forEach((pt, i) => {
+    const [x, y] = proj(pt[1], pt[0], W, H);
+    if (i) fill.lineTo(x, y); else fill.moveTo(x, y);
+    if (i && !seam(r[i - 1], pt)) coast.lineTo(x, y); else coast.moveTo(x, y);
+  });
+  landP = { fill, coast }; landPW = W; landPSrc = land;
+  return landP;
 }
 
 export function drawMap() {
@@ -162,18 +180,18 @@ export function drawMap() {
   for (let lon = -180; lon <= 180; lon += 30) { const [x] = proj(0, lon, W, H); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
   for (let lat = -60; lat <= 60; lat += 30) { const [, y] = proj(lat, 0, W, H); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
   // land
-  if (land) {
-    ctx.fillStyle = '#1c2a36'; ctx.strokeStyle = '#33485a';
-    for (const poly of land) {
-      ctx.beginPath();
-      for (const r of poly) r.forEach(([lon, lat], i) => { const [x, y] = proj(lat, lon, W, H); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-      ctx.fill('evenodd'); ctx.stroke();
-    }
-  }
+  const lp = landPath(W, H);
+  if (lp) { ctx.fillStyle = '#26394a'; ctx.fill(lp.fill, 'evenodd'); }
   ctx.imageSmoothingEnabled = true;
   const lk = mapLayer();
   if (lk !== 'none' && ((lk === 'drap' && IONO.drap) || (lk !== 'drap' && ionoLive()))) ctx.drawImage(ionoLayer(lk, W, H), 0, 0, W, H);
   ctx.drawImage(nightLayer(W, H), 0, 0, W, H);
+  // Coastlines go on top of the ionosphere and night overlays so the continents stay readable.
+  if (lp) {
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(5,10,16,0.55)'; ctx.lineWidth = 2.5; ctx.stroke(lp.coast);
+    ctx.strokeStyle = 'rgba(214,226,238,0.75)'; ctx.lineWidth = 1; ctx.stroke(lp.coast);
+  }
   // stations
   const me = player();
   const [mx, my] = proj(me.lat, me.lon, W, H);
