@@ -28,6 +28,7 @@ import { startRealWorld, RW } from './realworld.js';
 import { initScannerUI } from './services.js';
 import { elmer } from './elmer.js';
 import { openSettings, applySettings } from './settings.js';
+import { initFeedback, openFeedback } from './feedback.js';
 
 // [id, label, icon, group]
 const TABS = [
@@ -104,6 +105,9 @@ function helpTab(el) {
       h('div', { class: 'card' }, h('h3', {}, 'Abbreviations'),
         h('p', { class: 'small' }, 'CQ calling any station · DE from · K over · KN over, named station only · SK end of contact · 73 best regards · RST signal report · 5NN 599 · QTH location · QSL confirm · QRZ? who is calling · QRL? is this frequency in use · QSY change frequency · QRS send slower · AGN again · TU thank you · ES and · FB fine business · WX weather · UR your'),
         h('button', { class: 'btn small', onclick: () => bus.emit('library', 'q-codes') }, 'Full Q-code reference')),
+      h('div', { class: 'card' }, h('h3', {}, 'Report an issue'),
+        h('p', { class: 'small muted' }, 'Found a bug, have an idea or a question? Use the question-mark button in the bottom corner of any page, or open the form here.'),
+        h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => openFeedback('bug') }, 'Report a problem'), h('button', { class: 'btn', onclick: () => openFeedback('idea') }, 'Suggest an improvement'))),
       h('div', { class: 'card' }, h('h3', {}, 'Settings'),
         h('p', { class: 'small muted' }, 'Audio, display size and touch layout, mode and guidance, PTT key and CW speed, time and space weather, location, and backup/restore of your data.'),
         h('button', { class: 'btn primary', onclick: () => openSettings() }, 'Open settings')),
@@ -139,6 +143,7 @@ function init() {
   migrateMode();
   buildChrome();
   initModes();
+  initFeedback();
   initTraining($('#coach'));
   initExplain();
   initFinder($('#finder'));
