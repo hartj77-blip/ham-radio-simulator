@@ -257,7 +257,7 @@ export async function nanoVnaSweep(start, stop, points = 101, onStatus = () => {
   const readUntilPrompt = async (ms = 15000) => {
     const t0 = Date.now();
     while (!buf.includes('ch> ')) {
-      if (Date.now() - t0 > ms) throw new Error('NanoVNA did not respond');
+      if (Date.now() - t0 > ms) throw new Error('The analyzer did not respond');
       const { value, done } = await reader.read();
       if (done) break;
       buf += dec.decode(value);
@@ -268,7 +268,7 @@ export async function nanoVnaSweep(start, stop, points = 101, onStatus = () => {
   };
   const cmd = async (c) => { await writer.write(enc.encode(c + '\r')); const r = await readUntilPrompt(); return r.split(/\r?\n/).slice(1).map((l) => l.trim()).filter(Boolean); };
   try {
-    onStatus('Connected — waking NanoVNA…');
+    onStatus('Connected — waking the analyzer…');
     await writer.write(enc.encode('\r'));
     await readUntilPrompt(4000).catch(() => { });
     onStatus('Sweeping…');

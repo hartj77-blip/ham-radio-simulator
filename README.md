@@ -21,6 +21,7 @@ python3 -m http.server 8000
 - **Learn:** follow the course, read the reference library (35 articles with diagrams covering stations, antennas, measurement, receiving, propagation and operating), and study for the Technician, General and Extra exams with practice tests.
 - **Build:** wire a station connector by connector (polarity, RF path, grounding), design antennas with a Method-of-Moments solver and an SWR/impedance analyzer, place them at a realistic site (yard, rooftop, balcony, park, vehicle and others), assess terrain, and assemble equipment from real-world specifications.
 - **Design in one click:** "Find my location & design the best antenna" chooses the band, antenna type, height, orientation and feedline for your goal and site, solves the exact length and explains each decision.
+- **Equipment replicas:** 20 radios (base, touchscreen SDR, flagship, mobile, portable, handheld and PC-software receivers) and their accessories, under generic names, each with a faceplate laid out like its real-world class and fully working keys and knobs. Every model has an original operating guide, opened from the radio.
 - **Operate:** a transceiver with VFO, filters, AGC, RIT, tuner, meters and waterfall; a propagation map with live ionosphere layers and click-to-analyse paths; a logger with contest practice; a handheld view for phones; and an optional shared band where other users can hear you over the internet.
 - **Give feedback:** the question-mark button opens a form that creates a GitHub issue.
 
@@ -35,7 +36,7 @@ python3 -m http.server 8000
 - Airport locations and published radio frequencies (OurAirports).
 - UTC time, and your device location only if you allow it.
 - Other users shown online are real people; their voices travel over the internet (WebRTC), never by radio.
-- Band edges and license privileges (FCC Part 97), beacon schedules, repeater conventions and equipment specifications from published sources.
+- Band edges and license privileges (FCC Part 97), beacon schedules, repeater conventions and typical equipment specifications from published sources.
 
 **Simulated**
 - All radio signals. Nothing is transmitted or received over the air.
@@ -76,7 +77,7 @@ Published references the simulation is based on:
 - Shimazaki (1955) and Dudeney (1983): relation between F2-layer height and the M(3000)F2 factor.
 - HFTA by Dean Straw, N6BV ([ARRL Antenna Book](https://www.arrl.org/arrl-antenna-book)): concept behind the simplified terrain assessment.
 - NFPA 70 (National Electrical Code) Article 810: grounding and lightning-protection guidance in the library.
-- Manufacturer specifications for the equipment page. Product names identify equipment only; there is no affiliation with or endorsement by any manufacturer.
+- Published equipment specifications: typical figures for each class of radio and accessory. All equipment uses generic names and model codes; the project is not affiliated with or endorsed by any manufacturer.
 
 ## Privacy
 

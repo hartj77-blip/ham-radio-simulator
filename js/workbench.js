@@ -98,10 +98,10 @@ function render() {
   deChk.onchange = () => { w.deemb = deChk.checked; save(); measChanged(); };
   const measure = h('div', { class: 'card wb-measure' },
     h('h3', {}, 'Real measurements'),
-    h('p', { class: 'muted small' }, 'Load a sweep from your antenna analyzer (NanoVNA / RigExpert / any VNA): Touchstone .s1p, or CSV with Freq,R,X (or Freq,SWR). Or read a NanoVNA live over USB (Chrome/Edge desktop).'),
+    h('p', { class: 'muted small' }, 'Load a sweep from any antenna analyzer or vector network analyzer: Touchstone .s1p, or CSV with Freq,R,X (or Freq,SWR). Or read a compatible pocket VNA live over USB serial (Chrome/Edge desktop).'),
     h('div', { class: 'row' },
       h('label', { class: 'btn filebtn' }, 'Load .s1p / .csv', h('input', { type: 'file', accept: '.s1p,.csv,.txt,.tsv', onchange: loadMeas })),
-      h('button', { class: 'btn', onclick: liveVna }, 'Read NanoVNA'),
+      h('button', { class: 'btn', onclick: liveVna }, 'Read VNA over USB'),
       w.meas ? h('button', { class: 'btn small', onclick: () => { w.meas = null; save(); render(); } }, 'Clear') : null),
     w.meas ? h('div', { class: 'small ok' }, `${w.meas.pts.length} points from ${w.meas.source} (${(w.meas.pts[0].f / 1e6).toFixed(3)}–${(w.meas.pts[w.meas.pts.length - 1].f / 1e6).toFixed(3)} MHz)`) : null,
     h('fieldset', {}, h('legend', {}, 'Feedline between analyzer and antenna'),
@@ -204,9 +204,9 @@ async function liveVna() {
   try {
     const pts = await nanoVnaSweep(f0 - sp, f0 + sp, 101, (s) => toast(s, 'info', 2500));
     if (!pts.length) throw new Error('no data returned');
-    w.meas = { pts, source: 'NanoVNA (live)', kind: 'complex' };
+    w.meas = { pts, source: 'USB VNA (live)', kind: 'complex' };
     save(); render();
-  } catch (e) { toast(`NanoVNA: ${e.message}`, 'bad', 9000); }
+  } catch (e) { toast(`USB VNA: ${e.message}`, 'bad', 9000); }
 }
 function measChanged() { drawPlot(); drawReadout(); drawTrim(); drawMatch(); }
 
