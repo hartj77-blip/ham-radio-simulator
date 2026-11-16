@@ -316,6 +316,7 @@ const BCN = [['4U1UN', 40.75, -73.97], ['VE8AT', 79.99, -85.9], ['W6WX', 37.15, 
   ['ZS6DN', -25.9, 28.3], ['5Z4B', -1.25, 36.7], ['4X6TU', 32.1, 34.8], ['OH2B', 60.3, 24.4], ['CS3B', 32.8, -17.2],
   ['LU4AA', -34.6, -58.4], ['OA4B', -12.1, -76.9], ['YV5B', 9.1, -67.8]];
 const BEACONS = BCN.map(([call, lat, lon]) => ({ call, lat, lon, cont: '', zone: 0, qth: 'beacon', name: '', lang: 'en-US' }));
+export const BEACON_SITES = BEACONS;
 
 // ------------------------------------------------------------------ 2 m FM
 function populate2m(band) {
@@ -473,8 +474,9 @@ function behaveCaller(st) {
 }
 
 function onTxEnd(st) {
-  if (st.role === 'cq' && (st.st === 'cq')) { st.st = 'listen'; st.timer = rand(3.5, 7); }
-  if (st.role === 'run' && (st.st === 'cq' || st.st === 'tu')) { st.st = 'listen'; st.timer = rand(1.8, 3.2); }
+  const pat = S.settings.patience || 1; // ⚙ Settings → AI operator patience
+  if (st.role === 'cq' && (st.st === 'cq')) { st.st = 'listen'; st.timer = rand(3.5, 7) * pat; }
+  if (st.role === 'run' && (st.st === 'cq' || st.st === 'tu')) { st.st = 'listen'; st.timer = rand(1.8, 3.2) * pat; }
   if (st.role === 'run' && st.st === 'fakeqso') { st.timer = rand(1.2, 2); }
   if (st.role === 'rag' && st.partner) {
     st.partner.timer = rand(1.5, 4);

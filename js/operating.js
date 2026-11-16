@@ -13,8 +13,8 @@ import { voice, normalizeSpeech } from './voice.js';
 import { elmer } from './elmer.js';
 import { net } from './net.js';
 import { distanceKm, bearing } from './propagation.js';
-import { powerLimit } from './store.js';
-import { rig, rigCanTx, rigMaxW } from './rigs.js';
+import { powerLimit , maxPower } from './store.js';
+import { rig, rigCanTx, rigMaxW , gearOf } from './rigs.js';
 
 const R = () => S.radio;
 
@@ -57,7 +57,7 @@ function prepare(modeOverride, quiet) {
   const r = R(), rs = rigStatus();
   if (!rs.powered) { toast('The radio is off. Finish the setup in the Shack tab.', 'warn'); return null; }
   const mode = modeOverride || r.mode;
-  const txf = r.mode === 'FM' ? r.freq + r.rptOffset : r.freq;
+  const txf = r.split && r.vfoB ? r.vfoB : r.mode === 'FM' ? r.freq + r.rptOffset : r.freq;
   if (!quiet) {
     if (mode === 'CW' && !rs.key) { toast('Plug the CW paddle into the radio (Shack tab).', 'warn'); return null; }
     if (mode !== 'CW' && !rs.mic) { toast('Plug the microphone into the radio (Shack tab).', 'warn'); return null; }
@@ -86,13 +86,17 @@ function prepare(modeOverride, quiet) {
     return null;
   }
   const fb = foldback(swr);
-  const watts = Math.max(0.5, Math.min(r.power, rigMaxW(txf) >= 50 ? r.power : rigMaxW(txf)) * fb);
+  const watts = Math.max(0.5, Math.min(r.power, maxPower(), rigMaxW(txf) >= 50 ? Infinity : rigMaxW(txf)) * fb);
   if (swr > 2.0 && !quiet) {
     toast(`High SWR (${swr > 50 ? '∞' : swr.toFixed(1)}:1) — the rig folded back to ${watts.toFixed(0)} W. Tune the ATU or fix the antenna.`, 'warn');
     elmer('swr_high');
   }
   const g = swr >= 999 ? 0.999 : (swr - 1) / (swr + 1);
-  const dbm = via === 'dummy' ? -200 : wattsToDbm(watts) + 10 * Math.log10(1 - g * g);
+  // SSB/AM talk power: a better mic, speech compression, and mic gain (too low = weak, too high = ALC splatter)
+  const mg = r.micGain ?? 0.5;
+  const talk = mode !== 'CW' && mode !== 'FM' ? (gearOf('mic').talk || 0) + (r.comp ? 2.5 : 0) + (mg < 0.3 ? -4 * (0.3 - mg) / 0.3 : 0) - (mg > 0.85 ? 2 : 0) : 0;
+  if (mode !== 'CW' && mode !== 'FM' && mg > 0.85 && !quiet) toast('🔴 ALC overdriven: mic gain too high — your signal is splattering (wide and distorted). Back it off.', 'warn', 5000);
+  const dbm = via === 'dummy' ? -200 : wattsToDbm(watts) + 10 * Math.log10(1 - g * g) + talk;
   return { txf, watts, swr, dbm, via, mode };
 }
 
@@ -136,7 +140,7 @@ export function sendCW(text) {
   audio.init();
   const sch = schedule(text, S.settings.myWpm);
   Object.assign(txState, { active: true, freq: p.txf, mode: 'CW', watts: p.watts, swr: p.swr, start: now() + 0.05, sch });
-  audio.sidetone(sch.segs, audio.t + 0.05, R().pitch);
+  audio.sidetone(sch.segs, audio.t + 0.05, R().pitch, S.settings.sideVol ?? 0.25);
   if (p.via === 'rf') playerTxStart(p.txf, 'CW', 'CW', sch.dur);
   ui.transcript('You', text, 'tx', p.via);
   net.sendCW && net.sendCW(text, S.settings.myWpm, p.txf);
@@ -466,13 +470,14 @@ function onKey(e) {
   if (/^F[1-8]$/.test(e.key)) { e.preventDefault(); fireMacro(+e.key.slice(1)); return; }
   if (e.key === 'Escape') { e.preventDefault(); pendingTx = null; if (txState.active && txState.sch) { audio.stopSidetone(); clearTimeout(txState.timer); txState.active = false; } else wipe(); return; }
   if (typing && e.target.type !== 'range') return;
-  if (e.key === ' ' && !e.repeat) { e.preventDefault(); if (!spaceHeld) { spaceHeld = true; pttDown(); } return; }
-  if (e.key === ' ') { e.preventDefault(); return; }
+  const PK = S.settings.pttKey || ' ';
+  if (e.key === PK && !e.repeat) { e.preventDefault(); if (!spaceHeld) { spaceHeld = true; pttDown(); } return; }
+  if (e.key === PK) { e.preventDefault(); return; }
   if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); bus.emit('tune', 1); }
   if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); bus.emit('tune', -1); }
 }
 function onKeyUp(e) {
-  if (e.key === ' ' && spaceHeld) { spaceHeld = false; e.preventDefault(); pttUp(); }
+  if (e.key === (S.settings.pttKey || ' ') && spaceHeld) { spaceHeld = false; e.preventDefault(); pttUp(); }
 }
 
 export function setContestBar(html) { if (contestBar) contestBar.innerHTML = html; }

@@ -18,7 +18,8 @@ class AudioEngine {
     this.filters = [0, 1, 2, 3].map(() => ctx.createBiquadFilter());
     let n = this.rxIn;
     for (const f of this.filters) { n.connect(f); n = f; }
-    n.connect(this.agc); this.agc.connect(this.af); this.af.connect(this.limiter);
+    this.notch = ctx.createBiquadFilter(); this.notch.type = 'allpass';
+    n.connect(this.notch); this.notch.connect(this.agc); this.agc.connect(this.af); this.af.connect(this.limiter);
     this.limiter.connect(this.master); this.master.connect(ctx.destination);
 
     // white noise buffer
@@ -54,14 +55,16 @@ class AudioEngine {
     return s;
   }
 
-  setMode(mode, width, pitch) {
+  // Manual notch filter (null = off).
+  setNotch(hz) { if (!this.ctx) return; if (!hz) { this.notch.type = 'allpass'; return; } this.notch.type = 'notch'; this.notch.frequency.setTargetAtTime(hz, this.t, 0.01); this.notch.Q.value = 18; }
+  setMode(mode, width, pitch, shift = 0) {
     if (!this.ctx) return;
     this.mode = mode; this.width = width; this.pitch = pitch;
     const [a, b, c, d] = this.filters;
     const set = (f, type, freq, Q) => { f.type = type; f.frequency.setTargetAtTime(freq, this.t, 0.01); f.Q.value = Q; };
     if (mode === 'CW') {
-      const Q = clamp(pitch / width, 0.5, 30);
-      set(a, 'bandpass', pitch, Q); set(b, 'bandpass', pitch, Q);
+      const Q = clamp(pitch / width, 0.5, 30), c0 = clamp(pitch + shift, 200, 2500);
+      set(a, 'bandpass', c0, Q); set(b, 'bandpass', c0, Q);
       set(c, 'lowpass', 3000, 0.7); set(d, 'highpass', 150, 0.7);
     } else if (mode === 'WFM') {
       set(a, 'highpass', 40, 0.7); set(b, 'highpass', 40, 0.7); set(c, 'lowpass', 15000, 0.7); set(d, 'lowpass', 15000, 0.7);
@@ -71,8 +74,9 @@ class AudioEngine {
       set(a, 'highpass', 120, 0.7); set(b, 'highpass', 120, 0.7);
       set(c, 'lowpass', width / 2, 0.7); set(d, 'lowpass', width / 2, 0.7);
     } else {
-      set(a, 'highpass', 250, 0.7); set(b, 'highpass', 250, 0.7);
-      set(c, 'lowpass', 250 + width, 0.7); set(d, 'lowpass', 250 + width, 0.7);
+      const lo = clamp(250 + shift, 50, 2000);
+      set(a, 'highpass', lo, 0.7); set(b, 'highpass', lo, 0.7);
+      set(c, 'lowpass', lo + width, 0.7); set(d, 'lowpass', lo + width, 0.7);
     }
   }
 
@@ -85,6 +89,7 @@ class AudioEngine {
 
   setNoise(rms) { if (this.ctx) this.noiseGain.gain.setTargetAtTime(rms * this.noiseComp(), this.t, 0.05); }
   setAF(v) { if (this.ctx) this.af.gain.setTargetAtTime(v * v * 1.6, this.t, 0.03); }
+  setMaster(v) { if (this.ctx) this.master.gain.setTargetAtTime(0.9 * v, this.t, 0.03); }
   setAGC(v) { if (this.ctx) this.agc.gain.setTargetAtTime(v, this.t, 0.08); }
 
   crash(rms) {

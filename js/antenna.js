@@ -10,6 +10,7 @@ import { RW } from './realworld.js';
 const STATE_POS = () => stateBy(S.op.state) || stateBy('KS');
 import { runSolver } from './em/client.js';
 import { antOwned, feedOwned, maxHeight, owns } from './store.js';
+import { mountYard } from './yard.js';
 import { mountPlanner, autoSize, targetHz, P as planP, antDefaults } from './planner.js';
 
 export const ANT_TYPES = {
@@ -52,13 +53,13 @@ export const heightWl = (ant, fMHz) => (ant.height * 0.3048) / (300 / fMHz);
 // Feed-point impedance. Returns {R, X, f0, m, Rrad}
 // ---- Method-of-Moments impedance table for the game antenna (computed in a worker).
 let mom = { sig: null, blocks: [], busy: false, pendingSig: null };
-export const momSig = (a) => `${a.type}|${a.length}|${a.height}|${a.radials}|${a.type === 'yagi' ? 0 : a.axis}|${a.ground || 'average'}|${a.wire || ''}|${a.insulated !== false}`;
+export const momSig = (a) => `${a.type}|${a.length}|${a.height}|${a.radials}|${a.type === 'yagi' ? 0 : a.axis}|${a.ground || 'average'}|${a.wire || ''}|${a.insulated !== false}|${a.type === 'invv' ? a.droop ?? 40 : ''}`;
 export const momReady = (a = S.antenna) => mom.sig === momSig(a);
 export function gameModel(a) {
   const L = a.length, o = { ground: a.ground || 'average', cond: a.wire || 'AWG 14 copper' };
   switch (a.type) {
     case 'dipole': return buildModel('dipole', { len: L, h: a.height, axis: a.axis }, o);
-    case 'invv': return buildModel('invv', { len: L, h: a.height, droop: 40, axis: a.axis }, o);
+    case 'invv': return buildModel('invv', { len: L, h: a.height, droop: a.droop ?? 40, axis: a.axis }, o);
     case 'vertical': return buildModel('vertical', { len: L, radials: a.radials }, o);
     case 'efhw': return buildModel('efhw', { len: L, h: a.height, cp: 3, ratio: 49 }, o);
     case 'yagi': { const lam = 983.6 / (445 / L); return buildModel('yagi3', { drv: L, refl: L * 1.056, dir: L * 0.95, s1: 0.12 * lam, s2: 0.12 * lam, h: a.height, heading: 0 }, { cond: '½″ aluminium tube', ground: o.ground }); }
@@ -299,9 +300,9 @@ function render() {
     h('div', { class: 'row spread' }, h('h3', {}, '📟 Antenna analyzer'),
       h('div', { class: 'row' }, h('label', { class: 'inline' }, 'Sweep ', bandSel), h('label', { class: 'inline' }, atRig, ' measure at shack end of coax'))),
     canvas, info);
-  const planBox = h('div', { id: 'planner' });
-  root.append(h('div', { class: 'ant-grid' }, controls, h('div', {}, svgBox, an)), planBox);
-  mountPlanner(planBox);
+  const planBox = h('div', { id: 'planner' }), yardBox = h('div', { id: 'yard' });
+  root.append(h('div', { class: 'ant-grid' }, controls, h('div', {}, svgBox, an)), yardBox, planBox);
+  mountYard(yardBox); mountPlanner(planBox);
   renderInfo();
 }
 

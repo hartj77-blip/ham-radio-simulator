@@ -1,7 +1,8 @@
 // Hamfest: earn credits by operating, buy upgrades that change the physics of your station.
 import { S, save } from './state.js';
 import { h, toast, bus } from './util.js';
-import { RIGS, rig } from './rigs.js';
+import { RIGS, rig, gearOf, gear, psuLimitW } from './rigs.js';
+import { GEAR } from './data/gear.js';
 
 export const ITEMS = [
   ...Object.entries(RIGS).filter(([, r]) => r.price).map(([id, r]) => ({ id: `rig-${id}`, cat: 'Radios', name: r.name, price: r.price, icon: id === 'ht' ? '📟' : id === 'sdrrx' ? '📡' : '📻', desc: `${r.cls}. ${r.blurb}` })),
@@ -29,7 +30,23 @@ export function earn(n, why) {
 }
 export const maxHeight = () => (owns('tower100') ? 100 : owns('tower70') ? 70 : owns('mast50') ? 50 : 35);
 // Amplifiers need ~50–100 W of drive, so they only help with a full-power radio.
-export const maxPower = () => { const r = rig(); if (r.maxW >= 50) return owns('amp1500') ? 1500 : owns('amp500') ? 500 : r.maxW; return r.maxW; };
+export const ownsGear = (cat, id) => { const it = GEAR[cat]?.items[id]; return !!it && (freePlay() || it.starter || it.usd === 0 || (S.owned || []).includes(`gear-${cat}-${id}`)); };
+// Why the station can't make full power (shown in the rig builder and radio).
+export function powerChain() {
+  const r = rig(), amp = gearOf('amp'), tuner = gearOf('tuner');
+  const out = { rigW: Math.min(r.maxW, psuLimitW(r)), limits: [] };
+  if (psuLimitW(r) < r.maxW) out.limits.push(`power supply (${gearOf('psu').amps} A) limits the radio to ${psuLimitW(r)} W`);
+  let w = out.rigW;
+  if (amp.out && ownsGear('amp', gear().amp)) {
+    if (amp.mains === 240 && !gear().mains240) out.limits.push(`${amp.name} needs a 240 V circuit — running barefoot`);
+    else if (out.rigW < amp.drive * 0.8) out.limits.push(`${amp.name} needs ~${amp.drive} W of drive; your radio gives ${out.rigW} W`);
+    else w = amp.out;
+  } else if (r.maxW >= 50 && out.rigW >= 50) w = owns('amp1500') ? 1500 : owns('amp500') ? 500 : w;
+  if (tuner.maxW < w) { out.limits.push(`${tuner.name} is rated ${tuner.maxW} W`); w = tuner.maxW; }
+  out.maxW = w;
+  return out;
+}
+export const maxPower = () => powerChain().maxW;
 export const feedOwned = (f) => f === 'RG-58' || f === 'RG-8X' || (f === 'RG-213' && owns('rg213')) || (f === 'LMR-400' && owns('lmr400'));
 export const antOwned = (t) => (t === 'yagi' ? owns('yagi') : t === 'efhw' ? owns('unun') : true);
 

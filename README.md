@@ -15,11 +15,12 @@ Then open https://hartj77-blip.github.io/ham-radio-simulator/ Use headphones. Ch
 | Tab | What you do |
 |---|---|
 | 🔌 **Shack** | Wire the station by clicking connectors: the DC leads to the power supply (polarity matters, and reversing it blows the fuse), coax from the radio's ANT jack through the SWR meter and tuner to the lightning arrestor or the dummy load, ground bonding, mic and paddle. |
-| 📡 **Antenna** | Pick a dipole, inverted-V, quarter-wave vertical with radials, end-fed half-wave or 3-element Yagi. Set the length with **−/+ 1 in / 1 ft** buttons or press **🎯 Auto-size**, set the height, radials and coax, and raise it. Sweep it with the antenna analyzer, which shows the SWR curve plus R and X and tells you how many inches to lengthen or shorten. The **🧭 Site & design planner** below it does the professional design work (see below). |
+| 📡 **Antenna** | Pick a dipole, inverted-V, quarter-wave vertical with radials, end-fed half-wave or 3-element Yagi. Set the length with **−/+ 1 in / 1 ft** buttons or press **🎯 Auto-size**, set the height, radials and coax, and raise it. The **🏡 Antenna builder** hangs it in your yard (see below). Sweep it with the antenna analyzer, which shows the SWR curve plus R and X and tells you how many inches to lengthen or shorten. The **🧭 Site & design planner** below it does the professional design work (see below). |
 | 📻 **Radio** | An HF/6 m/2 m transceiver with a VFO knob, band and mode buttons, IF filters, AGC, RIT, ATT, squelch, an internal ATU, a manual tuner, a rotator, an S/PO/SWR meter and a live waterfall. Listen to CW and SSB QSOs, NCDXF beacons, and the local 2 m repeater, which needs the correct offset and CTCSS tone. |
 | 🏆 **Contests** | Field Day, a DX contest in the style of CQ WW, and a State QSO Party. You can run pileups or search and pounce. The logger works like N1MM, with F-key macros and ESM (Enter Sends Message). After the contest, your log is checked for busted calls, NIL contacts and wrong exchanges. |
 | 🪪 **License** | Study cards and practice exams for Technician, General and Extra, plus a "VE exam" that grants your license and callsign. |
 | 🛠 **Workbench** | A real antenna design tool, described below. |
+| 🧰 **Rig builder** | Build a station from real-world equipment and check it like an engineer (see below). |
 | 🛒 **Hamfest** | Spend credits earned by operating on coax, masts and towers, a Yagi and rotator, CW filters, DSP noise reduction and amplifiers. Each upgrade changes the physics. |
 | 📒 **Logbook** | Confirmed QSOs, progress toward WAS, DXCC and WAC awards, and ADIF export. |
 
@@ -76,14 +77,6 @@ In Career mode Elmer (ham slang for a mentor) walks you through everything, one 
 - **Ask Elmer anything** ("why do I need a ground?", "how do I use a repeater?"). A built-in knowledge base of 30+ topics answers *why* or *how* depending on your question, with Show me links.
 - **One voice:** the exam-topic lessons appear in his panel instead of pop-ups. You can minimize him, turn step-by-step off, restart the tutorial or hide him (⚙).
 
-## 📟 Handheld mode (phones)
-On a phone the app opens to a **handheld radio**, and on desktop you can switch with the 📟 Handheld button.
-
-- **The faceplate:** LCD with channel name, frequency, S-meter, TX/RX and offset/tone indicators; keypad frequency entry; channel up/down; MODE, SHIFT and TONE buttons; and a SCAN that stops on activity.
-- **Built-in memory channels** for what's really around you: local repeater (offset and tone set), 2 m simplex, NOAA Weather Radio, HEAR, the nearest airport tower and ATIS, aviation guard and nearby FM stations. You can save your own too.
-- **Talking:** a big push-to-talk button, plus quick phrases for when you have no microphone.
-- **Getting started:** phone players are handed an HT (5 W, 2 m FM, receive 88–470 MHz including airband AM) on their first launch. The ☰ menu reaches the full station, license study and logbook.
-
 ## 🌎 The real world around your radio
 The radio is a general-coverage receiver from 0.5 to 470 MHz (it can transmit only in the ham bands). The world it hears is built from live public data. All sources are free, need no API key, and allow browser access (CORS).
 
@@ -109,6 +102,81 @@ Propagation applies to every station: MW groundwave by day and long-distance sky
 - **Accuracy:** expect about 1–3% on resonance in the model. A real site adds a few % (insulation, trees, house wiring). Measure, then trim.
 
 The game's own antennas use the same solver, including your chosen ground type, wire gauge and a 3% insulated-wire correction.
+
+## 🧰 Rig builder: real-world equipment
+Pick each part of the station from a catalog of real models with approximate published specs:
+
+| Slot | Examples |
+|---|---|
+| Radios | IC-7300, FT-991A, FT-710, TS-590SG, FT-891, IC-705, Xiegu G90, Elecraft K4D |
+| Handhelds | UV-5R, UV-K5, FT-60R, TH-D75 |
+| Receivers | RTL-SDR V4, RSPdx |
+| Power supplies | Astron, Alinco, Powerwerx, SLA and LiFePO4 batteries |
+| Tuners | LDG Z-100Plus, MFJ-949E, Palstar AT2K |
+| Meters | Daiwa CN-901, Diamond SX-200, TelePost LP-500 |
+| Amplifiers | AL-811H, KPA500, ACOM 1000, SPE 1.3K-FA |
+| Other | Heil mics, paddles and keys, lightning arrestors |
+
+Each choice really changes the simulation:
+
+- **Power supply:** a supply with too few amps limits your output. A switching supply adds hash on the low bands.
+- **Amplifier:** it needs enough drive from the radio, and some need a 240 V circuit.
+- **Tuner and meter:** each has a power rating. A tuner that is too small limits your power.
+- **Receivers:** each has its own coverage and gaps. For example, the UV-5R has no airband. Receivers also differ in how quiet they are and in features such as scope, IF shift, notch and preamps.
+- **Microphone:** a better mic, plus the speech compressor, adds talk power on SSB.
+
+The engineering check flags every problem and shows the cost, weight and current draw. The builder also draws your desk with the gear and cables. In Career mode you buy gear with credits.
+
+*Specs are approximate, and model names only identify equipment. This game has no affiliation with any manufacturer.*
+
+## 🎛 Radio master view
+Press **🎛 Master view** on the radio to see every control at once:
+
+- **VFO:** A/B, A=B, SPLIT and "UP 5". In split, you transmit on VFO B.
+- **RF front end:** preamp 1/2, ATT 6/12/18 dB and RF gain.
+- **IF and DSP:** AGC fast/mid/slow/off, IF shift, noise blanker, NR, and a manual notch that removes carriers.
+- **CW:** keyer speed and pitch.
+- **Transmit:** power, mic gain with an ALC meter (too much splatters), and the speech compressor.
+
+All of these change what you hear and how your signal goes out. The view also includes a live diagram of the receive and transmit chains, from antenna to speaker and from mic to antenna, with the real numbers flowing through them.
+
+## 🌍 World view
+A map and a list of everything on the air, organized by what each service is used for. You can toggle each kind of service on or off: amateur HF, VHF and repeaters, beacons, time stations, AM and FM broadcast, aviation, weather, public safety and real players. Each kind comes with a short explanation of its use. You can switch between **My area** (250 km) and **World**, and click a marker or Tune to listen.
+
+## 📟 Handheld (phones)
+On a phone the app opens to a **handheld radio**. On desktop, switch with the 📟 Handheld button. Phone players get a UV-5R the first time they start.
+
+- **Built-in memory channels** for what's really around you: local repeater (offset and tone set), 2 m simplex, NOAA Weather Radio, HEAR, the nearest airport tower and ATIS, aviation guard and nearby FM stations. You can save your own too.
+
+The handheld works like a real dual-band HT:
+
+- **Display:** two lines, A and B. Use **VFO/MR** to switch between frequency and memory-channel modes, **A/B** to pick a line, and **BAND** to cycle through VHF, UHF, FM broadcast and airband.
+- **Keypad:** type six digits to set a frequency. **\*** starts a scan and **#** locks the keypad when held.
+- **MENU:** a numbered menu on the LCD with SQL, STEP, TX power, shift, offset, CTCSS tone, beep and memory channels. Use ▲▼ to choose and MENU to edit.
+- **Side keys and knob:** a PTT bar, **MONI** to open the squelch, **CALL** for the FM broadcast radio, and a volume knob.
+- **Models:** choose a UV-5R, UV-K5, FT-60R or TH-D75 from ☰. Each has its own coverage, modes and display.
+
+On iPad and other touch screens, buttons and sliders get bigger automatically, the tabs scroll sideways, and the radio layout adapts to the screen.
+
+## 🏡 Antenna builder (Antenna tab)
+You hang your antenna in your own yard:
+
+- **Your yard:** set the trees, house and mast (height and position) and the width of your lot.
+- **What it works out:** the real height at the feed point including sag, how much rope you need, how far an inverted-V's legs droop (which changes its resonance in the solver), the slope of an end-fed, the footprint of radials, and whether the wire fits at all. It warns you about ends hanging low.
+- **Hang it here:** applies the result to your antenna.
+- **Bill of materials:** a full list with typical prices, including wire, balun or unun, insulators, rope, pulleys, throw line, coax, connectors, weatherproofing and arrestor.
+- **Build steps:** a six-step checklist from measuring the wire to sweeping with the analyzer.
+
+## ⚙ Settings
+Press ⚙ in the top bar:
+
+- **Audio:** master volume, band-noise level, static crashes on or off, sidetone volume and pitch, AI voices on or off.
+- **Display:** text and control size, touch mode, which view the app opens in (handheld or station, useful on iPad), PTT on the left for left-handed users, reduced motion.
+- **Gameplay:** game mode, Elmer and the tutorial, the goal bar, Explain mode, and how patient AI operators are.
+- **Operating:** PTT key and CW speed.
+- **Time:** time warp and space weather.
+- **Location and privacy:** your location settings.
+- **Your data:** export and import your save, or reset.
 
 ## 🧭 Site & design planner (Antenna tab)
 The professional design steps, using your real site:

@@ -1,6 +1,7 @@
 // Radio models. Each has real-world-style limits that change how the sim behaves.
-// (Generic names — modelled on common classes of radios, not specific brands.)
+// Generic classes of radio, plus the real-world catalog in data/gear.js.
 import { S } from './state.js';
+import { REAL_RIGS, GEAR } from './data/gear.js';
 
 const HF6 = ['160m', '80m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m'];
 export const RIGS = {
@@ -35,6 +36,28 @@ export const RIGS = {
     blurb: 'For listening only: shortwave, broadcast, airband, weather, scanners. No license needed.',
   },
 };
+Object.assign(RIGS.allmode, { drawA: 22, look: 'classic', ifs: true, notch: true, preamps: 1, agc: true });
+Object.assign(RIGS.sdr100, { drawA: 21, look: 'touch', ifs: true, notch: true, preamps: 2, agc: true });
+Object.assign(RIGS.qrp, { drawA: 2.5, look: 'portable', preamps: 1, agc: true });
+Object.assign(RIGS.contest, { drawA: 22, look: 'contest', ifs: true, notch: true, preamps: 2, agc: true });
+Object.assign(RIGS.ht, { drawA: 1.6, look: 'ht', ht: { body: '#1a1c1f', accent: '#5ee08a', lcd: 'green', keys: 'classic' } });
+Object.assign(RIGS.sdrrx, { drawA: 0.4, look: 'sdr' });
+Object.assign(RIGS, REAL_RIGS);
 export const rig = () => RIGS[S.rig] || RIGS.allmode;
+// Can the current receiver tune this frequency? (some radios have gaps, e.g. no airband)
+export const rigRx = (hz, r = rig()) => (r.rxBands ? r.rxBands.some(([a, b]) => hz >= a && hz <= b) : hz >= r.rx[0] && hz <= r.rx[1]);
+export const isHT = (r = rig()) => r.look === 'ht';
+
+// Station accessories chosen in the Rig builder (power supply, tuner, meter, amp, mic, key).
+export const GEAR_DEFAULT = { psu: 'gen30', tuner: 'gen300', meter: 'gen200', amp: 'none', mic: 'stock', key: 'gen', arrestor: 'gen', mains240: false };
+export const gear = () => (S.gear = { ...GEAR_DEFAULT, ...(S.gear || {}) });
+export const gearOf = (cat) => GEAR[cat].items[gear()[cat]] || Object.values(GEAR[cat].items)[0];
+// Power the supply can actually deliver: the radio needs ~drawA at full output (+2 A receive).
+export function psuLimitW(r = rig()) {
+  const p = gearOf('psu');
+  if (!r.maxW || !r.drawA) return Infinity;
+  if (p.amps >= r.drawA) return Infinity;
+  return Math.max(1, Math.floor(r.maxW * Math.max(0, (p.amps - 2) / (r.drawA - 2)) / 5) * 5);
+}
 export const rigCanTx = (bandName) => rig().tx.includes(bandName);
 export const rigMaxW = (hz) => (rig().maxWvhf && hz > 100e6 ? rig().maxWvhf : rig().maxW);
