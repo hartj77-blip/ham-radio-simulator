@@ -3,7 +3,7 @@ import { S, save } from './state.js';
 import { h, toast, bus, $ } from './util.js';
 import { elmer } from './elmer.js';
 import { audio } from './audio.js';
-import { rig, gearOf } from './rigs.js';
+import { rig, gearOf, isHT } from './rigs.js';
 
 const DEV = {
   psu: { x: 30, y: 290, w: 180, h: 120, label: '13.8 V DC · 30 A power supply' },
@@ -57,6 +57,9 @@ export const isConnected = connected;
 const toBus = (id) => partners(id).some((p) => p.startsWith('gb')) || partners(id).some((p) => p !== id && P[p].t === 'gnd' && partners(p).some((q) => q.startsWith('gb')));
 
 export function rigStatus() {
+  // A handheld is self-contained: internal battery, its own antenna and a built-in microphone.
+  // It never depends on the desk wiring.
+  if (isHT()) return { powered: true, battery: true, dcOK: true, dcRev: false, end: 'antenna', hasMeter: false, hasTuner: false, reversedMeter: false, grounded: true, arrGrounded: true, mic: true, key: false, issues: [], antennaOk: !!S.antenna.built };
   const sh = S.shack;
   const dcOK = connected('rig_red', 'psu_pos') && connected('rig_blk', 'psu_neg');
   const dcRev = connected('rig_red', 'psu_neg') || connected('rig_blk', 'psu_pos');

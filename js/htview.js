@@ -10,7 +10,7 @@ import { RW, WX_CHANNELS, HEAR, wantBroadcast, wantAirports } from './realworld.
 import { rig, rigRx, RIGS, isHT } from './rigs.js';
 import { sUnits } from './propagation.js';
 import { net } from './net.js';
-import { openStation, applySetup } from './setups.js';
+import { openStation, applySetup, cutFor } from './setups.js';
 import { audio } from './audio.js';
 
 export const isPhone = () => window.matchMedia('(max-width: 760px)').matches || (window.matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600);
@@ -61,7 +61,29 @@ function selectCh(i) {
   load(); save(); draw();
 }
 
+// Pick up a handheld: switch to a handheld radio with its own rubber-duck antenna, and
+// remember the base station so it comes back when you return to the full station.
+function takeHandheld() {
+  if (isHT()) return;
+  S.htPrev = { rig: S.rig || 'allmode', antenna: { ...S.antenna }, freq: S.radio.freq, mode: S.radio.mode, power: S.radio.power };
+  S.rig = S.htRig && RIGS[S.htRig]?.look === 'ht' ? S.htRig : 'uv5r';
+  S.antenna = { ...S.antenna, type: 'vertical', length: cutFor('vertical', '2m'), radials: 0, feed: 'RG-58', feedLen: 0.5, height: 5, built: true, sizedBy: 'auto' };
+  S.radio.power = Math.min(S.radio.power, rig().maxW);
+  if (!rigRx(S.radio.freq)) { S.radio.freq = HT().vfo[HT().act].f; S.radio.mode = 'FM'; }
+  save(); bus.emit('rig'); bus.emit('antenna');
+}
+function putDownHandheld() {
+  const p = S.htPrev;
+  if (!p || !isHT()) return;
+  S.htRig = S.rig;
+  S.rig = p.rig; S.antenna = p.antenna; S.radio.power = p.power ?? S.radio.power;
+  delete S.htPrev;
+  save(); bus.emit('rig'); bus.emit('antenna'); bus.emit('antenna-rebuild');
+  setFreq(p.freq, { mode: p.mode }); setMode(p.mode);
+}
+
 export function showHT(on) {
+  if (on) takeHandheld(); else putDownHandheld();
   document.body.classList.toggle('ht-view', !!on);
   S.settings.view = on ? 'ht' : 'station';
   save();
