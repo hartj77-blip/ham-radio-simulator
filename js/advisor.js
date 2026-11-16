@@ -40,6 +40,7 @@ const HF = BANDS.filter((b) => !['6m', '2m'].includes(b.name));
 const fOf = (b) => (b.lo + b.hi) / 2e6;
 const lam = (f) => 984 / f; // wavelength in ft
 const ft = (x) => `${Math.round(x)} ft`;
+const an = (w) => (/^[aeiou]/i.test(w) ? `an ${w}` : `a ${w}`);
 const m = (x) => `${Math.round(x)} m`;
 
 function dest(p, brg, km) {
@@ -150,13 +151,13 @@ function buildPlan(envId, goal, site, found) {
   // --- radio
   let rig, alt = null; const RW_ = [];
   if (goal === 'listen') { rig = 'sdrrx'; RW_.push(`A wideband SDR receiver covers everything from AM broadcast to airband and 70 cm in one box, shows a waterfall of whole bands, and needs no licence.`); }
-  else if (['park', 'summit'].includes(envId)) { rig = 'qrp'; alt = 'ht'; RW_.push(`At a ${where} every gram and every amp-hour counts: a 10 W battery transceiver draws about 2.5 A on transmit versus over 20 A for a 100 W base radio, so a small LiFePO4 pack lasts a whole activation. 10 W is about 1 S-unit below 100 W; CW and FT8 make up the difference.`); }
+  else if (['park', 'summit'].includes(envId)) { rig = 'qrp'; alt = 'ht'; RW_.push(`At ${an(where)} every gram and every amp-hour counts: a 10 W battery transceiver draws about 2.5 A on transmit versus over 20 A for a 100 W base radio, so a small LiFePO4 pack lasts a whole activation. 10 W is about 1 S-unit below 100 W; CW and FT8 make up the difference.`); }
   else if (envId === 'vehicle') { rig = 'allmode'; RW_.push('A 100 W all-band radio with a detachable head is the classic mobile installation: HF on the loaded whip, 2 m FM on a roof magmount. Wire it directly to the battery with fuses in both leads.'); }
   else if (['apartment', 'hoa'].includes(envId)) {
     rig = 'allmode'; alt = goal === 'local' ? 'ht' : 'qrp';
-    RW_.push(`An all-band base radio gives you HF and 2 m from one box, with an internal tuner for the compromise antennas a ${where} allows. Run it at 25–50 W: the antenna is close to people and to your neighbours' electronics, and halving power costs only half an S-unit.`);
+    RW_.push(`An all-band base radio gives you HF and 2 m from one box, with an internal tuner for the compromise antennas ${an(where)} allows. Run it at 25–50 W: the antenna is close to people and to your neighbours' electronics, and halving power costs only half an S-unit.`);
   } else if (goal === 'dx' && envId === 'rural') { rig = 'contest'; RW_.push(`At a quiet rural site the band noise is about ${-E.noise} dB lower than in town, so the receiver's own noise and its narrow filters start to matter: a contest-grade receiver pulls out the weak DX a town station never hears. (In a city, the band noise would swamp that advantage.)`); }
-  else if (goal === 'dx') { rig = 'sdr100'; RW_.push(`For DX, a direct-sampling SDR transceiver gives a wide waterfall to spot openings, narrow CW filters and DSP noise reduction — useful against the ${E.noise > 0 ? 'higher ' : ''}man-made noise of a ${where}.`); }
+  else if (goal === 'dx') { rig = 'sdr100'; RW_.push(`For DX, a direct-sampling SDR transceiver gives a wide waterfall to spot openings, narrow CW filters and DSP noise reduction — useful against the ${E.noise > 0 ? 'higher ' : ''}man-made noise of ${an(where)}.`); }
   else { rig = 'allmode'; RW_.push('An all-band 100 W base transceiver (HF, 6 m and 2 m) is the best first radio: every band and mode, an internal tuner, a spectrum scope and general-coverage receive.'); }
   if (goal === 'local' && !alt && rig !== 'qrp') { alt = 'ht'; RW_.push('Add a dual-band handheld as a go-kit: in an emergency you take it with you, and it reaches the local repeaters from almost anywhere in town.'); }
   if (alt === 'qrp') RW_.push('Alternative: a 10 W QRP field radio. Less power means less interference to neighbours and a smaller RF-exposure distance, and it goes to the park when you want a better antenna site.');
@@ -169,6 +170,7 @@ function buildPlan(envId, goal, site, found) {
   if (envId === 'vehicle') Object.assign(A, { type: 'vertical', band: '20m', note: 'loaded HF whip (about 7 ft)' });
   else if (envId === 'boat') Object.assign(A, { type: 'vertical', band: '20m', note: 'insulated backstay with an automatic tuner at its base' });
   else if (goal === 'listen') Object.assign(A, { type: 'efhw', band: '40m', note: 'long wire for receiving' });
+  else if (goal === 'local' && envId === 'apartment') Object.assign(A, { type: 'efhw', band: '40m', multi: true, note: 'from the balcony to the courtyard tree' });
   else if (goal === 'local') Object.assign(A, { type: pick('dipole', 'invv', 'efhw'), band: '40m', nvis: true });
   else if (goal === 'dx') {
     if (['beach'].includes(envId)) Object.assign(A, { type: 'vertical', band: '20m' });
@@ -190,7 +192,7 @@ function buildPlan(envId, goal, site, found) {
   if (A.type === 'vertical') A.height = envId === 'vehicle' ? 4 : 0;
   else if (A.nvis) A.height = Math.round(clamp(0.2 * lamFt, 12, avail));
   else A.height = Math.round(clamp(ideal, 10, avail));
-  A.region = A.nvis || A.type === 'vertical' || A.type === 'efhw' && goal === 'listen' ? null : bestRegion(me, bf, site, A.height * FT);
+  A.region = A.nvis || envId === 'apartment' || A.type === 'vertical' || A.type === 'efhw' && goal === 'listen' ? null : bestRegion(me, bf, site, A.height * FT);
   A.axis = A.region ? ((Math.round((((A.region.brg + 90) % 180) + 180) % 180 / 45) * 45) % 180) : (S.antenna.axis || 0);
   A.heading = A.region ? Math.round(A.region.brg) : (S.antenna.heading || 45);
   const lab = ANT_TYPES[A.type].label;
@@ -201,15 +203,16 @@ function buildPlan(envId, goal, site, found) {
     vertical: envId === 'vehicle' ? 'On a vehicle only a vertical is practical: a loaded whip about 7 ft long, using the car body as its ground. It is a compromise (about −4 dB on 20 m, −8 dB on 40 m) but a mobile station works the whole country.' : (E.ground === 'salt' ? 'Over salt water a vertical is the best antenna there is: the sea is an almost perfect ground plane, so it radiates at the very low angles that reach other continents — the reason DXpeditions set up at the water\'s edge.' : 'A quarter-wave vertical radiates equally in all directions at low angles, which suits long distance; it needs radials (16 or more on the ground) to be efficient.'),
     yagi: `A 3-element Yagi on a rotator: about 6 dB of gain toward the target and 15–20 dB rejection from behind. With space and a tower, nothing improves DX more on 20 m.`,
   };
-  A.why.push(['Type', `${lab}${A.note ? ` (${A.note})` : ''}. ${typeWhy[A.type]}${!T.includes('yagi') && goal === 'dx' ? ` A beam is not practical at a ${where}.` : ''}`]);
+  A.why.push(['Type', `${lab}${A.note ? ` (${A.note})` : ''}. ${typeWhy[A.type]}${!T.includes('yagi') && goal === 'dx' ? ` A beam is not practical at ${an(where)}.` : ''}`]);
   A.why.push(['Length', `${A.length} ft${['dipole', 'invv'].includes(A.type) ? ` (two legs of ${(A.length / 2).toFixed(1)} ft)` : ''}, from ${({ dipole: 468, invv: 455, vertical: 234, efhw: 456, yagi: 445 })[A.type]} / f(MHz) at ${bf.toFixed(2)} MHz. Cut it a little long and trim it while watching the SWR dip — nearby objects shift resonance a few percent.${A.type === 'dipole' && A.length + 10 > H.lot ? ` It is longer than your ${H.lot} ft of space, so let the ends drop or bend.` : ''}`]);
   if (A.type === 'vertical') A.why.push(['Height', envId === 'vehicle' ? 'On the trunk lip or roof, as high and as central on the metal body as you can.' : E.ground === 'salt' ? 'At ground level, within a wavelength of the water — the closer to the sea, the lower the take-off angle.' : `Ground-mounted with radials, or elevated on a support with 2–4 elevated radials. Height is not critical for a vertical; the radial system is.`]);
   else if (A.nvis) A.why.push(['Height', `${ft(A.height)} (${(A.height / lamFt).toFixed(2)} λ). For near-vertical incidence skywave (NVIS) a low dipole — 0.1 to 0.25 λ — sends most energy straight up, and the ionosphere returns it within 0–600 km with no skip zone. That is why emergency networks use 40 m by day and 80 m at night on low wires.`]);
-  else A.why.push(['Height', `${ft(A.height)} (${(A.height / lamFt).toFixed(2)} λ). ${goal === 'dx' ? 'Long distance needs a main lobe near 12°' : 'General use wants a main lobe near 25°'}, which a horizontal antenna gets at ${ft(ideal)} (h = λ / 4 sin θ)${ideal > avail ? `; the tallest usable ${A.type === 'dipole' ? 'pair of supports' : 'support'} at your site is ${ft(avail)}, so go as high as you can — every extra foot lowers the angle` : '; your supports reach that'}.${H.floorFt && A.type !== 'yagi' ? ` The building raises it ${H.floorFt} ft above the street, but the roof and floors below act as a lossy ground.` : ''}`]);
+  else A.why.push(['Height', `${ft(A.height)} (${(A.height / lamFt).toFixed(2)} λ). ${goal === 'dx' ? 'Long distance needs a main lobe near 12°' : 'General use wants a main lobe near 25°'}, which a horizontal antenna gets at ${ft(ideal)} (h = λ / 4 sin θ)${ideal > avail ? `; ${A.type === 'yagi' ? `your tower puts the boom at ${ft(avail)}; a 50–70 ft tower is the classic upgrade, because every extra foot lowers the angle` : `the tallest usable ${A.type === 'dipole' ? 'pair of supports' : 'support'} at your site is ${ft(avail)}, so go as high as you can — every extra foot lowers the angle`}` : '; your supports reach that'}.${H.floorFt && A.type !== 'yagi' ? ` The building raises it ${H.floorFt} ft above the street, but the roof and floors below act as a lossy ground.` : ''}`]);
   if (A.region) {
     const t = A.region.t;
     A.why.push([A.type === 'yagi' ? 'Direction' : 'Orientation', `${A.type === 'yagi' ? `Point the beam at ${A.heading}°` : `Run the wire ${['N–S', 'NE–SW', 'E–W', 'NW–SE'][A.axis / 45]} so its broadside lobes point at ${Math.round(A.region.brg)}° and the reverse`}: toward ${A.region.name} (${Math.round(A.region.dist).toLocaleString()} km), the region with the strongest predicted opening on ${A.band} from ${g4} over the day${t ? `. The terrain that way ${t.slope < -0.5 ? `falls away (${t.slope.toFixed(1)}°), which lowers your take-off angle — free gain` : t.slope > 0.5 ? `rises (${t.slope.toFixed(1)}°), which raises your take-off angle slightly` : 'is flat'}${t.horizon > 1 ? ` and hills block angles below ${t.horizon.toFixed(1)}°` : ''}` : ''}.`]);
   } else if (A.type !== 'vertical' && !A.nvis) A.why.push(['Orientation', 'Not critical here: a low or end-fed wire on several bands radiates in many directions.']);
+  else if (envId === 'apartment') A.why.push(['Orientation', `Set by your building: run the wire from the balcony toward the courtyard tree (or along the outside wall) — getting it outside and away from the concrete matters far more than its direction.${goal === 'local' ? ' A wire this high is not an NVIS antenna, so for local work 2 m from the balcony is your main tool and HF covers the regional nets on 40 m.' : ''}`]);
   else if (A.nvis) A.why.push(['Orientation', 'Not critical for NVIS: a low dipole radiates nearly straight up, so its signal comes down in all directions around you.']);
   out.hf = A;
 
@@ -220,7 +223,7 @@ function buildPlan(envId, goal, site, found) {
   V.needRoof = !['vehicle', 'park', 'summit'].includes(envId) && V.simplex > V.ht * 1.25;
   V.why = [
     ['Horizon', `Radio horizon d ≈ 4.12 (√h₁ + √h₂) km with heights in metres (the 4/3-earth radio horizon). Your antenna at about ${ft(hAgl)} ${haat != null && haat > 5 ? `plus the ${m(haat)} you sit above the surrounding terrain ` : ''} gives ≈ ${V.simplex.toFixed(0)} km to another base station 10 m up, and ≈ ${V.rpt.toFixed(0)} km to a repeater 150 m above the terrain.${haat != null && haat < -20 ? ` You sit about ${m(-haat)} below the average terrain around you, so higher ground will shadow some directions; a repeater on a hilltop is the way over it.` : ''}`],
-    ['Antenna', V.needRoof ? `Yes, put an outdoor antenna up: a handheld at street level reaches only ≈ ${V.ht.toFixed(0)} km simplex, and indoors it loses another 10–20 dB to the walls. A quarter-wave ground plane or a collinear at ${ft(hAgl)} ${envId === 'apartment' ? 'on the balcony — your floor height is the best thing about an apartment for VHF' : envId === 'city' ? 'on the roof, the best VHF site in town' : 'on the mast or roof'} more than doubles your coverage.` : envId === 'vehicle' ? 'A 5/8-wave magmount in the middle of the roof: the metal roof is its ground plane, and it is 3 dB better than a quarter wave at low angles.' : `A handheld with a better antenna (a 19-inch quarter-wave whip or a roll-up J-pole hung high) is enough at a ${where}: being up on a hill or out in the open is what counts on VHF.`],
+    ['Antenna', V.needRoof ? `Yes, put an outdoor antenna up: a handheld at street level reaches only ≈ ${V.ht.toFixed(0)} km simplex, and indoors it loses another 10–20 dB to the walls. A quarter-wave ground plane or a collinear at ${ft(hAgl)} ${envId === 'apartment' ? 'on the balcony' : envId === 'city' ? 'on the roof' : 'on the mast or roof'} more than doubles your coverage${envId === 'apartment' ? ' — your floor height is the best thing about an apartment for VHF' : envId === 'city' ? ' — a rooftop is the best VHF site in town' : ''}.` : envId === 'vehicle' ? 'A 5/8-wave magmount in the middle of the roof: the metal roof is its ground plane, and it is 3 dB better than a quarter wave at low angles.' : `A handheld with a better antenna (a 19-inch quarter-wave whip or a roll-up J-pole hung high) is enough at ${an(where)}: being up on a hill or out in the open is what counts on VHF.`],
     ['Repeaters', `Typical repeaters sit on hills or towers and cover 40–80 km for a mobile. From your antenna, line of sight to a well-sited repeater is ≈ ${V.rpt.toFixed(0)} km; a handheld at ground level gets ≈ ${V.htRpt.toFixed(0)} km. Beyond the horizon, signals drop fast.`],
     ['Feedline', `At 146 MHz coax loss is 3–4× higher than on HF: ${FEED_LEN[envId]} ft of RG-58 loses ${feedLossDb('RG-58', FEED_LEN[envId], 146).toFixed(1)} dB, LMR-400 only ${feedLossDb('LMR-400', FEED_LEN[envId], 146).toFixed(1)} dB.`],
   ];
@@ -254,7 +257,7 @@ function buildPlan(envId, goal, site, found) {
     beach: 'Keep the antenna away from the tide line in wet salt sand, and leave at the first thunder: an open beach is a lightning hazard.',
   };
   P.push(['Grounding', G[envId]]);
-  if (pw) P.push(['RF exposure', `Every station must evaluate RF exposure (FCC §1.1310 and §97.13 in the US). At ${pw} W of FT8 on 10 m, keep people at least ≈ ${rfx(pw, 28.5).toFixed(1)} m from the antenna (≈ ${rfx(pw, 14.2).toFixed(1)} m on 20 m).${['apartment', 'city', 'hoa'].includes(envId) ? ` At a ${where} that includes neighbours on the next balcony or floor${['apartment'].includes(envId) ? ' — another reason to run 50 W or less' : ''}.` : ''}`]);
+  if (pw) P.push(['RF exposure', `Every station must evaluate RF exposure (FCC §1.1310 and §97.13 in the US). At ${pw} W of FT8 on 10 m, keep people at least ≈ ${rfx(pw, 28.5).toFixed(1)} m from the antenna (≈ ${rfx(pw, 14.2).toFixed(1)} m on 20 m).${['apartment', 'city', 'hoa'].includes(envId) ? ` At ${an(where)} that includes neighbours on the next balcony or floor${['apartment'].includes(envId) ? ' — another reason to run 50 W or less' : ''}.` : ''}`]);
   out.powerWhy = P;
 
   // --- rules & neighbours
@@ -292,7 +295,8 @@ function apply(p) {
   S.radio.atuTunedFreq = null;
   save();
   bus.emit('rig'); bus.emit('shack'); bus.emit('antenna'); bus.emit('antenna-rebuild');
-  toast(`Station applied: <b>${RIGS[S.rig].name}</b> (${RIGS[S.rig].code}) with a ${ANT_TYPES[a.type].label.toLowerCase()} cut to ${a.length} ft${a.type !== 'vertical' ? ` at ${a.height} ft` : ''}, ${a.feedLen} ft of ${a.feed}. Started from the "${pre.name}" preset.`, 'good', 9000);
+  const hfNote = !hfPreset && p.goal !== 'listen' ? ` Build the plan's ${ANT_TYPES[A.type].label.split(' (')[0].toLowerCase()} for HF on the Antenna page.` : '';
+  toast(`Station applied: <b>${RIGS[S.rig].name}</b> (${RIGS[S.rig].code}) with ${an(ANT_TYPES[a.type].label.toLowerCase())} cut to ${a.length} ft${a.type !== 'vertical' ? ` at ${a.height} ft` : ''}, ${a.feedLen} ft of ${a.feed}. Started from the "${pre.name}" preset.${hfNote}`, 'good', 9000);
 }
 
 // ------------------------------------------------------------------ UI
@@ -304,7 +308,7 @@ function renderPlan(p, close, back) {
   const A = p.hf, V = p.vhf, R = RIGS[p.rig], site = p.site;
   const nodes = [];
   nodes.push(h('div', { class: 'row spread' },
-    h('div', {}, h('div', { class: 'eyebrow' }, 'Station plan'), h('h2', {}, `${GOALS[p.goal].label} station at a ${p.E.label.toLowerCase()}, ${p.g6.slice(0, 4)}`)),
+    h('div', {}, h('div', { class: 'eyebrow' }, 'Station plan'), h('h2', {}, `${GOALS[p.goal].label} station at ${an(p.E.label.toLowerCase())}, ${p.g6.slice(0, 4)}`)),
     h('button', { class: 'btn ghost small', onclick: back }, 'Change answers')));
   nodes.push(h('div', { class: 'readouts sp-glance' },
     ro('Radio', `${R.code} · ${R.name}`), ro('HF antenna', p.goal === 'listen' ? 'Long wire' : `${ANT_TYPES[A.type].label.split(' (')[0]}, ${A.band}`),
