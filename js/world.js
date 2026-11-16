@@ -1,5 +1,6 @@
 // The simulated ham bands: AI operators who call CQ, ragchew, run contests,
 // answer your CQ in pileups, plus NCDXF beacons and a local 2 m repeater.
+import { rig } from './rigs.js';
 import { S, save } from './state.js';
 import { rand, randi, pick, chance, poisson, weighted, lev, bus, now, clamp, seeded } from './util.js';
 import { BANDS, bandOf } from './data/bandplan.js';
@@ -117,7 +118,9 @@ export const world = {
   rxDbm(st, fHz = st.freq) {
     const me = player();
     if (!st.path || now() - st.path.t > 15 || st.path.f !== Math.round(fHz / 1e5)) {
-      const p = st.txHeight && fHz >= 30e6 ? losPath(st.op, me, fHz / 1e6, st.txHeight) : propPath(st.op, me, fHz / 1e6);
+      // your antenna's height above ground (balcony/roof/mast) sets your radio horizon on VHF
+      const myH = rig().look === 'ht' ? 1.5 : Math.max(2, (S.antenna.agl ?? (S.antenna.type === 'vertical' ? 6 : S.antenna.height)) * 0.3048);
+      const p = st.txHeight && fHz >= 30e6 ? losPath(st.op, me, fHz / 1e6, st.txHeight, myH) : propPath(st.op, me, fHz / 1e6);
       st.path = { loss: p.loss, mode: p.mode, dist: p.dist, brg: bearing(me, st.op), t: now(), f: Math.round(fHz / 1e5) };
     }
     const g = rxAntGain(fHz, st.path.brg, st.path.dist, st.mode === 'FM' ? 'FM' : 'SSB');
