@@ -4,7 +4,7 @@ import { h, bus } from './util.js';
 import { icon } from './icons.js';
 import { STEPS } from './training.js';
 
-const CATS = ['Station', 'Antennas', 'Measurement & tuning', 'Receiving', 'Propagation', 'Operating', 'Reference'];
+const CATS = ['Self-study', 'Station', 'Antennas', 'Measurement & tuning', 'RF analysis', 'Receiving', 'Propagation', 'Operating', 'Etiquette & protocols', 'Reference'];
 let root, current = null, query = '';
 let LIBRARY = [];
 const libById = (id) => LIBRARY.find((a) => a.id === id);
@@ -47,6 +47,6 @@ function render() {
         idx < LIBRARY.length - 1 ? h('button', { class: 'btn ghost small', onclick: () => { current = LIBRARY[idx + 1].id; render(); window.scrollTo({ top: 0 }); } }, LIBRARY[idx + 1].title, h('span', { html: icon('chevronRight') })) : h('span')));
   } else article.append(h('p', { class: 'muted' }, 'No article matches your search.'));
   root.append(h('div', { class: 'page-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Learn'), h('h1', {}, 'Reference library'),
-    h('p', { class: 'lead' }, `${LIBRARY.length} articles covering station wiring, antenna theory and construction, measurement, receiving technique, propagation and operating practice.`))),
+    h('p', { class: 'lead' }, `${LIBRARY.length} articles covering station wiring, antenna theory and construction, RF analysis and measurement, receiving technique, propagation, operating practice, etiquette and protocols, with a free self-study path.`))),
   h('div', { class: 'lib-layout' }, nav, article));
 }

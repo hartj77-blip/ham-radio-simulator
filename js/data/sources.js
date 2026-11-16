@@ -11,6 +11,8 @@ export const REAL = [
   ['Broadcast stations', 'Real AM/FM stations near you, with their live audio streams played from the broadcasters.'],
   ['Airports', 'Real airport locations and published radio frequencies (OurAirports).'],
   ['Time and location', 'Real UTC time and, only if you allow it, your device location (kept in your browser).'],
+  ['Live feeds', 'Everything on the Live feeds page is real: web SDR receivers, scanner, air-band and weather audio, broadcast streams and live propagation spot networks, run by their own operators.'],
+  ['Spectrum analyzer input', 'When you choose the microphone or browser-tab audio, the analyzer measures that real audio in your browser; nothing is recorded or sent anywhere.'],
   ['Other users', 'People shown online are real users of this app; voice between them travels over the internet (WebRTC), never over the air.'],
   ['Historic recordings', 'Mission audio on the Radio history page is real NASA archival audio (public domain), streamed from the Internet Archive.'],
   ['Rules and reference data', 'US band edges and license privileges (FCC Part 97), beacon schedule, repeater conventions and equipment specifications are taken from published sources.'],
@@ -22,6 +24,7 @@ export const SIMULATED = [
   ['Short-range radio', 'CB, FRS walkie-talkie, GMRS and MURS conversations are invented. They are listen-only, as amateur radios may not transmit on those services.'],
   ['Propagation', 'Signal strength and path loss come from a simplified model. It is driven by the live data above when available, but it is not a forecast.'],
   ['Antennas', 'Impedance, SWR and patterns come from a numerical (Method-of-Moments) model. Real installations differ by a few percent.'],
+  ['Analyzer test signals', 'The spectrum analyzer\'s test signals are synthesized to demonstrate measurement techniques.'],
   ['Receiver audio', 'Band noise, static, filtering, AGC, CW tones and synthesized voices.'],
   ['Weather radio and ATIS', 'Real forecast and observation text read by a synthesized voice; aircraft and ambulance traffic is invented.'],
   ['WWV', 'An imitation of the NIST time-signal format, not the real broadcast.'],
@@ -35,7 +38,7 @@ export const SOURCES = [
   ['National Weather Service API', 'Forecasts, observations and alerts', 'https://www.weather.gov/documentation/services-web-api', 'US Government work, public domain'],
   ['Open-Meteo', 'Weather fallback and terrain elevation (Copernicus DEM GLO-90)', 'https://open-meteo.com', 'Data CC BY 4.0; Copernicus DEM copyright DLR/ESA'],
   ['USGS 3D Elevation Program (EPQS)', 'Terrain elevation in the US', 'https://www.usgs.gov/3d-elevation-program', 'US Government work, public domain'],
-  ['Radio Browser', 'Directory of broadcast stations and stream addresses', 'https://www.radio-browser.info', 'Community database; audio streams belong to the broadcasters'],
+  ['Radio Browser', 'Directory of broadcast stations and stream addresses; the Live feeds stream search', 'https://www.radio-browser.info', 'Community database; audio streams belong to the broadcasters'],
   ['OurAirports', 'Airport locations and radio frequencies', 'https://ourairports.com/data/', 'Public domain'],
   ['world-atlas (Natural Earth)', 'Coastlines on the propagation map', 'https://github.com/topojson/world-atlas', 'ISC licence; Natural Earth data is public domain'],
   ['PeerJS and PeerJS Cloud', 'Connecting online users (WebRTC signalling)', 'https://peerjs.com', 'MIT licence'],
@@ -48,6 +51,12 @@ export const SOURCES = [
 
 // Published references the simulation is based on (not downloaded).
 export const REFERENCES = [
+  ['47 CFR §1.1310 and FCC OET Bulletin 65 Supplement B', 'RF exposure limits and duty factors used by the exposure calculator', 'https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-1/subpart-I/section-1.1310'],
+  ['IARU Region 1 Technical Recommendation R.1', 'S-meter calibration (S9 = −73 dBm below 30 MHz, −93 dBm above; 6 dB per S-unit)', null],
+  ['ITU-R Recommendation P.372', 'Typical levels of natural and man-made radio noise', 'https://www.itu.int/rec/R-REC-P.372'],
+  ['Times Microwave LMR datasheets', 'Coax attenuation (k1·√f + k2·f) for LMR cables', 'https://www.timesmicrowave.com'],
+  ['IARU Ethics and Operating Procedures for the Radio Amateur', 'Etiquette and operating-practice articles', 'https://www.iaru-r1.org/on-the-air/eop/'],
+  ['ARRL radiogram and NTS methods', 'Net and formal-traffic procedure', 'https://www.arrl.org'],
   ['FCC 47 CFR Part 97', 'Amateur bands, license privileges, station identification and power rules', 'https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-97'],
   ['NCVEC question pools', 'Topics covered by the practice exams (questions here are original)', 'https://www.ncvec.org'],
   ['ARRL band plan', 'Conventional CW, data and phone segments', 'https://www.arrl.org/band-plan'],
