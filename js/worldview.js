@@ -10,6 +10,7 @@ import { net } from './net.js';
 import { getLand } from './map.js';
 import { rigRx } from './rigs.js';
 import { bandOf } from './data/bandplan.js';
+import { channels, channelPos } from './activity.js';
 
 // Kinds of radio service, with what they're used for.
 export const KINDS = {
@@ -17,11 +18,14 @@ export const KINDS = {
   hamvhf: { label: 'Amateur VHF & repeaters', icon: '', col: '#5ee08a', range: 'local', use: 'Local ragchews, nets, ARES/RACES emergency comms. 2 m FM through repeaters (offset + CTCSS tone).' },
   beacon: { label: 'Propagation beacons', icon: '', col: '#c792ea', range: 'world', use: 'NCDXF/IARU beacons rotate through 5 bands every 3 minutes — hear one and you know the band is open to that region.' },
   time: { label: 'Time & frequency', icon: '', col: '#e8e8e8', range: 'world', use: 'NIST WWV/WWVH: atomic-clock time, frequency standard, and space-weather bulletins at :18 / :45.' },
-  bcam: { label: 'AM broadcast', icon: '', col: '#4fc3f7', range: 'local', use: 'News, talk, sports. 530–1700 kHz: groundwave by day, skywave hundreds of km at night.' },
-  bcfm: { label: 'FM broadcast', icon: '', col: '#29b6f6', range: 'local', use: 'Music and public radio, 88–108 MHz wide FM. Line-of-sight, ~50–100 km.' },
+  land: { label: 'Land mobile', icon: '', col: '#ff9e5e', range: 'local', use: 'Radio as a working tool: fire dispatch with two-tone paging, railroads, highway crews, job sites and stores. Narrow FM on VHF and UHF; much of it is moving to digital (P25, DMR).' },
+  marine: { label: 'Marine VHF', icon: '', col: '#4dd0e1', range: 'local', use: 'Ships, boats, bridges and the Coast Guard, 156–162 MHz FM. Channel 16 is distress and calling; you hail there and move to a working channel.' },
+  pers: { label: 'Personal radio', icon: '', col: '#aed581', range: 'local', use: 'CB (27 MHz AM), FRS and GMRS (462/467 MHz FM) and MURS (151/154 MHz): short-range radio for the public, licence-free or lightly licensed.' },
+  util: { label: 'HF aeronautical', icon: '', col: '#b39ddb', range: 'world', use: 'Oceanic flights are out of VHF range, so they report positions by single sideband on HF. VOLMET reads airport weather on a schedule.' },
   air: { label: 'Aviation', icon: '', col: '#ff7a6b', range: 'local', use: 'Tower, ground, approach and ATIS (recorded weather). AM, 108–137 MHz. 121.5 MHz is the emergency (guard) frequency.' },
   wx: { label: 'Weather & alerts', icon: '', col: '#ffd54f', range: 'local', use: 'NOAA Weather Radio: continuous forecasts and the 1050 Hz alert tone for warnings. 162.400–162.550 MHz.' },
   ems: { label: 'Public safety', icon: '', col: '#ef5350', range: 'local', use: 'HEAR ambulance-to-hospital channel (155.340). Most police and fire radio is now digital or encrypted.' },
+  bc: { label: 'Broadcast (AM/FM)', icon: '', col: '#4fc3f7', range: 'local', use: 'The few strongest local stations. AM 530–1700 kHz: groundwave by day, skywave at night. FM 88–108 MHz: wide FM, line-of-sight.' },
   players: { label: 'Real players', icon: '', col: '#ffffff', range: 'world', use: 'Other people playing right now. Same band + open path = you can talk.' },
 };
 const off = (p, km, seed) => { const a = (seed % 360) * Math.PI / 180; return { lat: p.lat + Math.cos(a) * km / 111, lon: p.lon + Math.sin(a) * km / (111 * Math.cos(p.lat * Math.PI / 180)) }; };
@@ -42,18 +46,23 @@ export function catalog() {
   add('hamvhf', { name: `${S.local?.rpt || 'Local'} repeater`, f: 146.94e6, mode: 'FM', lat: rp.lat, lon: rp.lon, note: '−600 kHz, 100.0 Hz tone', rpt: true });
   add('hamvhf', { name: '2 m simplex calling', f: 146.52e6, mode: 'FM', ...off(me, 4, 77), note: 'national calling frequency' });
   for (const t of TIME_STATIONS) add('time', { name: `${t.call} ${t.f / 1e6} MHz`, f: t.f, mode: 'AM', lat: t.lat, lon: t.lon, note: `${t.kw} kW` });
-  for (const b of RW.broadcast || []) add(b.mode === 'AM' ? 'bcam' : 'bcfm', { name: b.name, f: b.f, mode: b.mode === 'WFM' ? 'WFM' : 'AM', lat: b.lat, lon: b.lon, note: b.state || '' });
+  for (const b of RW.broadcast || []) add('bc', { name: b.name, f: b.f, mode: b.mode === 'WFM' ? 'WFM' : 'AM', lat: b.lat, lon: b.lon, note: b.state || '' });
   for (const a of RW.airports || []) for (const fr of a.freqs.filter((x) => /ATIS|TWR|GND|APP|DEP|CTAF|UNIC|AWOS|ASOS/i.test(x.type)).slice(0, 4)) add('air', { name: `${a.ident} ${fr.type}`, f: Math.round(fr.mhz * 1e6), mode: 'AM', lat: a.lat, lon: a.lon, note: a.name });
   add('air', { name: 'Guard (emergency)', f: 121.5e6, mode: 'AM', ...me, note: 'monitored by all aircraft' });
   const wxp = off(me, 35, hashStr(RW.nws?.office || 'NWS'));
   add('wx', { name: `NOAA Weather Radio${RW.nws?.office ? ` (${RW.nws.office})` : ''}`, f: WX_CHANNELS[hashStr(RW.nws?.office || 'NWS') % 7], mode: 'FM', ...wxp, note: RW.nws?.alerts?.length ? `${RW.nws.alerts[0].event}` : 'forecast & alerts' });
+  for (const c of channels()) add(c.kind, { name: c.name, f: c.f, mode: c.mode === 'SSB' ? c.sb : c.mode, ...channelPos(c, me), note: c.info });
   add('ems', { name: 'HEAR hospital channel', f: HEAR, mode: 'FM', ...off(me, 8, 200), note: 'ambulance ↔ hospital' });
   for (const e of net.roster || []) { const st = stateBy(e.state); if (st) add('players', { name: e.call, f: e.freq, mode: e.mode, lat: st.lat, lon: st.lon, note: `${st.name}${e.tx ? ' · talking' : ''}`, roster: e }); }
   return out;
 }
 
 let root, cv, list, hoverPts = [];
-const V = () => (S.wv ||= { on: Object.fromEntries(Object.keys(KINDS).map((k) => [k, !['hamhf'].includes(k)])), scale: 'local' });
+const V = () => {
+  const v = (S.wv ||= { on: {}, scale: 'local' });
+  for (const k of Object.keys(KINDS)) v.on[k] ??= !['hamhf', 'bc'].includes(k); // kinds added since this was saved
+  return v;
+};
 
 export function initWorldView(el) {
   root = el;
@@ -73,10 +82,10 @@ function render() {
   root.append(h('div', { class: 'card wv-card' },
     h('div', { class: 'row spread wrap' }, h('h3', {}, 'World view — what\'s on the air, by use'),
       h('div', { class: 'row' }, ...[['local', 'My area'], ['world', 'World']].map(([k, l]) => h('button', { class: `rbtn ${v.scale === k ? 'active' : ''}`, onclick: () => { v.scale = k; save(); render(); } }, l)))),
-    h('div', { class: 'wv-chips' }, ...Object.entries(KINDS).map(([k, K]) => h('button', { class: `wv-chip ${v.on[k] ? 'on' : ''}`, style: { '--c': K.col }, title: K.use, onclick: () => { v.on[k] = !v.on[k]; if (v.on[k] && (k === 'bcam' || k === 'bcfm')) wantBroadcast(); if (v.on[k] && k === 'air') wantAirports(); save(); render(); } }, `${K.icon} ${K.label}`)),
-      h('button', { class: 'link small', onclick: () => { for (const k in v.on) v.on[k] = true; wantBroadcast(); wantAirports(); save(); render(); } }, 'all'), h('button', { class: 'link small', onclick: () => { for (const k in v.on) v.on[k] = false; save(); render(); } }, 'none')),
+    h('div', { class: 'wv-chips' }, ...Object.entries(KINDS).map(([k, K]) => h('button', { class: `wv-chip ${v.on[k] ? 'on' : ''}`, style: { '--c': K.col }, title: K.use, onclick: () => { v.on[k] = !v.on[k]; if (v.on[k] && k === 'bc') wantBroadcast(); if (v.on[k] && k === 'air') wantAirports(); save(); render(); } }, `${K.icon} ${K.label}`)),
+      h('button', { class: 'link small', onclick: () => { for (const k in KINDS) v.on[k] = true; wantBroadcast(); wantAirports(); save(); render(); } }, 'all'), h('button', { class: 'link small', onclick: () => { for (const k in v.on) v.on[k] = false; save(); render(); } }, 'none')),
     h('div', { class: 'wv-body' }, cv, list)));
-  if (v.on.bcam || v.on.bcfm) wantBroadcast();
+  if (v.on.bc) wantBroadcast();
   if (v.on.air) wantAirports();
   renderList();
   requestAnimationFrame(draw);
@@ -97,7 +106,7 @@ function renderList() {
   for (const [k, K] of Object.entries(KINDS)) {
     if (!v.on[k]) continue;
     const items = all.filter((x) => x.kind === k).sort((a, b) => a.km - b.km);
-    const status = k === 'bcam' || k === 'bcfm' ? RW.status?.broadcast : k === 'air' ? RW.status?.airports : null;
+    const status = k === 'bc' ? RW.status?.broadcast : k === 'air' ? RW.status?.airports : null;
     list.append(h('div', { class: 'wv-sec' },
       h('div', { class: 'wv-sec-h', style: { borderColor: K.col } }, h('b', {}, `${K.icon} ${K.label}`), h('span', { class: 'tiny muted' }, ` ${items.length}`)),
       h('div', { class: 'tiny muted' }, K.use),

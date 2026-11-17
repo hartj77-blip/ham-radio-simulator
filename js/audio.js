@@ -123,6 +123,30 @@ class AudioEngine {
     return v;
   }
 
+  // Frequency-shift-keyed data (FT8, packet, digital voice). `steps` is [[seconds, Hz], ...]:
+  // offsets added to the oscillator's frequency, so retuning still moves the whole signal.
+  fsk(id, start, dur, toneHz, steps, type = 'sine') {
+    this.remove(id);
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator(); osc.type = type; osc.frequency.value = Math.max(20, toneHz);
+    const key = ctx.createGain(); key.gain.value = 0;
+    const lvl = ctx.createGain(); lvl.gain.value = 0;
+    osc.connect(key); key.connect(lvl); lvl.connect(this.rxIn);
+    key.gain.setTargetAtTime(type === 'sine' ? 1 : 0.5, start, 0.004);
+    key.gain.setTargetAtTime(0, start + dur, 0.004);
+    const end = start + dur + 0.2;
+    if (ctx.createConstantSource) {
+      const sh = ctx.createConstantSource(); sh.offset.value = 0; sh.connect(osc.frequency);
+      for (const [t, hz] of steps) sh.offset.setValueAtTime(hz, start + t);
+      sh.start(start); sh.stop(end + 0.1);
+    }
+    osc.start(start); osc.stop(end + 0.1);
+    const v = { kind: 'cw', osc, lvl, end };
+    osc.onended = () => { if (this.voices.get(id) === v) this.voices.delete(id); try { lvl.disconnect(); } catch (e) { } };
+    this.voices.set(id, v);
+    return v;
+  }
+
   // Unintelligible voice-like sound (mistuned or overlapping SSB/FM).
   babble(id, start, dur, centerHz = 700) {
     this.remove(id);

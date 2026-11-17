@@ -10,7 +10,7 @@ import { schedule, cut } from './morse.js';
 import { netGain, system } from './antenna.js';
 import { rigStatus } from './shack.js';
 import { serviceOf, stationsFor, serviceBehave } from './services.js';
-import { netStations, cwStations, behaveNet, behaveCwPractice, repeaterNet, netCheckinFromPlayer, netsOn } from './activity.js';
+import { netStations, cwStations, behaveNet, behaveCwPractice, repeaterNet, netCheckinFromPlayer, netsOn, ft8Stations, aprsStation } from './activity.js';
 
 let NEXT_ID = 1;
 export const activeContest = () => (world.contest && !['30m', '17m', '12m', '2m'].includes(world.band) ? world.contest : null);
@@ -297,6 +297,7 @@ function populate(band, contest, shared = false) {
     }
   }
   if (!contest) list.push(...netStations(band), ...cwStations(band, list));
+  list.push(...ft8Stations(band)); // FT8 never stops, contest or not
   const beaconF = { '20m': 14100000, '17m': 18110000, '15m': 21150000, '12m': 24930000, '10m': 28200000 }[band.name];
   if (beaconF && !contest) list.push(new Station({ op: BEACONS[0], mode: 'CW', freq: beaconF, band: band.name, role: 'beacon', wpm: 22, powerDbm: 50, antGain: 2, slot: Object.keys({ '20m': 0, '17m': 1, '15m': 2, '12m': 3, '10m': 4 }).indexOf(band.name) }));
   return list;
@@ -350,7 +351,7 @@ function populate2m(band) {
     op: { call: S.local.locals[0].call, ...near(12), cont: 'NA', zone: 4, qth: 'local', name: S.local.locals[0].name, lang: 'en-US' },
     mode: 'FM', sb: 'FM', freq: 146520000, band: '2m', role: 'simplex', powerDbm: 44, antGain: 3, timer: rand(20, 60),
   });
-  return [rpt, simplex];
+  return [rpt, simplex, aprsStation(S.local.locals, near)];
 }
 
 const RPT_CHAT = [

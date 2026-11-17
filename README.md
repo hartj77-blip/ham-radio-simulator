@@ -24,7 +24,7 @@ python3 -m http.server 8000
 - **Equipment replicas:** 20 radios (base, touchscreen SDR, flagship, mobile, portable, handheld and PC-software receivers) and their accessories, under generic names, each with a faceplate laid out like its real-world class and fully working keys and knobs. Every model has an original operating guide, opened from the radio.
 - **Measure (RF tools):** an FFT spectrum analyzer with waterfall, markers, averaging, max hold and five window functions. Nine test signals each teach one technique: resolution bandwidth, weak signals in noise, AM and FM sidebands, two-tone IMD, harmonics, key clicks and SSB. It can also analyse real audio from the microphone/line input, another browser tab (for example a web SDR) or a live feed. Calculators cover levels (W, dBm, µV, S-units), SWR, return loss and mismatch, feedline loss with SWR, electrical length, wattmeter accuracy, coupler directivity and mismatch uncertainty, test-equipment attenuation, EIRP/ERP, line-of-sight link budget, radio horizon and Fresnel zone, receiver sensitivity, FCC RF exposure (MPE), antenna lengths, LC resonance, Q and bandwidth, occupied bandwidth by mode and FFT resolution.
 - **Listen (Live feeds):** a checked directory of real web SDR receivers, amateur, air-band, scanner and weather audio, broadcast streams and live propagation spot networks; a search of the Radio Browser stream directory; and your own saved feeds (audio streams play in a built-in player that can send its audio to the spectrum analyzer; receiver pages open in a new tab). Feeds can be exported and imported.
-- **Operate:** a transceiver with VFO, filters, AGC, RIT, tuner, meters and waterfall; a propagation map with live ionosphere layers and click-to-analyse paths; a logger with contest practice; a handheld view for phones; and an optional shared band where other users can hear you over the internet.
+- **Operate:** a transceiver with VFO, filters, AGC, RIT, tuner, meters and waterfall; a dial populated the way real spectrum is used (amateur voice, CW, FT8 and APRS, plus public safety, rail, marine, aviation, business and personal radio, with only a handful of broadcast stations); a propagation map with live ionosphere layers and click-to-analyse paths; a logger with contest practice; a handheld view for phones; and an optional shared band where other users can hear you over the internet.
 - **Give feedback:** the question-mark button opens a form that creates a GitHub issue.
 
 ## What is real and what is simulated
@@ -34,7 +34,8 @@ python3 -m http.server 8000
 - Ionosphere: measured foF2, layer height and electron content (NOAA GloTEC) and D-layer absorption (NOAA D-RAP), every 10 minutes. These set the maximum usable frequency on every simulated path.
 - Weather, forecasts and alerts for your area (National Weather Service, Open-Meteo).
 - Terrain elevation around your location (Open-Meteo/Copernicus, USGS).
-- Nearby AM/FM broadcast stations and their live audio streams, played from the broadcasters.
+- The few nearest AM and FM broadcast stations (four per band) and their live audio streams, played from the broadcasters. Broadcasting is deliberately a small part of the dial.
+- The nationwide frequencies used for fire, railroad, marine VHF, business, CB, FRS/GMRS, MURS, APRS, FT8, oceanic air traffic and VOLMET.
 - Airport locations and published radio frequencies (OurAirports).
 - UTC time, and your device location only if you allow it.
 - Everything on the Live feeds page (web SDRs, scanner/air-band/weather audio, broadcast streams, spot networks), and any real audio you choose to analyse.
@@ -49,6 +50,8 @@ python3 -m http.server 8000
 - Receiver noise, static, filtering and synthesized voices.
 - The spectrum analyzer's test signals.
 - NOAA Weather Radio and airport ATIS read real forecast and observation text in a synthesized voice; aircraft and ambulance traffic is invented. WWV is an imitation of the NIST format.
+- Everyday two-way traffic is invented: fire dispatch with two-tone paging, railroad crews and defect detectors, marine VHF (in states with navigable water), highway, job-site and store radios, CB, FRS, GMRS and MURS, oceanic position reports with SELCAL, and VOLMET weather (its numbers are made up). Some of it follows your live weather.
+- Digital signals are imitations of how they sound: FT8 in its 15-second UTC slots on every HF band (with the text a decoder would show), APRS packets on 144.390 MHz, and P25/DMR digital voice, which an analog receiver hears only as a buzz.
 - Licenses, callsigns, QSL confirmations and awards earned here have no legal or official standing. Real licenses are issued by the FCC after a Volunteer Examiner session; practice questions are original and cover the official topics, not the official pool.
 
 ## Sources and credits

@@ -1,6 +1,7 @@
-// Non-ham services on a general-coverage receiver: AM/FM broadcast (real stations, live
-// audio), NOAA Weather Radio (real NWS forecasts), airband (real airports & frequencies,
-// ATIS from real observations, simulated traffic), HEAR ambulance channel, WWV/WWVH.
+// Non-ham services on a general-coverage receiver: NOAA Weather Radio (real NWS forecasts),
+// airband (real airports & frequencies, ATIS from real observations, simulated traffic), HEAR
+// ambulance channel, WWV/WWVH, the land-mobile, marine and HF utility channels in activity.js,
+// and a handful of the strongest local AM/FM broadcast stations (real stations, live audio).
 import { S } from './state.js';
 import { h, bus, rand, randi, pick, chance, hashStr, now, clamp } from './util.js';
 import { RW, TIME_STATIONS, WX_CHANNELS, HEAR, AIRLINES, wantBroadcast, wantAirports } from './realworld.js';
@@ -9,15 +10,15 @@ import { stateBy } from './data/world.js';
 import { simDate, distanceKm, path as propPath, bandNoiseDbm, sUnits } from './propagation.js';
 import { schedule } from './morse.js';
 import { bandOf } from './data/bandplan.js';
-import { shortRangeStations, behaveChatter } from './activity.js';
+import { shortRangeStations, behaveChatter, behaveDigital, behaveAprs, behaveFt8, channels, channelPos, hasMarine, SVC } from './activity.js';
 
 export const SERVICE_REGIONS = [
   { name: 'MW', label: 'AM broadcast', lo: 520e3, hi: 1710e3, mode: 'AM', step: 10e3, span: 150e3, def: 1000e3 },
   { name: 'SW', label: 'Shortwave', lo: 1.71e6, hi: 30e6, mode: 'AM', step: 5e3, span: 24e3, def: 10e6 },
-  { name: 'VHF-LO', label: 'VHF low', lo: 30e6, hi: 87.5e6, mode: 'FM', step: 5e3, span: 200e3, def: 46e6 },
+  { name: 'VHF-LO', label: 'VHF low', lo: 30e6, hi: 87.5e6, mode: 'FM', step: 5e3, span: 200e3, def: 47.26e6 },
   { name: 'FM', label: 'FM broadcast', lo: 87.5e6, hi: 108e6, mode: 'WFM', step: 100e3, span: 2.4e6, def: 98.1e6 },
   { name: 'AIR', label: 'Airband', lo: 108e6, hi: 137e6, mode: 'AM', step: 25e3, span: 500e3, def: 121.5e6 },
-  { name: 'VHF', label: 'VHF high', lo: 137e6, hi: 225e6, mode: 'FM', step: 5e3, span: 400e3, def: 162.4e6 },
+  { name: 'VHF', label: 'VHF high', lo: 137e6, hi: 225e6, mode: 'FM', step: 5e3, span: 400e3, def: 154.19e6 },
   { name: 'UHF', label: 'UHF', lo: 225e6, hi: 470e6, mode: 'FM', step: 12.5e3, span: 400e3, def: 462.5625e6 },
 ];
 export const serviceOf = (hz) => (bandOf(hz) ? null : SERVICE_REGIONS.find((r) => hz >= r.lo && hz < r.hi) || null);
@@ -106,6 +107,9 @@ export function serviceBehave(st, t) {
     case 'atc': return atcTraffic(st);
     case 'ems': return ems(st);
     case 'chatter': return behaveChatter(st);
+    case 'digital': return behaveDigital(st);
+    case 'aprs': return behaveAprs(st);
+    case 'ft8': return behaveFt8(st);
   }
 }
 
@@ -292,18 +296,21 @@ function render() {
   const row = (name, f, mode, info, e) => h('tr', {}, h('td', {}, name), h('td', { class: 'mono' }, f >= 30e6 ? (f / 1e6).toFixed(3) : `${(f / 1e3).toFixed(f < 2e6 ? 0 : 1)} kHz`), h('td', {}, mode), h('td', { class: 'small muted' }, info), h('td', { class: e && e.s !== '—' ? 'ok' : 'muted' }, e ? e.s : ''), h('td', {}, tune(f, mode)));
   const st = RW.status;
   const wx = RW.wx;
+  const chRow = (c) => { const p = channelPos(c); return row(c.name, c.f, c.mode === 'SSB' ? c.sb : c.mode, c.info, est(p.lat, p.lon, c.f, c.powerDbm, c.antGain, c.txHeight || 0)); };
   const tabs = [
-    ['Broadcast', () => {
-      const list = RW.broadcast.map((b) => { const lp = /-LP\b|\bLPFM\b/i.test(b.name); return { b, e: est(b.lat, b.lon, b.f, b.mode === 'AM' ? (b.call && b.call.length === 3 ? 77 : 67) : lp ? 50 : 77, b.mode === 'AM' ? 0 : 3, b.mode === 'AM' ? 0 : lp ? 30 : 250) }; }).sort((x, y) => y.e.dbm - x.e.dbm).slice(0, 40);
-      return list.length ? list.map(({ b, e }) => row(b.name, b.f, b.mode === 'WFM' ? 'WFM' : 'AM', `${b.state} · ${Math.round(e.km)} km`, e))
-        : [h('tr', {}, h('td', { colspan: 6, class: 'muted small' }, st.broadcast || 'Tune to the AM or FM broadcast band (or press Load) to fetch real stations near you.'))];
-    }],
+    ['Land mobile & marine', () => [
+      ...channels().filter((c) => c.kind === 'land' || c.kind === 'marine').map(chRow),
+      row('HEAR — ambulance ↔ hospital', HEAR, 'FM', 'nationwide hospital channel', null),
+      ...channels().filter((c) => c.kind === 'pers').map(chRow),
+    ]],
     ['Weather & emergency', () => {
       const office = RW.nws?.office || 'NWS';
       return [
         row(`NOAA Weather Radio (${office})`, WX_CHANNELS[hashStr(office) % 7], 'FM', 'real NWS forecast & alerts (channel approximate)', null),
         row('HEAR — ambulance ↔ hospital', HEAR, 'FM', 'nationwide hospital channel (traffic simulated)', null),
         row('Aviation emergency (guard)', 121.5e6, 'AM', 'monitored by all aircraft', null),
+        ...(hasMarine() ? [row('Marine channel 16', SVC.marine16, 'FM', 'distress, safety and calling', null)] : []),
+        row('CB channel 9', 27065000, 'AM', 'emergency and traveller assistance', null),
       ];
     }],
     ['Airband', () => {
@@ -311,13 +318,22 @@ function render() {
       for (const a of RW.airports) for (const fr of a.freqs.filter((x) => /ATIS|TWR|GND|APP|DEP|CTAF|UNIC/i.test(x.type)).slice(0, 5)) rows.push(row(`${a.ident} ${fr.type}`, Math.round(fr.mhz * 1e6), 'AM', `${a.name}${fr.desc ? ' · ' + fr.desc : ''} · ${Math.round(a.d)} km`, null));
       return rows.length ? rows : [h('tr', {}, h('td', { colspan: 6, class: 'muted small' }, st.airports || 'Tune to the airband (108–137 MHz) to load real airports & frequencies near you.'))];
     }],
-    ['Time & propagation', () => TIME_STATIONS.map((t) => row(`${t.call} ${t.f / 1e6} MHz`, t.f, 'AM', `${t.call === 'WWV' ? 'Fort Collins, CO' : 'Kauai, HI'} · ${t.kw} kW`, est(t.lat, t.lon, t.f, 10 * Math.log10(t.kw * 1e6), 2)))],
+    ['HF utility', () => [
+      ...channels().filter((c) => c.kind === 'util').map(chRow),
+      ...TIME_STATIONS.map((t) => row(`${t.call} ${t.f / 1e6} MHz`, t.f, 'AM', `${t.call === 'WWV' ? 'Fort Collins, CO' : 'Kauai, HI'} · ${t.kw} kW`, est(t.lat, t.lon, t.f, 10 * Math.log10(t.kw * 1e6), 2))),
+    ]],
+    ['Broadcast', () => {
+      const list = RW.broadcast.map((b) => { const lp = /-LP\b|\bLPFM\b/i.test(b.name); return { b, e: est(b.lat, b.lon, b.f, b.mode === 'AM' ? (b.call && b.call.length === 3 ? 77 : 67) : lp ? 50 : 77, b.mode === 'AM' ? 0 : 3, b.mode === 'AM' ? 0 : lp ? 30 : 250) }; }).sort((x, y) => y.e.dbm - x.e.dbm);
+      return list.length ? list.map(({ b, e }) => row(b.name, b.f, b.mode === 'WFM' ? 'WFM' : 'AM', `${b.state} · ${Math.round(e.km)} km`, e))
+        : [h('tr', {}, h('td', { colspan: 6, class: 'muted small' }, st.broadcast || 'Loading the few nearest AM and FM stations…'))];
+    }],
   ];
+  if (!(S.scanTab < tabs.length)) S.scanTab = 0;
   S.scanTab ??= 0;
   const body = h('table', { class: 'tbl small scan-tbl' }, h('tr', {}, ...['Station', 'Freq', 'Mode', 'Info', 'Est.', ''].map((x) => h('th', {}, x))), ...tabs[S.scanTab][1]());
   root.append(h('div', { class: 'card scanner' },
     h('div', { class: 'row spread' }, h('h3', {}, 'What\'s on the air near you'),
-      h('div', { class: 'row' }, ...tabs.map(([n], i) => h('button', { class: `rbtn ${S.scanTab === i ? 'active' : ''}`, onclick: () => { S.scanTab = i; if (i === 0) wantBroadcast(); if (i === 2) wantAirports(); render(); } }, n)))),
+      h('div', { class: 'row' }, ...tabs.map(([n], i) => h('button', { class: `rbtn ${S.scanTab === i ? 'active' : ''}`, onclick: () => { S.scanTab = i; if (n === 'Broadcast') wantBroadcast(); if (n === 'Airband') wantAirports(); render(); } }, n)))),
     h('div', { class: 'small muted' }, `Real data: space weather ${RW.sun ? `✓ NOAA SWPC (SFI ${RW.sun.sfi}, Kp ${RW.sun.k})` : st.sun || '…'} · weather ${wx ? `✓ ${wx.source}${wx.station ? ' ' + wx.station : ''}: ${wx.desc}, ${wx.tempF}°F` : st.wx || '…'} · broadcast ${st.broadcast || 'not loaded'} · airports ${st.airports || 'not loaded'}`),
     body));
 }
