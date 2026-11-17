@@ -232,9 +232,8 @@ function init() {
   setInterval(() => { world.tick(); rxUpdate(); }, 100);
   setInterval(() => { clock(); contestTick(); $('#operating')?.classList.toggle('is-cw', S.radio.mode === 'CW'); }, 1000);
   setInterval(() => { if (SUN.shared()) { world.bandCache = {}; } solarBanner(); }, 60000);
-  let last = 0;
   let lastMap = 0;
-  const loop = (t) => { if (t - last > 60) { last = t; drawFrame(); } if (t - lastMap > 250) { lastMap = t; drawMap(); shackTick(txState); } requestAnimationFrame(loop); };
+  const loop = (t) => { drawFrame(); if (t - lastMap > 250) { lastMap = t; drawMap(); shackTick(txState); } requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
 
   if (!S.started) welcome((m) => { header(); solarBanner(); showTab(m === 'training' ? 'shack' : 'radio'); if (isPhone()) { phoneStart(); showHT(true); } });

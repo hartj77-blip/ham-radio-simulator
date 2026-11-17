@@ -372,7 +372,7 @@ export function initRadioUI(el) {
       lcd,
       h('div', { class: 'rig-right' }, knob, h('div', { class: 'row center' }, stepSel, freqIn)),
     ),
-    h('div', { class: 'rig-mid' }, h('div', { class: 'wf-wrap' }, wf, h('div', { class: 'no-scope-msg' }, `The ${rig().name} has no spectrum scope — tune by ear, like the old days. (Watch the S-meter!)`))),
+    h('div', { class: 'rig-mid' }, h('div', { class: 'wf-wrap' }, wf, wfToolbar(), h('div', { class: 'no-scope-msg' }, `The ${rig().name} has no spectrum scope — tune by ear, like the old days. (Watch the S-meter!)`))),
     h('div', { class: 'rig-controls' },
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'HAM BANDS'), bandBtns,
         h('div', { class: 'ctl-title', style: { marginTop: '8px' } }, 'GENERAL COVERAGE (RX)'), serviceButtons()),
@@ -428,6 +428,19 @@ export function tuneBy(n) {
   if (!S.tips.includes('first_listen')) elmer('first_listen');
 }
 
+function wfToolbar() {
+  const speed = h('select', { class: 'rsel wf-speed', title: 'Waterfall scroll speed' }, ...Object.entries(WF_RATES).map(([k2, v]) => h('option', { value: k2 }, `${k2[0].toUpperCase()}${k2.slice(1)} (${v} rows/s)`)));
+  speed.onchange = () => { S.settings.wfSpeed = speed.value; save(); };
+  wfTools = h('div', { class: 'wf-tools' },
+    h('span', { class: 'wf-lab' }, 'Span'),
+    h('button', { class: 'rbtn wf-in', title: 'Zoom in (narrower span)', onclick: () => wfZoom(-1) }, '−'),
+    h('span', { class: 'wf-span mono' }),
+    h('button', { class: 'rbtn wf-out', title: 'Zoom out (wider span)', onclick: () => wfZoom(1) }, '+'),
+    h('span', { class: 'wf-lab' }, 'Waterfall'), speed);
+  setTimeout(updateWfTools);
+  return wfTools;
+}
+
 function onWfClick(e) {
   const r = R();
   const span = spanHz();
@@ -445,7 +458,6 @@ function onWfClick(e) {
   setFreq(f);
 }
 
-const spanHz = () => { const sv = serviceOf(R().freq); if (sv) return sv.span; return R().mode === 'FM' || world.band === '2m' ? 200000 : 24000; };
 
 // ------------------------------------------------------------------ ATU
 function atuTune() {
@@ -504,6 +516,7 @@ export function effectiveSwr(f) {
 
 // ------------------------------------------------------------------ display
 export function updateDisplay() {
+  updateWfTools();
   if (!lcd) return;
   const r = R(), rs = rigStatus();
   const band = bandOf(r.freq);
@@ -572,72 +585,157 @@ export function updateDisplay() {
 }
 
 // ------------------------------------------------------------------ waterfall + meter drawing
-let wfBuf = null, wfBufCtx = null, lastWfFreq = null;
-function colorFor(v) {
-  // v: 0..1
+// The panadapter works like a real FFT display: each pixel column is one frequency bin of
+// width span ÷ pixels, noise is shown per bin (so narrow signals stand out above it, as on a
+// real radio), the trace redraws every frame and the waterfall adds rows at a fixed rate in
+// rows per second, independent of the frame rate.
+export const WF_RATES = { slow: 15, normal: 30, fast: 60 };
+const HF_SPANS = [10e3, 25e3, 50e3, 100e3, 200e3];
+const WIDE_ZOOM = [0.25, 0.5, 1, 2, 4];
+const wideBase = () => { const sv = serviceOf(R().freq); if (sv) return sv.span; return R().mode === 'FM' || world.band === '2m' ? 200000 : 0; };
+function zoomKey() { return wideBase() ? 'wfZoomWide' : 'wfZoomHF'; }
+function zoomIdx() { const k = zoomKey(); return clamp(R()[k] ?? (k === 'wfZoomHF' ? 1 : 2), 0, 4); }
+function spanHz() { const b = wideBase(), z = zoomIdx(); return b ? b * WIDE_ZOOM[z] : HF_SPANS[z]; }
+export function wfZoom(dir) { const k = zoomKey(); R()[k] = clamp(zoomIdx() + dir, 0, 4); save(); wfReset = true; updateWfTools(); }
+const fmtSpan = (hz) => (hz >= 1e6 ? `${+(hz / 1e6).toFixed(2)} MHz` : `${+(hz / 1e3).toFixed(1)} kHz`);
+
+let wfBuf = null, wfBufCtx = null, lastWfFreq = null, lastWfSpan = null, wfReset = true, wfAcc = 0, wfLastT = 0, trace = null, wfTools = null;
+const COLORS = (() => {
   const stops = [[0, 6, 10, 30], [0.25, 10, 40, 140], [0.5, 30, 170, 200], [0.7, 240, 220, 60], [0.85, 255, 120, 20], [1, 255, 255, 255]];
-  for (let i = 1; i < stops.length; i++) if (v <= stops[i][0]) {
-    const [a, r0, g0, b0] = stops[i - 1], [b, r1, g1, b1] = stops[i], t = (v - a) / (b - a);
-    return [r0 + (r1 - r0) * t, g0 + (g1 - g0) * t, b0 + (b1 - b0) * t];
+  const lut = new Uint8ClampedArray(256 * 3);
+  for (let n = 0; n < 256; n++) {
+    const v = n / 255;
+    for (let i = 1; i < stops.length; i++) if (v <= stops[i][0]) {
+      const [a, r0, g0, b0] = stops[i - 1], [b, r1, g1, b1] = stops[i], t = (v - a) / (b - a);
+      lut[n * 3] = r0 + (r1 - r0) * t; lut[n * 3 + 1] = g0 + (g1 - g0) * t; lut[n * 3 + 2] = b0 + (b1 - b0) * t; break;
+    }
   }
-  return [255, 255, 255];
+  return lut;
+})();
+
+// Deterministic pseudo-random in [0, 1)
+const hash = (a, b) => { const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); };
+const seedOf = (o) => o._wfSeed ??= [...String(o.id ?? o.freq ?? 0)].reduce((s, c) => (s * 31 + c.charCodeAt(0)) % 9973, 7);
+// Speech-like envelope (0..1): syllables of ~0.22 s with gaps between words and phrase pauses.
+function speechEnv(seed, t, floor = 0.003) {
+  const P = Math.floor(t / 2.6);
+  if (hash(seed + 2, P) < 0.2 && t / 2.6 - P < 0.3) return floor; // pause for breath
+  const L = 0.2 + 0.06 * hash(seed + 3, P), k = Math.floor(t / L), ph = t / L - k;
+  if (hash(seed, k) < 0.22) return floor; // gap between words
+  return Math.max(floor, Math.pow(Math.sin(Math.PI * ph), 0.7) * (0.25 + 0.75 * hash(seed + 1, k)));
+}
+// Long-term average speech spectrum, relative power vs audio frequency (peak near 500 Hz,
+// about −10 dB at 2 kHz and −16 dB at 2.8 kHz).
+const speechShape = (a) => (a < 500 ? Math.pow(10, -((500 - a) / 300) * 0.6) : Math.pow(10, -((a - 500) / 2300) * 1.6));
+// Exponential power noise averaged over two looks (what an FFT bin shows), in dB about 0.
+const noiseDb = () => 10 * Math.log10(Math.max(1e-6, (-Math.log(1 - Math.random()) - Math.log(1 - Math.random())) / 2));
+
+function computeBins(Wb, span, f0, nfBin, t, rs, r) {
+  const bins = new Float32Array(Wb);
+  for (let i = 0; i < Wb; i++) bins[i] = rs.powered ? nfBin + noiseDb() : -170;
+  if (!rs.powered) return bins;
+  const hzPerBin = span / Wb;
+  const pw = new Float64Array(Wb); // added signal power, mW
+  const binOf = (f) => Math.floor((f - f0) / hzPerBin);
+  // spread `dbm` over [lo, hi] weighted by shape(f) (relative); the total power is conserved
+  const spread = (lo, hi, dbm, shape) => {
+    let a = binOf(lo), b = binOf(hi);
+    if (b < 0 || a >= Wb) return;
+    const ws = []; let sum = 0;
+    for (let i = a; i <= b; i++) { const w = shape ? shape(f0 + (i + 0.5) * hzPerBin) : 1; ws.push(w); sum += w; }
+    const tot = Math.pow(10, dbm / 10);
+    for (let i = a; i <= b; i++) if (i >= 0 && i < Wb) pw[i] += tot * ws[i - a] / sum * (shape ? Math.exp(-Math.log(1 - Math.random())) : 1);
+  };
+  const addSig = (fc, dbm, kind, sb, keyed, seed) => {
+    if (!keyed) return;
+    if (kind === 'cw') spread(fc - 15, fc + 15, dbm);
+    else if (kind === 'wfm') spread(fc - 90000, fc + 90000, dbm - 0.5 * Math.random());
+    else if (kind === 'fm') spread(fc - 7000, fc + 7000, dbm - Math.random());
+    else if (kind === 'am') {
+      // steady carrier with about two-thirds of the power; programme audio in the sidebands
+      spread(fc - 10, fc + 10, dbm - 1.8);
+      const env = speechEnv(seed, t, 0.25), side = dbm - 6 + 10 * Math.log10(env);
+      const sh = (f) => speechShape(Math.abs(f - fc));
+      spread(fc - 4500, fc - 100, side - 3, sh); spread(fc + 100, fc + 4500, side - 3, sh);
+    } else {
+      const env = speechEnv(seed, t), d = sb === 'LSB' ? -1 : 1, lv = dbm + 10 * Math.log10(env);
+      const sh = (f) => speechShape(Math.abs(f - fc));
+      if (d > 0) spread(fc + 200, fc + 2800, lv, sh); else spread(fc - 2800, fc - 200, lv, sh);
+    }
+  };
+  for (const st of world.stations) {
+    if (!st.tx || t < st.tx.start || t > st.tx.end + (st.tx.speaking ? 3 : 0)) continue;
+    if (Math.abs(st.freq - r.freq) > span) continue;
+    const dbm = world.rxDbm(st) - r.rfAtt;
+    let keyed = true;
+    if (st.tx.sch) { const el = t - st.tx.start; keyed = st.tx.sch.segs.some((s) => el >= s.t0 && el <= s.t1); }
+    const kind = st.mode === 'WFM' ? 'wfm' : st.mode === 'AM' && st.tx.kind !== 'amtone' ? 'am' : st.mode === 'CW' || st.tx.kind === 'cwtone' || st.tx.kind === 'amtone' ? 'cw' : st.mode === 'FM' ? 'fm' : 'voice';
+    addSig(st.freq, dbm, kind, st.sb, keyed || kind === 'am' || kind === 'wfm', seedOf(st));
+  }
+  if (net.waterfall) for (const p of net.waterfall()) addSig(p.freq, p.dbm, p.kind, p.sb, true, seedOf(p));
+  if (txState.active) addSig(txState.freq, -40, txState.mode === 'CW' ? 'cw' : txState.mode === 'FM' ? 'fm' : 'voice', txState.mode, txState.keyed, 99);
+  for (let i = 0; i < Wb; i++) if (pw[i] > 0) bins[i] = 10 * Math.log10(Math.pow(10, bins[i] / 10) + pw[i]);
+  return bins;
+}
+
+function updateWfTools() {
+  if (!wfTools) return;
+  wfTools.querySelector('.wf-span').textContent = fmtSpan(spanHz());
+  const z = zoomIdx();
+  wfTools.querySelector('.wf-in').disabled = z === 0;
+  wfTools.querySelector('.wf-out').disabled = z === 4;
+  wfTools.querySelector('.wf-speed').value = S.settings.wfSpeed || 'normal';
 }
 
 export function drawFrame() {
   if (!wf || !panel.offsetParent) return;
-  const W = wf.width, H = wf.height, specH = 90;
+  const cw = wf.clientWidth, ch = wf.clientHeight;
+  if (!cw || !ch) return;
+  const k = Math.min(window.devicePixelRatio || 1, 2);
+  const W = Math.round(cw * k), H = Math.round(ch * k);
+  if (wf.width !== W || wf.height !== H) { wf.width = W; wf.height = H; wfBuf = null; }
+  const specH = Math.round(90 * k), wfH = H - specH;
   const r = R(), rs = rigStatus();
-  const span = spanHz(), f0 = r.freq - span / 2;
-  const bins = new Float32Array(W);
-  const nf = rx.noiseDbm;
-  for (let i = 0; i < W; i++) bins[i] = rs.powered ? nf + (Math.random() - 0.5) * 5 : -140;
+  const span = spanHz(), f0 = r.freq - span / 2, hzPerBin = span / W;
+  const nf = rx.noiseDbm, nfBin = nf - 10 * Math.log10(2400 / hzPerBin); // noise per bin
   const t = now();
-  const addSig = (fc, dbm, kind, sb, keyed) => {
-    if (!keyed) return;
-    const hzPerBin = span / W;
-    let lo, hi;
-    if (kind === 'cw') { lo = fc - 20; hi = fc + 20; }
-    else if (kind === 'wfm') { lo = fc - 90000; hi = fc + 90000; }
-    else if (kind === 'am') { lo = fc - 4500; hi = fc + 4500; }
-    else if (kind === 'fm') { lo = fc - 7000; hi = fc + 7000; }
-    else if (sb === 'LSB') { lo = fc - 2800; hi = fc - 200; } else { lo = fc + 200; hi = fc + 2800; }
-    const a = Math.floor((lo - f0) / hzPerBin), b = Math.ceil((hi - f0) / hzPerBin);
-    for (let i = Math.max(0, a); i <= Math.min(W - 1, b); i++) {
-      const v = kind === 'voice' ? dbm - 6 - Math.random() * 14 - ((i - a) / (b - a + 1)) * 8 : dbm - (kind === 'fm' ? Math.random() * 3 : 0);
-      if (v > bins[i]) bins[i] = v;
-    }
-  };
-  if (rs.powered) {
-    for (const st of world.stations) {
-      if (!st.tx || t < st.tx.start || t > st.tx.end + (st.tx.speaking ? 3 : 0)) continue;
-      if (Math.abs(st.freq - r.freq) > span) continue;
-      const dbm = world.rxDbm(st) - r.rfAtt + 10 * Math.log10(2400 / 50) * (st.mode === 'CW' ? 0.3 : 0);
-      let keyed = true;
-      if (st.tx.sch) { const el = t - st.tx.start; keyed = st.tx.sch.segs.some((s) => el >= s.t0 && el <= s.t1); }
-      const kind = st.mode === 'WFM' ? 'wfm' : st.mode === 'AM' && st.tx.kind !== 'amtone' ? 'am' : st.mode === 'CW' || st.tx.kind === 'cwtone' || st.tx.kind === 'amtone' ? 'cw' : st.mode === 'FM' ? 'fm' : 'voice';
-      addSig(st.freq, dbm, kind, st.sb, keyed || kind === 'am' || kind === 'wfm');
-    }
-    if (net.waterfall) for (const p of net.waterfall()) addSig(p.freq, p.dbm, p.kind, p.sb, true);
-    if (txState.active) addSig(txState.freq, -40, txState.mode === 'CW' ? 'cw' : txState.mode === 'FM' ? 'fm' : 'voice', txState.mode, txState.keyed);
-  }
-  // scroll waterfall (kept in an offscreen buffer so overlays don't smear)
-  if (!wfBuf) { wfBuf = document.createElement('canvas'); wfBuf.width = W; wfBuf.height = H - specH; wfBufCtx = wfBuf.getContext('2d'); wfBufCtx.fillStyle = '#05080d'; wfBufCtx.fillRect(0, 0, W, H); }
-  if (lastWfFreq != null && lastWfFreq !== r.freq) {
+  const bins = computeBins(W, span, f0, nfBin, t, rs, r);
+
+  // waterfall buffer: scroll sideways when retuned, clear when the span changes
+  if (!wfBuf || wfBuf.width !== W || wfBuf.height !== wfH) { wfBuf = document.createElement('canvas'); wfBuf.width = W; wfBuf.height = wfH; wfBufCtx = wfBuf.getContext('2d'); wfReset = true; }
+  if (wfReset || span !== lastWfSpan) { wfBufCtx.fillStyle = '#05080d'; wfBufCtx.fillRect(0, 0, W, wfH); trace = null; wfReset = false; }
+  else if (lastWfFreq != null && lastWfFreq !== r.freq) {
     const dx = Math.round(((lastWfFreq - r.freq) / span) * W);
-    if (Math.abs(dx) < W) { const tmp = wfBufCtx.getImageData(0, 0, W, wfBuf.height); wfBufCtx.fillStyle = '#05080d'; wfBufCtx.fillRect(0, 0, W, wfBuf.height); wfBufCtx.putImageData(tmp, dx, 0); }
-    else { wfBufCtx.fillStyle = '#05080d'; wfBufCtx.fillRect(0, 0, W, wfBuf.height); }
+    wfBufCtx.globalCompositeOperation = 'copy'; wfBufCtx.drawImage(wfBuf, dx, 0); wfBufCtx.globalCompositeOperation = 'source-over';
+    wfBufCtx.fillStyle = '#05080d';
+    if (dx > 0) wfBufCtx.fillRect(0, 0, dx, wfH); else if (dx < 0) wfBufCtx.fillRect(W + dx, 0, -dx, wfH);
+    trace = null;
   }
-  lastWfFreq = r.freq;
-  wfBufCtx.drawImage(wfBuf, 0, 0, W, wfBuf.height - 1, 0, 1, W, wfBuf.height - 1);
-  const row = wfBufCtx.createImageData(W, 1);
-  for (let i = 0; i < W; i++) {
-    const v = clamp((bins[i] - nf + 3) / 45, 0, 1);
-    const [cr, cg, cb] = colorFor(v);
-    row.data[i * 4] = cr; row.data[i * 4 + 1] = cg; row.data[i * 4 + 2] = cb; row.data[i * 4 + 3] = 255;
+  lastWfFreq = r.freq; lastWfSpan = span;
+  // rows due since the last frame, at a fixed rate (rows per second)
+  const nowMs = performance.now(), dt = wfLastT ? Math.min(0.5, (nowMs - wfLastT) / 1000) : 0;
+  wfLastT = nowMs;
+  wfAcc += dt * (WF_RATES[S.settings.wfSpeed] || WF_RATES.normal);
+  const rows = Math.min(Math.floor(wfAcc), 30);
+  wfAcc -= rows;
+  if (rows > 0) {
+    wfBufCtx.globalCompositeOperation = 'copy'; wfBufCtx.drawImage(wfBuf, 0, rows); wfBufCtx.globalCompositeOperation = 'source-over';
+    const img = wfBufCtx.createImageData(W, rows);
+    for (let row = 0; row < rows; row++) {
+      const b = row === 0 ? bins : computeBins(W, span, f0, nfBin, t - row / 30, rs, r);
+      for (let i = 0; i < W; i++) {
+        const n = Math.round(clamp((b[i] - nfBin + 4) / 50, 0, 1) * 255) * 3, o = (row * W + i) * 4;
+        img.data[o] = COLORS[n]; img.data[o + 1] = COLORS[n + 1]; img.data[o + 2] = COLORS[n + 2]; img.data[o + 3] = 255;
+      }
+    }
+    wfBufCtx.putImageData(img, 0, 0);
   }
-  wfBufCtx.putImageData(row, 0, 0);
+  wfCtx.setTransform(1, 0, 0, 1, 0, 0);
   wfCtx.drawImage(wfBuf, 0, specH);
-  // spectrum
+
+  // spectrum trace (lightly smoothed, as most radios do)
+  if (!trace || trace.length !== W) trace = Float32Array.from(bins);
+  else for (let i = 0; i < W; i++) trace[i] = trace[i] * 0.55 + bins[i] * 0.45;
   wfCtx.fillStyle = '#05080d'; wfCtx.fillRect(0, 0, W, specH);
   const band = bandOf(r.freq);
   const xOf = (f) => ((f - f0) / span) * W;
@@ -647,34 +745,37 @@ export function drawFrame() {
     if (band.hi < f0 + span) wfCtx.fillRect(xOf(band.hi), 0, W - xOf(band.hi), specH);
     for (const seg of privilegeMap(S.license, band)) {
       wfCtx.fillStyle = seg.allow === 'ALL' ? 'rgba(80,220,120,0.55)' : 'rgba(90,160,255,0.55)';
-      wfCtx.fillRect(xOf(seg.lo), specH - 5, xOf(seg.hi) - xOf(seg.lo), 5);
+      wfCtx.fillRect(xOf(seg.lo), specH - 5 * k, xOf(seg.hi) - xOf(seg.lo), 5 * k);
     }
   }
-  wfCtx.strokeStyle = '#7fe0ff'; wfCtx.beginPath();
-  for (let i = 0; i < W; i++) { const y = specH - 8 - clamp((bins[i] + 135) / 75, 0, 1) * (specH - 14); i ? wfCtx.lineTo(i, y) : wfCtx.moveTo(i, y); }
+  const top = nfBin + 70, rng = 85; // display from 15 dB below the noise to 70 dB above
+  wfCtx.strokeStyle = '#7fe0ff'; wfCtx.lineWidth = k; wfCtx.beginPath();
+  for (let i = 0; i < W; i++) { const y = specH - 8 * k - clamp((trace[i] - (top - rng)) / rng, 0, 1) * (specH - 14 * k); i ? wfCtx.lineTo(i, y) : wfCtx.moveTo(i, y); }
   wfCtx.stroke();
   // passband overlay
   const d = dialHz(), w = r.filter[r.mode];
   let pl, ph;
   if (r.mode === 'USB') { pl = d + 250; ph = d + 250 + w; } else if (r.mode === 'LSB') { pl = d - 250 - w; ph = d - 250; }
-  else if (r.mode === 'CW') { pl = d - w / 2; ph = d + w / 2; } else { pl = d - w / 2; ph = d + w / 2; }
-  wfCtx.fillStyle = 'rgba(255,255,255,0.08)'; wfCtx.fillRect(xOf(pl), 0, Math.max(2, xOf(ph) - xOf(pl)), H);
-  wfCtx.strokeStyle = '#ff4d4d'; wfCtx.beginPath(); wfCtx.moveTo(W / 2 + 0.5, 0); wfCtx.lineTo(W / 2 + 0.5, specH); wfCtx.stroke();
-  // scale
-  wfCtx.fillStyle = '#9fb3c8'; wfCtx.font = '10px monospace';
-  const tick = span > 2e6 ? 200000 : span > 1e6 ? 100000 : span > 300000 ? 50000 : span > 100000 ? 20000 : span > 30000 ? 10000 : 2000;
+  else { pl = d - w / 2; ph = d + w / 2; }
+  wfCtx.fillStyle = 'rgba(255,255,255,0.08)'; wfCtx.fillRect(xOf(pl), 0, Math.max(2 * k, xOf(ph) - xOf(pl)), H);
+  wfCtx.strokeStyle = '#ff4d4d'; wfCtx.lineWidth = k; wfCtx.beginPath(); wfCtx.moveTo(W / 2 + 0.5, 0); wfCtx.lineTo(W / 2 + 0.5, specH); wfCtx.stroke();
+  // frequency scale: aim for a label every ~110 CSS pixels
+  wfCtx.fillStyle = '#9fb3c8'; wfCtx.font = `${10 * k}px monospace`;
+  const raw = span / (cw / 110), mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const tick = [1, 2, 5, 10].map((m) => m * mag).find((x) => x >= raw);
   for (let f = Math.ceil(f0 / tick) * tick; f < f0 + span; f += tick) {
-    const x = xOf(f); wfCtx.fillRect(x, specH - 12, 1, 4);
-    wfCtx.fillText(f >= 30e6 ? (f / 1e6).toFixed(tick >= 100000 ? 1 : 2) : (f / 1000).toFixed(0), x - 18, specH - 14);
+    const x = xOf(f); wfCtx.fillRect(x, specH - 12 * k, k, 4 * k);
+    const lab = f >= 30e6 ? (f / 1e6).toFixed(tick >= 100000 ? 1 : tick >= 10000 ? 2 : 3) : (f / 1000).toFixed(tick >= 1000 ? 0 : 1);
+    wfCtx.fillText(lab, x - wfCtx.measureText(lab).width / 2, specH - 14 * k);
   }
   if (S.settings.lab && rs.powered) {
     const s = rx.strongest;
-    wfCtx.font = '11px ui-monospace, monospace'; wfCtx.fillStyle = 'rgba(0,0,0,0.6)'; wfCtx.fillRect(4, 4, 560, 30);
+    wfCtx.font = `${11 * k}px ui-monospace, monospace`; wfCtx.fillStyle = 'rgba(0,0,0,0.6)'; wfCtx.fillRect(4 * k, 4 * k, Math.min(W - 8 * k, 600 * k), 30 * k);
     wfCtx.fillStyle = '#9dffb9';
-    wfCtx.fillText(`Noise ${rx.noiseDbm.toFixed(1)} dBm  S-meter ${rx.smeterDbm.toFixed(1)} dBm${s ? `  Sig ${s.dbm.toFixed(1)} dBm  SNR ${s.snr.toFixed(1)} dB` : ''}`, 10, 16);
-    if (s) { const p = s.st.path || {}; wfCtx.fillText(`${s.st.call}  ${s.st.op.qth || ''}  ${p.dist ? Math.round(p.dist) + ' km' : ''}  brg ${p.brg != null ? Math.round(p.brg) + '°' : '?'}  path ${p.mode || '?'}  loss ${p.loss ? p.loss.toFixed(1) + ' dB' : '?'}  off ${(s.off >= 0 ? '+' : '') + Math.round(s.off)} Hz`, 10, 29); }
+    wfCtx.fillText(`Noise ${rx.noiseDbm.toFixed(1)} dBm (${nfBin.toFixed(1)} dBm/bin, ${hzPerBin.toFixed(0)} Hz bins)  S-meter ${rx.smeterDbm.toFixed(1)} dBm${s ? `  Sig ${s.dbm.toFixed(1)} dBm  SNR ${s.snr.toFixed(1)} dB` : ''}`, 10 * k, 16 * k);
+    if (s) { const p = s.st.path || {}; wfCtx.fillText(`${s.st.call}  ${s.st.op.qth || ''}  ${p.dist ? Math.round(p.dist) + ' km' : ''}  brg ${p.brg != null ? Math.round(p.brg) + '°' : '?'}  path ${p.mode || '?'}  loss ${p.loss ? p.loss.toFixed(1) + ' dB' : '?'}  off ${(s.off >= 0 ? '+' : '') + Math.round(s.off)} Hz`, 10 * k, 29 * k); }
   }
-  if (!rs.powered) { wfCtx.fillStyle = '#ffd166'; wfCtx.font = '16px sans-serif'; wfCtx.fillText('Radio is off — complete the Station wiring', W / 2 - 170, specH / 2); }
+  if (!rs.powered) { wfCtx.fillStyle = '#ffd166'; wfCtx.font = `${16 * k}px sans-serif`; const m = 'Radio is off — complete the Station wiring'; wfCtx.fillText(m, (W - wfCtx.measureText(m).width) / 2, specH / 2); }
   drawMeter(rs);
   const txl = document.getElementById('lcd-tx');
   if (txl) txl.className = txState.active ? 'tx-on' : 'dim';
