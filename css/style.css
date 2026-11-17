@@ -1140,3 +1140,10 @@ body.ht-view .fb-fab { left: 14px; bottom: auto; top: 10px; width: 34px; height:
 .sp-glance b { font-size: 0.84rem; }
 
 .plan-link { width: 100%; justify-content: flex-start; margin: -6px 0 14px; }
+
+/* waterfall span / speed controls */
+.wf-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 0.78rem; color: var(--muted); }
+.wf-tools .rbtn { min-width: 28px; padding: 2px 8px; }
+.wf-tools .wf-span { min-width: 64px; text-align: center; color: var(--text); }
+.wf-tools .wf-lab:not(:first-child) { margin-left: 10px; }
+#radio-panel.no-scope .wf-tools { display: none; }
