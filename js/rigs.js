@@ -28,12 +28,12 @@ export const RIGS = {
   ht: {
     name: 'Dual-Band Handheld', code: 'DH-5', cls: '2 m FM handheld, 5 W', price: 60, maxW: 5,
     tx: ['2m'], rx: [88e6, 470e6], modes: ['FM', 'WFM', 'AM'], atu: false, scope: false, dsp: false, narrowCw: false, face: 'black',
-    blurb: 'Pocket radio for repeaters and simplex, plus FM broadcast, NOAA weather and airband (AM receive).',
+    blurb: 'Pocket radio for repeaters and simplex, plus APRS, NOAA weather, fire, rail and marine monitoring, and airband (AM receive).',
   },
   sdrrx: {
     name: 'Wideband SDR Receiver', code: 'WR-1', cls: 'Receive-only SDR, 0.5–470 MHz', price: 100, maxW: 0,
     tx: [], rx: [0.5e6, 470e6], modes: ['LSB', 'USB', 'CW', 'AM', 'FM', 'WFM'], atu: false, scope: true, dsp: true, narrowCw: true, face: 'black',
-    blurb: 'For listening only: shortwave, broadcast, airband, weather, scanners. No license needed.',
+    blurb: 'For listening only: public safety, rail, marine, airband, weather and HF utility stations. No license needed.',
   },
 };
 Object.assign(RIGS.allmode, { drawA: 22, look: 'classic', ifs: true, notch: true, preamps: 1, agc: true });

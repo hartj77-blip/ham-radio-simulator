@@ -9,7 +9,7 @@ import { rig } from './rigs.js';
 import { RW, WX_CHANNELS } from './realworld.js';
 import { hashStr } from './util.js';
 import { system } from './antenna.js';
-import { NETS, netActive, nextNet, localHour } from './activity.js';
+import { NETS, netActive, nextNet, localHour, SVC, FT8_FREQ, hasMarine } from './activity.js';
 
 // ------------------------------------------------------------------ Explain mode
 const HELP = [
@@ -18,7 +18,7 @@ const HELP = [
   ['.vfo-knob', 'VFO knob', 'Drag or scroll to tune. Pick the step size below it, or type a frequency in kHz.'],
   ['.waterfall', 'Spectrum & waterfall', 'Every signal near your frequency: brightness = strength, time scrolls down. Click a trace to tune to it. Green/blue bars = where your license lets you transmit.'],
   ['.btn-grid.bands .rbtn:not(.svc)', 'Ham bands', 'Jump between amateur bands. Low bands (160–40 m) are best at night, high bands (20–10 m) by day.'],
-  ['.rbtn.svc', 'General coverage', 'Receive-only presets outside the ham bands: AM/FM broadcast, WWV time signals, airband, NOAA Weather Radio, EMS.'],
+  ['.rbtn.svc', 'General coverage', 'Receive-only presets outside the ham bands: WWV time signals, oceanic air traffic, airband, NOAA Weather Radio, EMS, fire dispatch, railroad and marine or job-site radio.'],
   ['.btn-grid.modes', 'Mode', 'LSB/USB = voice (LSB below 10 MHz, USB above). CW = Morse. AM = broadcast & airband. FM = repeaters/VHF. WFM = FM broadcast.'],
   ['#filter-sel', 'IF filter', 'How much spectrum you listen to. Narrower = less noise and interference, but too narrow distorts voice. CW loves 250–500 Hz.'],
   ['.knobrow:has(input[type=range])', 'Control', 'AF GAIN = volume. SQL = squelch (mutes FM noise until a signal opens it). POWER = transmit power — use the minimum needed.'],
@@ -109,7 +109,11 @@ export function initFinder(el) {
     B('Repeater', 'Local 2 m repeater, with offset and tone set', () => { S.radio.rptOffset = -600000; S.radio.toneHz = 100; save(); bus.emit('tune-to', 146940000, 'FM'); toast('Local repeater: 146.940 MHz, −600 kHz offset, 100.0 Hz tone. Say your call to check in!', 'info'); }),
     B('WWV', 'Time signal on 10 MHz', () => { (S.flags ||= {}).wwv = 1; bus.emit('tune-to', 10e6, 'AM'); }),
     B('Weather', 'NOAA Weather Radio', () => bus.emit('tune-to', WX_CHANNELS[hashStr(RW.nws?.office || 'NWS') % 7], 'FM')),
-    B('FM radio', 'FM broadcast band', () => bus.emit('tune-to', S.radio.lastByBand.FM?.f || 98.1e6, 'WFM')),
+    B('FT8', 'The busiest mode on HF: 15-second digital transmissions in a 3 kHz window', () => { const b = bandOf(S.radio.freq); const f = FT8_FREQ[b?.name] || FT8_FREQ[rankBands()[0].b.name] || 14074000; bus.emit('tune-to', f, 'USB'); toast(`FT8 on ${(f / 1e6).toFixed(3)} MHz USB. Each tone is one station sending for 12.6 seconds, then listening for 15. Turn on subtitles to see the decodes.`, 'info', 9000); }),
+    B('Fire', 'County fire dispatch: two-tone paging and voice (listen only)', () => bus.emit('tune-to', SVC.fire, 'FM')),
+    B('Railroad', 'Railroad road channel: crews, dispatcher, defect detectors (listen only)', () => bus.emit('tune-to', SVC.rail, 'FM')),
+    ...(hasMarine() ? [B('Marine', 'Marine VHF channel 16: distress and calling (listen only)', () => bus.emit('tune-to', SVC.marine16, 'FM'))] : []),
+    B('Oceanic', 'Airliners over the Atlantic reporting positions on HF sideband (listen only)', () => bus.emit('tune-to', localHour() > 7 && localHour() < 19 ? SVC.oceanic[1] : SVC.oceanic[0], 'USB')),
     B('Nets', 'Scheduled emergency, traffic and weather nets: practise checking in', openNets),
     B('Slow CW', 'Slow-speed CW stations and a code-practice broadcast', () => { const day = localHour() > 7 && localHour() < 18; bus.emit('tune-to', day ? 7047500 : 3581500, 'CW'); toast(`Code practice on ${day ? '7.0475' : '3.5815'} MHz. Slow-speed stations call CQ nearby in the CW segment, at 8–13 wpm.`, 'info', 6000); }),
     B('CB 19', 'CB channel 19, highway traffic (listen only)', () => bus.emit('tune-to', 27185000, 'AM')),

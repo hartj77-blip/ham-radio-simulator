@@ -27,9 +27,9 @@ export const SETUPS = [
   { id: 'vhf', name: 'VHF/UHF FM & repeaters', rig: 'allmode', ant: { type: 'vertical', band: '2m', radials: 4, feed: 'LMR-400', feedLen: 50 }, tune: ['2m', 'FM'], rpt: true, needs: ['lmr400'],
     desc: '2 m ground-plane on the roof. Set up for your local repeater (−600 kHz, 100 Hz tone).' },
   { id: 'ht', name: 'Handheld (HT) only', rig: 'ht', ant: { type: 'vertical', band: '2m', radials: 0, feed: 'RG-58', feedLen: 3 }, tune: ['2m', 'FM'], rpt: true, power: 5, needs: ['rig-ht'],
-    desc: 'A 5 W handheld with its rubber-duck antenna. Repeaters, simplex, weather and FM broadcast.' },
-  { id: 'listener', name: 'Scanner & shortwave listener', rig: 'sdrrx', ant: { type: 'efhw', band: '40m', height: 30, feed: 'RG-8X', feedLen: 50, axis: 0 }, tune: [null, 'WFM', 98.1e6], needs: ['rig-sdrrx', 'unun'],
-    desc: 'Wideband receive-only SDR and a long wire: broadcast, shortwave, WWV, airband, weather radio. No license needed.' },
+    desc: 'A 5 W handheld with its rubber-duck antenna. Repeaters, simplex, APRS, weather, and fire, rail and marine monitoring.' },
+  { id: 'listener', name: 'Scanner & shortwave listener', rig: 'sdrrx', ant: { type: 'efhw', band: '40m', height: 30, feed: 'RG-8X', feedLen: 50, axis: 0 }, tune: [null, 'FM', 154.19e6], needs: ['rig-sdrrx', 'unun'],
+    desc: 'Wideband receive-only SDR and a long wire: fire, rail and marine channels, airband, weather radio, WWV and oceanic HF. No license needed.' },
 ];
 
 export function applySetup(id, { quiet } = {}) {

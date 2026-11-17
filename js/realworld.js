@@ -111,14 +111,15 @@ function nearestStates(n = 5) {
   const m = me();
   return STATES.map((s) => ({ s, d: distanceKm(m, s) })).sort((a, b) => a.d - b.d).slice(0, n).map((x) => x.s);
 }
+const BROADCAST_PER_BAND = 4;
 export async function loadBroadcast() {
   const m = me();
-  const key = `bc4:${m.abbr}`;
+  const key = `bc5:${m.abbr}`;
   const cached = cacheGet(key, 24 * 3600e3);
   if (cached) { RW.broadcast = cached; bus.emit('realworld', 'broadcast'); setStatus('broadcast', `${cached.length} stations`); return; }
   setStatus('broadcast', 'loading…');
   const out = [], seen = new Set();
-  for (const st of nearestStates(10)) {
+  for (const st of nearestStates(3)) {
     try {
       const list = await getJSON(`${RB}/stations/search?countrycode=US&state=${encodeURIComponent(st.name)}&is_https=true&hidebroken=true&has_geo_info=true&limit=500&order=clickcount&reverse=true`);
       for (const x of list) {
@@ -135,6 +136,10 @@ export async function loadBroadcast() {
       }
     } catch (e) { }
   }
+  // Broadcasting is a small part of what a receiver is for: keep only the few nearest
+  // stations on each band (the ones a real radio would hear well) and leave the rest out.
+  const nearest = (mode) => out.filter((x) => x.mode === mode).map((x) => ({ x, d: distanceKm(m, x) })).sort((a, b) => a.d - b.d).slice(0, BROADCAST_PER_BAND).map((e) => e.x);
+  out.splice(0, out.length, ...nearest('AM'), ...nearest('WFM'));
   RW.broadcast = out;
   cacheSet(key, out);
   setStatus('broadcast', `${out.length} stations`);

@@ -8,7 +8,7 @@ export const REAL = [
   ['Ionosphere', 'Measured foF2, layer height and TEC (NOAA GloTEC) and D-layer absorption (NOAA D-RAP), refreshed every 10 minutes.'],
   ['Weather', 'Local conditions, forecasts and alerts for your area (National Weather Service, Open-Meteo).'],
   ['Terrain', 'Ground elevation around your location (Open-Meteo/Copernicus DEM, USGS 3DEP).'],
-  ['Broadcast stations', 'Real AM/FM stations near you, with their live audio streams played from the broadcasters.'],
+  ['Broadcast stations', 'The few nearest real AM and FM stations (four per band), with their live audio streams played from the broadcasters.'],
   ['Airports', 'Real airport locations and published radio frequencies (OurAirports).'],
   ['Time and location', 'Real UTC time and, only if you allow it, your device location (kept in your browser).'],
   ['Live feeds', 'Everything on the Live feeds page is real: web SDR receivers, scanner, air-band and weather audio, broadcast streams and live propagation spot networks, run by their own operators.'],
@@ -28,6 +28,8 @@ export const SIMULATED = [
   ['Receiver audio', 'Band noise, static, filtering, AGC, CW tones and synthesized voices.'],
   ['Weather radio and ATIS', 'Real forecast and observation text read by a synthesized voice; aircraft and ambulance traffic is invented.'],
   ['WWV', 'An imitation of the NIST time-signal format, not the real broadcast.'],
+  ['Two-way radio traffic', 'Fire dispatch and paging, railroad, marine VHF, highway, job-site and store radios, CB, FRS, GMRS, MURS, oceanic air traffic and VOLMET are invented traffic on the real nationwide frequencies.'],
+  ['Digital signals', 'FT8, APRS packets and P25/DMR digital voice are imitations of how those signals sound and what a decoder would show.'],
   ['License and callsign', 'Practice exams use original questions covering the official topics. A license or callsign earned here has no legal standing; real licenses come from a Volunteer Examiner session and the FCC.'],
   ['Logbook confirmations', 'QSL confirmations and awards are simulated and not recognised by any awards programme.'],
 ];

@@ -19,6 +19,7 @@ import { serviceOf, SERVICE_REGIONS } from './services.js';
 import { rig , rigRx, gearOf } from './rigs.js';
 import { RW, WX_CHANNELS, HEAR } from './realworld.js';
 import { hashStr } from './util.js';
+import { SVC, hasMarine, localHour } from './activity.js';
 const regionOf = (hz) => bandOf(hz) || serviceOf(hz);
 
 const R = () => S.radio;
@@ -87,7 +88,8 @@ bus.on('station-tx', (st) => {
   const tx = st.tx;
   if (tx.kind === 'peervoice' || tx.kind === 'stream') return;
   const start = audio.t + Math.max(0, tx.start - now());
-  if (tx.kind === 'cw' || tx.kind === 'cwtone' || tx.kind === 'amtone' || tx.kind === 'fmtone') audio.cw(st.id, tx.sch.segs, start, Math.max(20, toneFor(st)));
+  if (tx.steps) audio.fsk(st.id, start, tx.end - tx.start, Math.max(20, toneFor(st)), tx.steps, tx.wave);
+  else if (tx.kind === 'cw' || tx.kind === 'cwtone' || tx.kind === 'amtone' || tx.kind === 'fmtone') audio.cw(st.id, tx.sch.segs, start, Math.max(20, toneFor(st)));
   else audio.babble(st.id, start, tx.end - tx.start, 700);
   tx.heard = false;
 });
@@ -166,7 +168,7 @@ export function rxUpdate() {
       audible = !fmRx && ao < 6000;
       intelligible = (r.mode === 'AM' && ao < 2500) || ((r.mode === 'USB' || r.mode === 'LSB') && ao < 300);
       audio.setVoice(st.id, { tone: 700 + off / 8 });
-    } else if (st.mode === 'CW' || st.tx.kind === 'cwtone') {
+    } else if (st.mode === 'CW' || st.mode === 'FT8' || st.tx.kind === 'cwtone') {
       audible = tone > 0 && inPassband(tone);
       if (st.tx.kind === 'cwtone') audible = r.mode === 'FM' && Math.abs(off) < 7000;
       audio.setVoice(st.id, { tone });
@@ -233,6 +235,12 @@ export function rxUpdate() {
     }
     audio.setVoice(s.st.id, { rms });
     s.st.rxSnrRecent = s.snr;
+    // what a decoder would show for data signals (a real radio needs a computer for this)
+    const tx = s.st.tx;
+    if (S.settings.subtitles && s.audible && open && !tx.noted) {
+      if (s.st.mode === 'FT8') { if (s.snr > -16 && t > tx.end - 0.5) { tx.noted = true; opUi.transcript(s.st.call, tx.show, 'rx', null, `FT8 decode, ${Math.round(clamp(s.snr, -24, 20))} dB`); } }
+      else if (tx.note && s.snr > 3) { tx.noted = true; opUi.transcript(s.st.call, tx.note, 'rx'); }
+    }
   }
   for (const p of peerSigs) p.node.gain.setTargetAtTime(p.audible && open ? clamp(db2amp(p.snr) * agc * 0.3, 0, 1.4) : 0, audio.t, 0.05);
   // QRN static crashes on the low bands
@@ -406,12 +414,14 @@ function serviceButtons() {
   const go = (f, m) => { prevFreq = R().freq; setFreq(f, { mode: m }); setMode(m); };
   const lastIn = (name, def) => R().lastByBand[name]?.f || def;
   const P = [
-    ['AM BC', () => go(lastIn('MW', 1000e3), 'AM'), 'AM broadcast 530–1700 kHz (real stations)'],
     ['WWV', () => go(10e6, 'AM'), 'WWV/WWVH time signals on 10 MHz'],
-    ['FM BC', () => go(lastIn('FM', 98.1e6), 'WFM'), 'FM broadcast 88–108 MHz (real stations)'],
+    ['OCEANIC', () => go(localHour() > 7 && localHour() < 19 ? SVC.oceanic[1] : SVC.oceanic[0], 'USB'), 'Oceanic air traffic on HF single sideband: position reports and SELCAL (8906 kHz by day, 5598 kHz at night)'],
     ['AIR', () => { const ap = RW.airports[0]; const tw = ap?.freqs.find((x) => /TWR/i.test(x.type)) || ap?.freqs[0]; go(tw ? Math.round(tw.mhz * 1e6) : 121.5e6, 'AM'); }, 'Airband: nearest airport tower'],
     ['NOAA WX', () => go(WX_CHANNELS[hashStr(RW.nws?.office || 'NWS') % 7], 'FM'), 'NOAA Weather Radio'],
     ['EMS', () => go(HEAR, 'FM'), 'HEAR ambulance ↔ hospital (155.340)'],
+    ['FIRE', () => go(SVC.fire, 'FM'), 'County fire dispatch: two-tone paging, then the voice dispatch (154.190)'],
+    ['RAIL', () => go(SVC.rail, 'FM'), 'Railroad road channel: crews, dispatcher and defect detectors (160.800)'],
+    hasMarine() ? ['MARINE', () => go(SVC.marine16, 'FM'), 'Marine VHF channel 16: distress and calling (156.800)'] : ['JOB SITE', () => go(SVC.biz, 'FM'), 'Business itinerant channel: construction crews, flaggers, towing (151.625)'],
   ];
   return h('div', { class: 'btn-grid bands' }, ...P.map(([l, fn, t]) => h('button', { class: 'rbtn svc', title: t, onclick: fn }, l)));
 }
@@ -649,6 +659,7 @@ function computeBins(Wb, span, f0, nfBin, t, rs, r) {
   const addSig = (fc, dbm, kind, sb, keyed, seed) => {
     if (!keyed) return;
     if (kind === 'cw') spread(fc - 15, fc + 15, dbm);
+    else if (kind === 'ft8') spread(fc, fc + 50, dbm); // 8 tones 6.25 Hz apart
     else if (kind === 'wfm') spread(fc - 90000, fc + 90000, dbm - 0.5 * Math.random());
     else if (kind === 'fm') spread(fc - 7000, fc + 7000, dbm - Math.random());
     else if (kind === 'am') {
@@ -669,7 +680,7 @@ function computeBins(Wb, span, f0, nfBin, t, rs, r) {
     const dbm = world.rxDbm(st) - r.rfAtt;
     let keyed = true;
     if (st.tx.sch) { const el = t - st.tx.start; keyed = st.tx.sch.segs.some((s) => el >= s.t0 && el <= s.t1); }
-    const kind = st.mode === 'WFM' ? 'wfm' : st.mode === 'AM' && st.tx.kind !== 'amtone' ? 'am' : st.mode === 'CW' || st.tx.kind === 'cwtone' || st.tx.kind === 'amtone' ? 'cw' : st.mode === 'FM' ? 'fm' : 'voice';
+    const kind = st.mode === 'WFM' ? 'wfm' : st.mode === 'AM' && st.tx.kind !== 'amtone' ? 'am' : st.mode === 'CW' || st.tx.kind === 'cwtone' || st.tx.kind === 'amtone' ? 'cw' : st.mode === 'FT8' ? 'ft8' : st.mode === 'FM' ? 'fm' : 'voice';
     addSig(st.freq, dbm, kind, st.sb, keyed || kind === 'am' || kind === 'wfm', seedOf(st));
   }
   if (net.waterfall) for (const p of net.waterfall()) addSig(p.freq, p.dbm, p.kind, p.sb, true, seedOf(p));

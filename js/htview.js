@@ -6,6 +6,7 @@ import { S, save, licName } from './state.js';
 import { h, bus, toast, hashStr, clamp } from './util.js';
 import { rx, setFreq, setMode } from './radio.js';
 import { pttDown, pttUp, sendVoice, txState } from './operating.js';
+import { channels as svcChannels, SVC } from './activity.js';
 import { RW, WX_CHANNELS, HEAR, wantBroadcast, wantAirports } from './realworld.js';
 import { rig, rigRx, RIGS, isHT } from './rigs.js';
 import { sUnits } from './propagation.js';
@@ -39,7 +40,8 @@ export function channels() {
   const at = ap?.freqs.find((x) => /ATIS|AWOS|ASOS/i.test(x.type));
   if (at) L.push({ name: `${ap.ident} ATIS`, f: Math.round(at.mhz * 1e6), mode: 'AM', note: `${ap.name} weather` });
   L.push({ name: 'GUARD', f: 121.5e6, mode: 'AM', note: 'Aviation emergency' });
-  for (const b of (RW.broadcast || []).filter((x) => x.mode === 'WFM').slice(0, 3)) L.push({ name: (b.call || b.name).slice(0, 7), f: b.f, mode: 'WFM', note: b.name });
+  for (const c of svcChannels().filter((x) => ['FIRE', 'RAIL', 'MARINE 16', 'BUSINESS', 'FRS 1'].includes(x.call))) L.push({ name: c.call.replace('MARINE 16', 'MAR 16').replace('BUSINESS', 'JOBSITE'), f: c.f, mode: 'FM', note: c.name });
+  L.push({ name: 'APRS', f: SVC.aprs, mode: 'FM', note: 'APRS packet data, 1200 baud' });
   for (const m of S.htMem || []) L.push({ ...m, mine: true });
   return L.filter((c) => rigRx(c.f) && rig().modes.includes(c.mode));
 }
@@ -91,7 +93,7 @@ export function showHT(on) {
   document.body.classList.toggle('ht-view', !!on);
   S.settings.view = on ? 'ht' : 'station';
   save();
-  if (on) { wantBroadcast(); wantAirports(); if (isHT()) load(); draw(); }
+  if (on) { wantAirports(); if (isHT()) load(); draw(); }
   bus.emit('view', on ? 'ht' : 'station');
 }
 
