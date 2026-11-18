@@ -291,6 +291,9 @@ body.coach-on #toasts { right: calc(var(--coach-w) + 18px); }
 .exam-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; } .exam-grid > :last-child { grid-column: 1 / -1; }
 .lic-big { font-size: 1.6rem; margin: 8px 0; }
 .exam-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.reach { margin: 14px 0; } .reach h4 { margin: 16px 0 6px; } .reach .tbl td { vertical-align: top; }
+.reach td.ok { color: var(--ok); } .reach td.warn { color: var(--warn); } .reach td.bad { color: var(--bad); } .reach tr.none td { color: var(--muted); }
+.reach-grid th, .reach-grid td { text-align: center; white-space: nowrap; } .reach-grid th:first-child, .reach-grid td:first-child { text-align: left; }
 .exam-grid > .priv-guide { grid-column: 1 / -1; }
 .priv-guide .seg { margin: 4px 0 12px; }
 .priv-guide ul { margin: 6px 0 12px; padding-left: 20px; } .priv-guide li { margin: 3px 0; }
