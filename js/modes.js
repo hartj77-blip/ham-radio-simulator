@@ -172,8 +172,9 @@ export function welcome(onDone) {
   const name = h('input', { value: S.op.name, placeholder: 'First name (optional)' });
   const sel = h('select', {}, ...STATES.map((s) => h('option', { value: s.abbr, selected: s.abbr === S.op.state }, s.name)));
   let close;
+  const pres = h('input', { type: 'checkbox', checked: true });
   const finish = (mode) => {
-    S.op.name = name.value.trim(); S.op.state = sel.value; S.started = true;
+    S.op.name = name.value.trim(); S.op.state = sel.value; S.started = true; S.settings.presence = pres.checked;
     audio.init();
     if (mode === 'training') { S.training = { step: 0, done: {}, answers: {}, marks: {}, min: false }; }
     save(); close();
@@ -188,6 +189,7 @@ export function welcome(onDone) {
     h('h1', {}, 'Ham Radio Simulator'),
     h('p', { class: 'lead' }, 'Learn amateur radio by doing it. Nothing here transmits a real signal.'),
     h('div', { class: 'row welcome-fields' }, h('label', { class: 'fc-field' }, h('span', {}, 'Name'), name), h('label', { class: 'fc-field' }, h('span', {}, 'Location (state)'), sel)),
+    h('label', { class: 'inline small welcome-pres' }, pres, ' Show me as online and tell me when others come on. They see only a callsign and your state.'),
     h('div', { class: 'mode-grid two' }, card('training'), card('simulation')),
     h('p', { class: 'tiny muted' }, 'Headphones recommended. You can switch between Training and Simulation at any time.')),
   { wide: true, onClose: () => { if (!S.started) { S.started = true; S.mode ||= 'training'; save(); setAppMode(S.mode, { quiet: true }); } audio.init(); } });

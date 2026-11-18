@@ -1387,3 +1387,15 @@ body.ht-view .subnav, .subnav[hidden] { display: none; }
 @media (max-width: 640px) { .path-row { flex-wrap: wrap; } .path-main { flex-basis: 60%; } }
 body.coach-on .shack-grid { grid-template-columns: 1fr; }
 .course-now .bar { max-width: 520px; }
+
+
+/* ============================ redesign: online presence ============================ */
+#people-btn.has-people { color: #fff; }
+#people-btn.has-people .ic { color: var(--ok); }
+#people-btn.on-air .ic { color: var(--bad); }
+.people-pop { display: flex; flex-direction: column; gap: 8px; }
+.pp-row { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; }
+.pp-row .mono { margin-left: auto; font-size: 0.78rem; }
+.pp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.pp-dot.air { background: var(--ok); } .pp-dot.tx { background: var(--bad); }
+.welcome-pres { display: flex; gap: 8px; margin: 10px 0 0; color: var(--text-2); }

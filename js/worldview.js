@@ -51,7 +51,7 @@ export function catalog() {
   add('wx', { name: `NOAA Weather Radio${RW.nws?.office ? ` (${RW.nws.office})` : ''}`, f: WX_CHANNELS[hashStr(RW.nws?.office || 'NWS') % 7], mode: 'FM', ...wxp, note: RW.nws?.alerts?.length ? `${RW.nws.alerts[0].event}` : 'forecast & alerts' });
   for (const c of channels()) add(c.kind, { name: c.name, f: c.f, mode: c.mode === 'SSB' ? c.sb : c.mode, ...channelPos(c, me), note: c.info });
   add('ems', { name: 'HEAR hospital channel', f: HEAR, mode: 'FM', ...off(me, 8, 200), note: 'ambulance ↔ hospital' });
-  for (const e of net.roster || []) { const st = stateBy(e.state); if (st) add('players', { name: e.call, f: e.freq, mode: e.mode, lat: st.lat, lon: st.lon, note: `${st.name}${e.tx ? ' · talking' : ''}`, roster: e }); }
+  for (const e of net.roster || []) { const st = stateBy(e.state); if (st) add('players', { name: e.call, f: e.freq, mode: e.mode, lat: st.lat, lon: st.lon, note: `${st.name}${e.air === false ? ' · online, not on the air' : e.tx ? ' · talking' : ''}`, roster: e }); }
   return out;
 }
 

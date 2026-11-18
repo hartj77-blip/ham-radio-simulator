@@ -25,7 +25,7 @@ import { initExplain, initFinder } from './guide.js';
 import { initWhereAmI } from './whereami.js';
 import { initTraining, initCourse } from './training.js';
 import { initLibrary } from './libraryui.js';
-import { MODES, initModes, migrateMode, welcome, initFreeConsole } from './modes.js';
+import { MODES, initModes, migrateMode, welcome, initFreeConsole, setAppMode, autoSetup } from './modes.js';
 import { initHT, showHT, isPhone, phoneStart } from './htview.js';
 import { startRealWorld, RW } from './realworld.js';
 import { initScannerUI } from './services.js';
@@ -155,6 +155,38 @@ function helpTab(el) {
 
 }
 
+// Who is online: count on the top bar, list in a small popover.
+function peopleBadge() {
+  const b = $('#people-btn'); if (!b) return;
+  const n = net.online ? net.roster.length : 0;
+  b.querySelector('.lbl').textContent = !net.online ? 'Offline' : n ? `${n} online` : 'Online';
+  b.classList.toggle('active', net.online);
+  b.classList.toggle('has-people', n > 0);
+  b.classList.toggle('on-air', net.roster.some((e) => e.tx));
+  document.querySelector('.people-pop')?._draw();
+}
+function peoplePop(anchor) {
+  const old = document.querySelector('.people-pop'); if (old) { old.remove(); return; }
+  const pop = h('div', { class: 'info-pop people-pop' });
+  const draw = () => {
+    pop.innerHTML = '';
+    if (!net.online) pop.append(h('p', {}, 'See who else has the simulator open, and get told when someone comes online. Others will see your callsign and state.'), h('button', { class: 'btn primary small', onclick: () => { bus.emit('presence', true); setTimeout(draw, 1500); } }, 'Show me as online'));
+    else {
+      pop.append(h('b', {}, net.roster.length ? `${net.roster.length} other ${net.roster.length === 1 ? 'person' : 'people'} online` : 'Nobody else is online right now'));
+      for (const e of net.roster.slice(0, 12)) pop.append(h('div', { class: 'pp-row' }, h('span', { class: `pp-dot ${e.tx ? 'tx' : e.air === false ? '' : 'air'}` }), h('b', {}, e.call), h('span', { class: 'muted' }, e.state || ''),
+        h('span', { class: 'muted mono' }, e.air === false ? 'online' : `${(e.freq / 1e6).toFixed(3)} ${e.mode}`), e.air === false ? null : h('button', { class: 'btn small', onclick: () => { pop.remove(); bus.emit('net-join', e); } }, 'Join')));
+      pop.append(h('div', { class: 'row' }, h('button', { class: 'btn small', onclick: () => { pop.remove(); showTab('radio'); bus.emit('radio-side', 'players'); } }, 'Open Players'), h('button', { class: 'link small', onclick: () => { bus.emit('presence', false); pop.remove(); } }, net.air ? '' : 'Go offline')));
+    }
+  };
+  draw();
+  pop._draw = draw;
+  document.body.append(pop);
+  const r = anchor.getBoundingClientRect(), w = Math.min(340, innerWidth - 24);
+  Object.assign(pop.style, { width: `${w}px`, left: `${Math.max(12, Math.min(innerWidth - w - 12, r.right - w))}px`, top: `${r.bottom + 8}px` });
+  const close = (ev) => { if (pop.contains(ev.target) || anchor.contains(ev.target)) return; pop.remove(); removeEventListener('pointerdown', close, true); };
+  setTimeout(() => addEventListener('pointerdown', close, true));
+}
+
 function buildChrome() {
   const nav = $('#tabs');
   let group = null;
@@ -176,6 +208,7 @@ function buildChrome() {
   $('#tb-tools').append(
     tool('station-btn', 'station', 'Station', 'Station presets, radio model, saved antennas, appearance', () => openStation()),
     tool('ht-btn', 'handheld', 'Handheld', 'Switch between the handheld radio and the full station', () => showHT(!document.body.classList.contains('ht-view'))),
+    tool('people-btn', 'users', 'Online', 'Who else is online', (e) => peoplePop(e.currentTarget)),
     tool('help-btn', 'help', 'Help', 'How it works, shortcuts, sources', () => showTab('help')),
     tool('explain-btn', 'info', 'Explain', 'Hover any control to learn what it does', (e) => { S.settings.explain = !S.settings.explain; save(); e.currentTarget.classList.toggle('active', S.settings.explain); toast(S.settings.explain ? 'Explain mode on — hover over any control.' : 'Explain mode off.', 'info', 2500); }));
   $('#explain-btn').classList.toggle('active', !!S.settings.explain);
@@ -220,10 +253,12 @@ function init() {
   helpTab($('#tab-help'));
   header(); solarBanner(); clock();
   world.setFreq(S.radio.freq);
+  // Simulation is free play: if the station is not on the air yet, set it up.
+  if (S.started && autoSetup() && (!S.shack.rigOn || !S.antenna.built)) setAppMode('simulation', { quiet: true });
   const start = (location.hash || '').slice(1);
   showTab(start || (S.mode === 'training' ? 'course' : 'radio'));
 
-  bus.on('roster', header);
+  bus.on('roster', peopleBadge); peopleBadge();
   bus.on('license', header);
   bus.on('qth', () => { header(); solarBanner(); });
   bus.on('mode', () => { modeSwitch(); header(); });
@@ -259,8 +294,10 @@ function init() {
   const loop = (t) => { drawFrame(); if (t - lastMap > 250) { lastMap = t; drawMap(); shackTick(txState); } requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
 
-  if (!S.started) welcome((m) => { header(); solarBanner(); showTab(m === 'training' ? 'course' : 'radio'); if (isPhone()) { phoneStart(); showHT(true); } });
+  if (!S.started) welcome((m) => { header(); solarBanner(); showTab(m === 'training' ? 'course' : 'radio'); if (isPhone()) { phoneStart(); showHT(true); } setTimeout(autoOnline, 800); });
   if (S.started) setTimeout(autoOnline, 1500);
+  // People who used the app before presence existed are asked once.
+  if (S.started && S.settings.presence == null && !S.settings.autoOnline) setTimeout(() => { S.settings.presence = false; save(); toast('New: see who else is online and get told when someone arrives. <button class="btn small primary" onclick="this.closest(\'.toast\')?.remove(); document.getElementById(\'people-btn\').click()">Show me</button>', 'info', 15000); }, 4000);
   bus.on('view', (v) => { const b = $('#ht-btn .lbl'); if (b) b.textContent = v === 'ht' ? 'Full station' : 'Handheld'; });
   const sv = S.settings.startView || 'auto';
   if (S.started && (sv === 'ht' || (sv === 'auto' && (S.settings.view === 'ht' || (isPhone() && S.settings.view !== 'station'))))) { if (isPhone()) phoneStart(); showHT(true); }

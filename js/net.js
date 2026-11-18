@@ -2,6 +2,9 @@
 // the radio model. Peer-to-peer WebRTC via PeerJS. You only hear another player when
 // you're tuned to their frequency, in the right mode, and propagation supports the path.
 //
+// Two levels. "Online" is presence only: you are in the lobby, others see your callsign and
+// state, and you see who is around. "On the air" adds the direct links that carry voice and CW.
+//
 // Discovery without a server of our own: the first player online claims a well-known
 // "lobby" peer ID on the public PeerJS broker and keeps the roster; everyone else sends it
 // a heartbeat every 2 s and gets the roster back. If the lobby host leaves, the next player
@@ -20,7 +23,7 @@ const LOBBY = 'hamshack-sim-lobby-v1';
 const HB_MS = 2000, STALE_MS = 9000;
 
 export const net = {
-  online: false, peer: null, id: null, peers: new Map(), status: 'offline', roster: [], hosting: false,
+  online: false, air: false, peer: null, id: null, peers: new Map(), status: 'offline', roster: [], hosting: false,
   isPeerCall(call) { for (const p of this.peers.values()) if (p.call === call) return true; return false; },
 };
 const lobby = { host: null, registry: null, hostTimer: null, conn: null, retry: null, lastRoster: 0 };
@@ -35,18 +38,20 @@ function loadLib() {
   });
 }
 
-async function goOnline() {
-  if (net.online || net.status === 'connecting…') return;
-  try { audio.init(); } catch (e) { }
-  if (S.settings.hour != null) { S.settings.hour = null; save(); world.repopulate(); toast('On the air together, everyone runs on real UTC — time warp turned off.', 'info'); }
+async function goOnline({ air = true } = {}) {
+  if (net.online) { if (air && !net.air) { net.air = true; startAir(); heartbeat(); render(); bus.emit('roster'); } return; }
+  if (net.status === 'connecting…') { net.air ||= air; return; }
+  net.air = air;
+  if (air) startAir();
   setStatus('connecting…');
   try { await loadLib(); } catch (e) { setStatus('offline'); return toast('Could not load the networking library (are you offline?).', 'bad'); }
   const id = `hamshack-${(S.call || 'swl').toLowerCase()}-${randi(1000, 9999)}`;
   const peer = new window.Peer(id);
   net.peer = peer;
-  peer.on('open', (pid) => { net.id = pid; net.online = true; setStatus('online'); tryHost(); render(); });
-  peer.on('connection', (conn) => { if (conn.peer !== LOBBY) setupConn(conn); });
-  peer.on('call', onIncomingCall);
+  peer.on('open', (pid) => { net.id = pid; net.online = true; setStatus(net.air ? 'on the air' : 'online'); tryHost(); render(); bus.emit('roster'); });
+  // Direct links and calls are only accepted while on the air.
+  peer.on('connection', (conn) => { if (conn.peer === LOBBY) return; if (net.air) setupConn(conn); else { try { conn.close(); } catch (e) { } } });
+  peer.on('call', (c) => { if (net.air) onIncomingCall(c); else { try { c.close(); } catch (e) { } } });
   peer.on('error', (e) => {
     if (e.type === 'peer-unavailable' && String(e.message || '').includes(LOBBY)) return relobby();
     if (e.type === 'peer-unavailable') return toast('That station is no longer online.', 'warn');
@@ -59,14 +64,27 @@ async function goOnline() {
   net.hbTimer = setInterval(heartbeat, HB_MS);
 }
 
+function startAir() {
+  try { audio.init(); } catch (e) { }
+  if (S.settings.hour != null) { S.settings.hour = null; save(); world.repopulate(); toast('On the air together, everyone runs on real UTC. Time warp turned off.', 'info'); }
+  if (net.online) setStatus('on the air');
+}
+// Leave the air but stay visible as online.
+function goOffAir() {
+  for (const p of [...net.peers.values()]) removePeer(p.id);
+  net.air = false; S.settings.autoOnline = false; save();
+  setStatus('online'); heartbeat(); render(); bus.emit('roster');
+}
+
 function goOffline() {
+  seen = null; airSeen.clear();
   clearInterval(net.timer); clearInterval(net.hbTimer); clearInterval(lobby.hostTimer); clearTimeout(lobby.retry);
   for (const p of [...net.peers.values()]) removePeer(p.id);
   try { lobby.conn && lobby.conn.close(); } catch (e) { }
   try { lobby.host && lobby.host.destroy(); } catch (e) { }
   Object.assign(lobby, { host: null, registry: null, conn: null });
   net.peer && net.peer.destroy();
-  Object.assign(net, { peer: null, online: false, id: null, roster: [], hosting: false });
+  Object.assign(net, { peer: null, online: false, air: false, id: null, roster: [], hosting: false });
   setStatus('offline'); render(); bus.emit('roster');
 }
 
@@ -123,7 +141,7 @@ function relobby() {
 
 function myInfo() {
   const r = S.radio;
-  return { t: 'hb', id: net.id, call: S.call || 'SWL', state: S.op.state, name: S.op.name || '', lic: S.license || null,
+  return { t: 'hb', id: net.id, air: net.air, call: S.call || 'SWL', state: S.op.state, name: S.op.name || '', lic: S.license || null,
     freq: myTx.tx ? myTx.freq : r.freq, mode: r.mode, tx: !!myTx.tx, mic: !!voice.micStream, ts: Date.now() };
 }
 
@@ -137,8 +155,36 @@ function heartbeat() {
   else if (lobby.conn && lobby.conn.open) { try { lobby.conn.send(info); } catch (e) { } }
 }
 
+// Tell the operator when someone arrives or goes on the air. The first roster after connecting
+// is everyone who was already here, so it is not announced.
+let seen = null;
+const airSeen = new Set(), lastNote = new Map();
+function note(e, text) {
+  if (S.settings.notifyOnline === false) return;
+  const k = `${e.call}|${text}`;
+  if (Date.now() - (lastNote.get(k) || 0) < 10 * 60 * 1000) return;
+  lastNote.set(k, Date.now());
+  const st = stateBy(e.state);
+  const line = `${e.call}${st ? ` (${st.name})` : ''} ${text}`;
+  toast(`<b>${e.call}</b>${st ? ` (${st.name})` : ''} ${text}`, 'info', 6000);
+  if (document.hidden && S.settings.notifyBrowser && 'Notification' in window && Notification.permission === 'granted') {
+    try { const n = new Notification('Ham Radio Simulator', { body: line, tag: `hrs-${e.call}` }); n.onclick = () => { window.focus(); bus.emit('goto', 'radio'); bus.emit('radio-side', 'players'); n.close(); }; } catch (err) { /* not allowed here */ }
+  }
+}
+function announce(list) {
+  const ids = new Set(list.map((e) => e.id));
+  if (seen) for (const e of list) {
+    if (!seen.has(e.id)) note(e, e.air === false ? 'is online' : `is on the air on ${(e.freq / 1e6).toFixed(3)} MHz`);
+    else if (e.air !== false && !airSeen.has(e.id)) note(e, `went on the air on ${(e.freq / 1e6).toFixed(3)} MHz`);
+  }
+  airSeen.clear();
+  for (const e of list) if (e.air !== false) airSeen.add(e.id);
+  seen = ids;
+}
+
 function setRoster(list) {
-  net.roster = list.filter((x) => x.id && x.id !== net.id).sort((a, b) => (b.tx - a.tx) || a.freq - b.freq);
+  net.roster = list.filter((x) => x.id && x.id !== net.id).sort((a, b) => (b.tx - a.tx) || ((b.air !== false) - (a.air !== false)) || a.freq - b.freq);
+  announce(net.roster);
   bus.emit('roster');
   renderRoster();
 }
@@ -158,6 +204,8 @@ export function pathEstimate(e) {
 // Join: tune to them, open a direct link (audio + CW), and get ready to talk.
 async function join(e, talk = true) {
   if (!net.online) return;
+  if (e.air === false) return toast(`${e.call} is online but not on the air yet.`, 'info');
+  if (!net.air) await goOnline({ air: true });
   bus.emit('tune-to', e.freq, e.mode);
   if (!net.peers.has(e.id)) connect(e.id);
   const lp = net.peers.get(e.id); if (lp) lp.pinned = true;
@@ -291,10 +339,10 @@ function tick() {
 const MAX_LINKS = 24;
 let lastAuto = 0;
 function autoLink() {
-  if (!net.online || now() - lastAuto < 1.5) return;
+  if (!net.online || !net.air || now() - lastAuto < 1.5) return;
   lastAuto = now();
   const myBand = world.band;
-  const same = net.roster.filter((e) => bandOf(e.freq)?.name === myBand && myBand);
+  const same = net.roster.filter((e) => e.air !== false && bandOf(e.freq)?.name === myBand && myBand);
   same.sort((a, b) => Math.abs(a.freq - S.radio.freq) - Math.abs(b.freq - S.radio.freq));
   for (const e of same) {
     if (net.peers.size >= MAX_LINKS) break;
@@ -364,15 +412,20 @@ function render() {
   statusEl = h('span', { class: `badge ${net.online ? 'ok' : ''}` }, net.status);
   rosterBox = h('div', { class: 'roster' });
   root.append(h('div', { class: 'card side-card net', id: 'net-card' },
-    h('div', { class: 'row spread' }, h('h3', {}, 'Players', info('A shared, simulated band with other people using the app. You hear anyone who transmits where you are tuned, if the band is open between you. Tune to their frequency (or press Join) and hold SPACE to talk. Voices go directly between browsers; nothing is recorded. Others see your callsign, state and frequency.', 'About players')), h('div', { class: 'row' }, net.hosting ? h('span', { class: 'badge', title: 'Your browser is currently keeping the player list' }, 'lobby host') : null, statusEl)),
+    h('div', { class: 'row spread' }, h('h3', {}, 'Players', info('<b>Online</b> shows who else has the app open; others see your callsign and state. <b>On the air</b> adds a shared, simulated band with other people using the app. You hear anyone who transmits where you are tuned, if the band is open between you. Tune to their frequency (or press Join) and hold SPACE to talk. Voices go directly between browsers; nothing is recorded. Others see your callsign, state and frequency.', 'About players')), h('div', { class: 'row' }, net.hosting ? h('span', { class: 'badge', title: 'Your browser is currently keeping the player list' }, 'lobby host') : null, statusEl)),
     net.online
       ? h('div', {},
         rosterBox,
-        h('details', { class: 'small' }, h('summary', {}, 'Advanced: connect by station ID'),
+        net.air ? h('details', { class: 'small' }, h('summary', {}, 'Advanced: connect by station ID'),
           h('div', { class: 'row' }, h('span', {}, 'Your ID: '), h('code', { class: 'peer-id' }, net.id || '…'), h('button', { class: 'btn small', onclick: () => { navigator.clipboard?.writeText(net.id); toast('Copied!', 'good'); } }, 'Copy')),
-          h('div', { class: 'row' }, idIn, h('button', { class: 'btn small', onclick: () => connect(idIn.value) }, 'Connect'))),
-        h('div', { class: 'row' }, autoChk(), h('button', { class: 'btn small', onclick: goOffline }, 'Go offline')))
-      : h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => { S.settings.autoOnline = true; save(); goOnline(); } }, 'Go on the air with real players')),
+          h('div', { class: 'row' }, idIn, h('button', { class: 'btn small', onclick: () => connect(idIn.value) }, 'Connect'))) : null,
+        h('div', { class: 'row wrap' },
+          net.air ? h('button', { class: 'btn small', onclick: goOffAir }, 'Leave the air') : h('button', { class: 'btn primary', id: 'go-air', onclick: () => { S.settings.autoOnline = true; save(); goOnline({ air: true }); } }, 'Go on the air'),
+          h('button', { class: 'btn small ghost', onclick: () => { S.settings.presence = false; S.settings.autoOnline = false; save(); goOffline(); } }, 'Go offline'),
+          net.air ? autoChk() : null))
+      : h('div', { class: 'row wrap' },
+        h('button', { class: 'btn primary', id: 'go-online', onclick: () => { S.settings.presence = true; save(); goOnline({ air: false }); } }, 'See who is online'),
+        h('button', { class: 'btn', onclick: () => { S.settings.presence = true; S.settings.autoOnline = true; save(); goOnline({ air: true }); } }, 'Go on the air')),
   ));
   renderRoster();
 }
@@ -382,14 +435,16 @@ function autoChk() {
   c.onchange = () => { S.settings.autoOnline = c.checked; save(); };
   return h('label', { class: 'inline small' }, c, ' go on the air automatically when I open the simulator');
 }
-export function autoOnline() { if (S.settings.autoOnline && !net.online) goOnline(); }
+export function autoOnline() { if (net.online) return; if (S.settings.autoOnline) goOnline({ air: true }); else if (S.settings.presence) goOnline({ air: false }); }
+export const setPresence = (on) => { S.settings.presence = on; save(); if (on) goOnline({ air: false }); else if (net.online && !net.air) goOffline(); };
+bus.on('presence', setPresence);
 
 function renderRoster() {
   if (!rosterBox || !net.online) return;
   const list = net.roster;
   rosterBox.innerHTML = '';
   if (!list.length) {
-    rosterBox.append(h('p', { class: 'muted small' }, net.hosting || (lobby.conn && lobby.conn.open) ? 'Nobody else is on the air right now. You\'re listening — anyone who comes on your band will be heard automatically. (Share the game link with a friend!)' : 'Finding the lobby…'));
+    rosterBox.append(h('p', { class: 'muted small' }, net.hosting || (lobby.conn && lobby.conn.open) ? 'Nobody else is online right now. You will be told when someone arrives.' : 'Finding the lobby…'));
     return;
   }
   const dial = S.radio.freq;
@@ -404,10 +459,10 @@ function renderRoster() {
         h('td', {}, e.tx ? h('span', { class: 'onair-dot', title: 'transmitting now' }, '●') : linked?.media ? '' : ''),
         h('td', {}, h('b', {}, e.call), e.lic ? h('span', { class: `badge lic-${e.lic}` }, e.lic) : h('span', { class: 'badge lic-none' }, 'SWL')),
         h('td', {}, `${e.state}${est ? ` · ${Math.round(est.km).toLocaleString()} km` : ''}`),
-        h('td', { class: 'mono' }, `${(e.freq / 1e6).toFixed(3)}${band ? ` (${band.name})` : ''}`),
+        h('td', { class: 'mono' }, e.air === false ? '—' : `${(e.freq / 1e6).toFixed(3)}${band ? ` (${band.name})` : ''}`),
         h('td', {}, e.mode),
         h('td', { class: est ? (est.open ? 'ok' : 'bad') : 'muted' }, est ? (est.open ? `≈ ${est.s}` : 'band closed') : '—'),
         h('td', { class: 'small' }, linked ? (linked.media ? 'audio' : '') : bandOf(e.freq)?.name === world.band ? '…' : h('span', { class: 'muted' }, 'other band')),
-        h('td', {}, here && linked ? h('span', { class: 'badge ok' }, 'joined') : h('button', { class: 'btn primary small', onclick: () => join(e) }, e.tx ? 'Join (on air)' : 'Join')));
+        h('td', {}, e.air === false ? h('span', { class: 'badge' }, 'online') : here && linked ? h('span', { class: 'badge ok' }, 'joined') : h('button', { class: 'btn primary small', onclick: () => join(e) }, e.tx ? 'Join (talking)' : 'Join')));
     })));
 }

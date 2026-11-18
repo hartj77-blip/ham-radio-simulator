@@ -78,6 +78,9 @@ export function openSettings(tab = 'audio') {
       row('My CW speed', range('myWpm', 10, 40, 1, (v) => `${v} wpm`), 'Simulated stations reply at about your speed.'),
       row('ESM (Enter Sends Message)', check('esm'), 'Contest-logger style: Enter does the next logical thing.'),
       row('CW decoder', check('decoder'), 'Show decoded Morse text (a crutch — try copying by ear!).'),
+      row('Show me as online', chk0('presence', () => bus.emit('presence', !!S.settings.presence)), 'Others see your callsign and state; you see who is around. No audio is shared.'),
+      row('Tell me when someone comes online', check('notifyOnline'), 'A short notice in the app.'),
+      row('Browser notifications', (() => { const ok = 'Notification' in window; const b = h('button', { class: 'btn small', disabled: !ok }, !ok ? 'Not supported' : S.settings.notifyBrowser && Notification.permission === 'granted' ? 'On (click to turn off)' : 'Turn on'); b.onclick = async () => { if (S.settings.notifyBrowser && Notification.permission === 'granted') { S.settings.notifyBrowser = false; } else { const r = await Notification.requestPermission(); S.settings.notifyBrowser = r === 'granted'; if (r !== 'granted') toast('Notifications are blocked for this site in your browser settings.', 'warn'); } save(); draw(t); }; return b; })(), 'Also notify when this tab is in the background. Only while the app is open.'),
       row('Go on the air automatically', chk0('autoOnline'), 'Rejoin the shared band with real players at start-up.'),
       row('Default tuning step', select('step', [[10, '10 Hz'], [50, '50 Hz'], [100, '100 Hz'], [500, '500 Hz'], [1000, '1 kHz']], null, S.radio)));
     if (t === 'time') {
