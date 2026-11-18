@@ -1,7 +1,7 @@
 // Transceiver front panel, panadapter/waterfall and the receive audio chain.
 import { S, save } from './state.js';
 import { h, $, $$, clamp, fmtFreq, bus, now, toast, rand, chance, db2amp } from './util.js';
-import { BANDS, bandOf, bandByName, privilegeMap, CTCSS, SIDEBAND_FOR } from './data/bandplan.js';
+import { BANDS, bandOf, bandByName, privilegeMap, txAdvice, CTCSS, SIDEBAND_FOR } from './data/bandplan.js';
 import { audio } from './audio.js';
 import { world, player, phone } from './world.js';
 import { rigStatus } from './shack.js';
@@ -541,7 +541,8 @@ export function updateDisplay() {
       ${r.mode === 'FM' ? `<span>${r.rptOffset ? (r.rptOffset < 0 ? '−' : '+') + 'SHIFT' : 'SIMP'}</span><span>${r.toneHz ? 'T ' + r.toneHz.toFixed(1) : ''}</span>` : ''}
       ${rig().tx.length ? `<span>SWR ${swr > 50 ? '∞' : swr.toFixed(1)}</span>` : ''}</div>
     <div class="lcd-row small"><span>${rs.end === 'antenna' ? (S.antenna.built ? ANT_TYPES[S.antenna.type].label.split('(')[0] : 'NO ANTENNA UP') : rs.end === 'dummy' ? 'DUMMY LOAD' : 'ANT: OPEN'}</span>
-      ${r.mode === 'FM' && r.rptOffset ? `<span>TX ${(txf / 1e6).toFixed(3)}</span>` : ''}</div>`
+      ${r.mode === 'FM' && r.rptOffset ? `<span>TX ${(txf / 1e6).toFixed(3)}</span>` : ''}
+      ${rig().tx.length ? (() => { const a = txAdvice(S.license, txf, r.mode); return `<span class="lcd-priv ${a.ok ? 'ok' : 'no'}" title="${a.long.replace(/"/g, '&quot;')}">${a.short}</span>`; })() : ''}</div>`
     : `<div class="lcd-off">${rs.issues[0] || 'OFF'}<br><small>(see the Station wiring page)</small></div>`;
   $$('.rbtn[data-band]', panel).forEach((b) => b.classList.toggle('active', band && b.dataset.band === band.name));
   $$('.rbtn[data-mode]', panel).forEach((b) => b.classList.toggle('active', b.dataset.mode === r.mode));

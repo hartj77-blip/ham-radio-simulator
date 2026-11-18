@@ -70,9 +70,9 @@ function prepare(modeOverride, quiet) {
   if (via === 'rf') {
     const chk = checkTx(S.license, txf, mode);
     if (!chk.ok) {
-      S.stats.violations++; save();
+      if (chk.code !== 'notsim') { S.stats.violations++; save(); }
       toast(`<b>Transmission blocked.</b> ${chk.reason}${chk.code === 'nolicense' ? '<br>Tip: you CAN transmit into the dummy load to practice.' : ''}`, 'bad', 9000);
-      if (chk.code === 'edge') elmer('band_edge'); else if (chk.code !== 'nolicense') elmer('privileges');
+      if (chk.code === 'edge') elmer('band_edge'); else if (chk.code !== 'nolicense' && chk.code !== 'notsim') elmer('privileges');
       if (chk.code === 'privilege' && S.license === 'T') elmer('tech_hf');
       bus.emit('helper-mistake', 'tx-blocked', chk.reason);
       return null;

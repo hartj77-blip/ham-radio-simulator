@@ -232,6 +232,7 @@ body.coach-on #toasts { right: calc(var(--coach-w) + 18px); }
 .lcd-row { display: flex; gap: 14px; flex-wrap: wrap; } .lcd-row.small { font-size: 0.78rem; }
 .lcd-row .mode { background: var(--lcd); color: #0a1810; padding: 0 6px; border-radius: 3px; font-weight: 700; }
 .lcd-panel .dim { opacity: 0.3; } .lcd-panel .hl { color: #fff; }
+.lcd-priv { margin-left: auto; font-weight: 700; cursor: help; } .lcd-panel.on .lcd-priv.ok { color: #7dffa6; } .lcd-panel.on .lcd-priv.no { color: #ffb37a; text-shadow: none; }
 .tx-on { background: #ff3b3b; color: #fff; padding: 0 5px; border-radius: 3px; text-shadow: none; }
 .lcd-off { color: #ffb347; text-align: center; padding-top: 30px; font-family: system-ui; font-size: 0.95rem; }
 .rig-right { display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -290,6 +291,13 @@ body.coach-on #toasts { right: calc(var(--coach-w) + 18px); }
 .exam-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; } .exam-grid > :last-child { grid-column: 1 / -1; }
 .lic-big { font-size: 1.6rem; margin: 8px 0; }
 .exam-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.exam-grid > .priv-guide { grid-column: 1 / -1; }
+.priv-guide .seg { margin: 4px 0 12px; }
+.priv-guide ul { margin: 6px 0 12px; padding-left: 20px; } .priv-guide li { margin: 3px 0; }
+.priv-guide .tbl td { vertical-align: top; } .priv-guide .tbl td.f { font-family: var(--mono); white-space: nowrap; }
+.priv-guide tr.none td { color: var(--muted); } .priv-guide tr.cont td:first-child { border-bottom-color: transparent; }
+.priv-guide .m-ALL { color: var(--ok); } .priv-guide .m-CW, .priv-guide .m-CWDATA { color: var(--accent2); }
+.priv-guide h4 { margin: 16px 0 6px; }
 .tbl.priv td.ph { color: var(--ok); } .tbl.priv td.cw { color: var(--accent2); } .tbl.priv td.np { color: #556; } .tbl.priv th.me { color: var(--accent); }
 .quiz { margin-top: 10px; }
 .qmeta { color: var(--muted); font-size: 0.8rem; margin-bottom: 6px; }
