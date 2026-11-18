@@ -24,7 +24,7 @@ const regionOf = (hz) => bandOf(hz) || serviceOf(hz);
 
 const R = () => S.radio;
 let wf, wfCtx, spec, meterCv, lcd, panel;
-let agc = 1;
+let agc = 1, lastRxT = 0;
 let lastSmeter = -127;
 export const rx = { strongest: null, decoder: '', smeterDbm: -127, noiseDbm: -130 };
 
@@ -168,7 +168,7 @@ export function rxUpdate() {
   const t = now();
   for (const st of world.stations) {
     if (!st.tx || t > st.tx.end + 0.3 || t < st.tx.start - 0.2) continue;
-    const dbm = world.rxDbm(st) - att - site.lossDb;
+    let dbm = world.rxDbm(st) - att - site.lossDb;
     const off = st.freq - d;
     let tone = toneFor(st), audible = false, intelligible = false;
     const ao = Math.abs(off), fmRx = r.mode === 'FM' || r.mode === 'WFM';
@@ -202,13 +202,25 @@ export function rxUpdate() {
       intelligible = sameSb && r.mode !== 'CW' && Math.abs(off) < 350;
       audio.setVoice(st.id, { tone: clamp(center * 0.6, 150, 3000) });
     }
+    // Selectivity: a signal that is not centred in the passband comes through weaker and
+    // distorted, with noise mixed in, until it drops out. `pen` is that loss in dB; `rough`
+    // (0 clean .. 1 unreadable) drives the distortion, the extra hiss and the voice level.
+    let pen = 0, rough = 0, zone = 0;
+    const skirt = (flat, span) => (ao <= flat ? 0 : (ao - flat) / span * 36);
+    if (st.mode === 'WFM') pen = fmRx ? skirt(40000, 60000) : 0;
+    else if (st.mode === 'FM' && st.tx.kind !== 'fmtone' && st.tx.kind !== 'cwtone') pen = fmRx ? skirt(1500, 5500) : 0;
+    else if (st.mode === 'AM' && r.mode === 'AM') pen = skirt(1200, 3600);
+    if (pen) { dbm -= pen; rough = clamp(pen / 16, 0, 1); zone = rough < 0.2 ? 0 : 1; if (pen >= 16) intelligible = false; }
+    else if (st.mode === 'SSB' || (st.mode !== 'FM' && st.mode !== 'WFM' && st.mode !== 'AM' && st.mode !== 'CW' && st.mode !== 'FT8' && st.tx.kind === 'voice')) {
+      rough = clamp((ao - 90) / 260, 0, 1); zone = Math.round(off / 80); // re-voiced as you tune, so the pitch follows the dial
+    }
     if (audible && st.tx.kind !== 'stream' && t < st.tx.end - 0.15 && !audio.has(st.id)) startVoice(st); // tuned in mid-transmission
     const snr = dbm - nBW;
-    sigs.push({ st, dbm, snr, audible, intelligible, off, tone });
+    sigs.push({ st, dbm, snr, audible, intelligible, off, tone, rough, zone });
     if (audible) {
       const rms = NREF * db2amp(snr);
       if (rms > maxRms) maxRms = rms;
-      if (dbm > strongDbm) { strongDbm = dbm; strongest = { st, snr, intelligible, off, dbm }; }
+      if (dbm > strongDbm) { strongDbm = dbm; strongest = { st, snr, intelligible, off, dbm, rough }; }
     }
   }
   // network peers (other players)
@@ -230,32 +242,42 @@ export function rxUpdate() {
   // receiver would, so the next station is not left waiting behind it.
   if (speaking) {
     const cur = sigs.find((x) => x.st === speaking.st);
-    if (!(cur && cur.st.tx === speaking.tx && cur.intelligible && cur.snr > -1 && open)) stopSpeaking();
+    if (!(cur && cur.st.tx === speaking.tx && cur.intelligible && cur.snr > -1 && open && cur.zone === speaking.zone)) stopSpeaking();
   }
   // AGC (fast attack, slow decay)
   const target = clamp(0.28 / maxRms, 0.02, 1);
   const spd = r.agcSpd || 'mid';
   if (spd === 'off') agc = 0.7; // no AGC: strong signals blast, weak ones vanish — ride the RF gain
-  else agc = target < agc ? target : agc + (target - agc) * ({ fast: 0.3, mid: 0.08, slow: 0.025 }[spd] || 0.08);
+  else {
+    // Recovery is timed, not counted in calls, so tuning quickly does not change how the AGC behaves.
+    const ticks = clamp((t - lastRxT) / 0.1, 0.05, 3);
+    const k = 1 - Math.pow(1 - ({ fast: 0.4, mid: 0.16, slow: 0.04 }[spd] || 0.16), ticks);
+    agc = target < agc ? target : agc + (target - agc) * k;
+  }
+  lastRxT = t;
   rx.agcDb = 20 * Math.log10(agc); rx.att = att; rx.bw = bw;
-  audio.setNoise(noiseRms * agc * (r.nr && (owns('dsp') || rig().dsp) ? 0.55 : 1) * (S.settings.noiseLvl ?? 1));
+  // Band hiss, plus the rasp of a signal that is off-centre in the passband (not tamed by AGC).
+  const fmMode = r.mode === 'FM' || r.mode === 'WFM';
+  const offTune = strongest && open ? strongest.rough * 0.16 : 0;
+  audio.setNoise((noiseRms * agc * (fmMode ? 1 : 1.4) + offTune) * (r.nr && (owns('dsp') || rig().dsp) ? 0.55 : 1) * (S.settings.noiseLvl ?? 1));
   const liveNow = new Set(); // live streams the receiver is on this tick
   for (const s of sigs) {
     let rms = s.audible && open ? NREF * db2amp(s.snr) * agc : 0;
     if (r.notch && rig().notch && s.tone > 0 && Math.abs(s.tone - (r.notchHz || 1000)) < 70 && ['cw', 'cwtone', 'amtone'].includes(s.st.tx.kind) || (r.notch && rig().notch && s.st.mode === 'CW' && Math.abs(s.tone - (r.notchHz || 1000)) < 70)) rms *= 0.04;
     if ((r.mode === 'FM' || r.mode === 'WFM') && (s.st.mode === 'FM' || s.st.mode === 'WFM') && s.audible) rms = open ? 0.25 : 0;
     if (s.st.tx.kind === 'stream') {
-      const lvl = s.audible && open ? clamp((s.intelligible ? 1 : 0.35) * (s.st.mode === 'WFM' ? clamp((s.snr - 3) / 12, 0, 1) * 1.2 : NREF * db2amp(s.snr) * agc / 0.12), 0, 1.5) : 0;
+      const lvl = s.audible && open ? clamp((s.intelligible ? 1 : 0.35) * (1 - 0.5 * s.rough) * (s.st.mode === 'WFM' ? clamp((s.snr - 3) / 12, 0, 1) * 1.2 : NREF * db2amp(s.snr) * agc / 0.12), 0, 1.5) : 0;
       if (lvl > 0.01 && !s.st.dead) { const rec = audio.stream(s.st.url, s.st.url); if (rec.dead) s.st.dead = true; }
       liveNow.add(s.st.url); // keyed by address, so coming back reuses the stream that is still buffered
       audio.streamLevel(s.st.url, lvl, r.af);
+      audio.streamRough(s.st.url, s.rough);
       if (lvl > 0.01 && S.settings.subtitles && s.st.lastSub !== s.st.id) { s.st.lastSub = s.st.id; opUi.transcript(s.st.op.call, `${s.st.op.name} — live${s.st.dead ? ' (stream unavailable)' : ''}`, 'rx'); }
       s.st.rxSnrRecent = s.snr;
       continue;
     }
     if (s.intelligible && s.snr > -1 && s.st.tx.kind === 'voice') {
       rms *= 0.06; // the TTS voice carries the intelligible audio
-      speakIfNeeded(s, open ? (r.mode === 'FM' ? 0.9 : clamp(db2amp(s.snr) * agc * 0.35, 0.05, 1)) : 0);
+      speakIfNeeded(s, open ? (r.mode === 'FM' ? 0.9 : clamp(db2amp(s.snr) * agc * 0.35, 0.05, 1)) * (1 - 0.6 * s.rough) : 0);
     }
     audio.setVoice(s.st.id, { rms });
     s.st.rxSnrRecent = s.snr;
@@ -310,8 +332,9 @@ function speakIfNeeded(s, vol) {
   tx.speaking = true;
   const st = s.st;
   const utt = { cancelled: false };
-  speaking = { st, tx, utt };
-  const pitch = clamp(st.pitch + s.off / 450 * (R().mode === 'LSB' ? -1 : 1), 0.2, 2);
+  speaking = { st, tx, utt, zone: s.zone };
+  // Only a sideband signal changes pitch when mistuned; FM and AM voices keep theirs.
+  const pitch = st.mode === 'SSB' ? clamp(st.pitch + s.off / 450 * (R().mode === 'LSB' ? -1 : 1), 0.2, 2) : clamp(st.pitch, 0.2, 2);
   (S.settings.tts === false ? new Promise((res) => setTimeout(res, Math.min(9000, 400 + say.length * 55))) : audio.speak(say, { lang: st.op.lang, seed: st.seed, rate: (st.rate || 1) * (S.settings.ttsRate || 1), pitch, volume: vol })).then(() => {
     if (utt.cancelled) return; // cut off by tuning away: the station itself is still transmitting
     if (speaking && speaking.utt === utt) speaking = null;
