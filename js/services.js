@@ -10,6 +10,7 @@ import { stateBy } from './data/world.js';
 import { simDate, distanceKm, path as propPath, bandNoiseDbm, sUnits } from './propagation.js';
 import { schedule } from './morse.js';
 import { bandOf } from './data/bandplan.js';
+import { helperStations, behaveHelper } from './helpers.js';
 import { shortRangeStations, behaveChatter, behaveDigital, behaveAprs, behaveFt8, channels, channelPos, hasMarine, SVC } from './activity.js';
 
 export const SERVICE_REGIONS = [
@@ -87,6 +88,7 @@ export function stationsFor(region) {
     out.push(mk({ op: { call: 'GUARD', name: 'Emergency/guard 121.5', lat: qth.lat + 1, lon: qth.lon, qth: 'airborne', cont: 'NA', lang: 'en-US' }, mode: 'AM', sb: 'AM', freq: 121.5e6, band: 'AIR', role: 'atc', atc: 'guard', powerDbm: 44, antGain: 0, txHeight: 9000, timer: rand(60, 200) }));
   }
   out.push(...shortRangeStations(region.name, mk, qth));
+  out.push(...helperStations(region.name, mk, near(qth, 6, 45)));
   return out;
 }
 
@@ -110,6 +112,7 @@ export function serviceBehave(st, t) {
     case 'digital': return behaveDigital(st);
     case 'aprs': return behaveAprs(st);
     case 'ft8': return behaveFt8(st);
+    case 'helper': return behaveHelper(st);
   }
 }
 

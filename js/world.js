@@ -10,6 +10,7 @@ import { schedule, cut } from './morse.js';
 import { netGain, system } from './antenna.js';
 import { rigStatus } from './shack.js';
 import { serviceOf, stationsFor, serviceBehave } from './services.js';
+import { helperStations, behaveHelper } from './helpers.js';
 import { netStations, cwStations, behaveNet, behaveCwPractice, repeaterNet, netCheckinFromPlayer, netsOn, ft8Stations, aprsStation } from './activity.js';
 
 let NEXT_ID = 1;
@@ -127,6 +128,7 @@ export const world = {
     const g = rxAntGain(fHz, st.path.brg, st.path.dist, st.mode === 'FM' ? 'FM' : 'SSB');
     const q = st.qsb, t = now();
     const fade = q.depth * (0.5 + 0.5 * Math.sin(t * 2 * Math.PI / q.per + q.ph)) * (0.6 + 0.4 * Math.sin(t * 0.37 + q.ph * 2));
+    if (st.fixedDbm != null) return st.fixedDbm; // helper channels are always clearly audible
     return st.powerDbm + st.antGain + g - st.path.loss - fade + (st.elevBoost || 0);
   },
 
@@ -195,7 +197,8 @@ function rxAntGain(fHz, brg, dist, mode) {
 const txAntGain = rxAntGain;
 
 // ------------------------------------------------------------------ population
-const CASUAL_N = { '160m': 10, '80m': 22, '40m': 34, '30m': 14, '20m': 40, '17m': 17, '15m': 25, '12m': 11, '10m': 22, '6m': 10 };
+// Kept modest on purpose: each band also has a helper channel (helpers.js) that explains it.
+const CASUAL_N = { '160m': 6, '80m': 13, '40m': 20, '30m': 8, '20m': 24, '17m': 10, '15m': 15, '12m': 7, '10m': 13, '6m': 6 };
 const US_W = { '160m': 0.9, '80m': 0.85, '40m': 0.75, '30m': 0.6, '20m': 0.45, '17m': 0.45, '15m': 0.45, '12m': 0.45, '10m': 0.5, '6m': 0.8 };
 
 function predictedSnr(op, band, f) {
@@ -271,6 +274,7 @@ function newStation(band, contest, list, opts = {}) {
 
 // The shared world: band population is a pure function of (band, 30-min UTC slot), so
 // every player online sees the same stations on the same frequencies at the same time.
+const nearMe = () => { const p = player(); return { lat: p.lat + 0.05, lon: p.lon + 0.05 }; };
 export const worldSlot = () => Math.floor(simDate().getTime() / 1800000);
 function populateShared(band, contest) {
   if (contest || band.name === '2m') return populate(band, contest);
@@ -296,7 +300,7 @@ function populate(band, contest, shared = false) {
       list.push(p);
     }
   }
-  if (!contest) list.push(...netStations(band), ...cwStations(band, list));
+  if (!contest) list.push(...netStations(band), ...cwStations(band, list), ...helperStations(band.name, (o) => new Station(o), nearMe()));
   list.push(...ft8Stations(band)); // FT8 never stops, contest or not
   const beaconF = { '20m': 14100000, '17m': 18110000, '15m': 21150000, '12m': 24930000, '10m': 28200000 }[band.name];
   if (beaconF && !contest) list.push(new Station({ op: BEACONS[0], mode: 'CW', freq: beaconF, band: band.name, role: 'beacon', wpm: 22, powerDbm: 50, antGain: 2, slot: Object.keys({ '20m': 0, '17m': 1, '15m': 2, '12m': 3, '10m': 4 }).indexOf(band.name) }));
@@ -351,7 +355,7 @@ function populate2m(band) {
     op: { call: S.local.locals[0].call, ...near(12), cont: 'NA', zone: 4, qth: 'local', name: S.local.locals[0].name, lang: 'en-US' },
     mode: 'FM', sb: 'FM', freq: 146520000, band: '2m', role: 'simplex', powerDbm: 44, antGain: 3, timer: rand(20, 60),
   });
-  return [rpt, simplex, aprsStation(S.local.locals, near)];
+  return [rpt, simplex, aprsStation(S.local.locals, near), ...helperStations('2m', (o) => new Station(o), nearMe())];
 }
 
 const RPT_CHAT = [
@@ -417,6 +421,7 @@ function behave(st, t) {
     case 'simplex': return behaveSimplex(st, t);
     case 'net': return behaveNet(st, t);
     case 'cwpractice': return behaveCwPractice(st, t);
+    case 'helper': return behaveHelper(st);
     default: return serviceBehave(st, t);
   }
 }

@@ -30,6 +30,7 @@ const HELP = [
   ['.ptt', 'Push-to-talk', 'Hold SPACE (or this button) to transmit your voice. Release to listen.'],
   ['.pmap', 'Propagation map', 'Day/night, the greyline, every station on your band, and the path to who you\'re hearing. Click to tune.'],
   ['.scanner', 'What\'s on the air', 'Real stations and services near you, with estimated signal strength. Tune to any of them.'],
+  ['.whereami', 'Where you are', 'Follows the dial: who uses this frequency and why, when it works, what to do here, and whether you could listen or transmit in real life.'],
   ['#finder', 'Find bar', 'Shortcuts that tune you straight to something worth hearing right now.'],
   ['.shack-svg', 'Shack wiring', 'Click a connector, then where the cable goes. Coax: radio ANT → meter → tuner → wall. Bond every GND to the ground bus.'],
   ['.analyzer', 'Antenna analyzer', 'SWR across the band. A dip below the band = antenna too long (trim it). Above = too short.'],
@@ -103,6 +104,7 @@ export function initFinder(el) {
   const B = (label, title, fn) => h('button', { class: 'find-btn', title, onclick: fn }, label);
   el.append(h('div', { class: 'finder' }, h('span', { class: 'ctl-title' }, 'FIND'),
     B('Best band now', 'The band most open from your QTH right now that your antenna can work', () => { const [x] = rankBands(); tuneBand(x.b); toast(`<b>${x.b.name}</b> looks best right now (propagation from your QTH${x.swr < 90 ? `, antenna SWR ${x.swr.toFixed(1)}:1` : ''}).`, 'info'); }),
+    B('Whole dial', 'Every band from 500 kHz to 500 MHz: who uses it, why, and whether you can listen or transmit in real life', () => bus.emit('whole-dial')),
     B('A voice CQ', 'Tune to someone calling CQ on SSB', () => findCQ(false)),
     B('A CW CQ', 'Tune to someone calling CQ in Morse', () => findCQ(true)),
     B('Beacons', 'NCDXF beacons on 14.100 — check which continents are open', () => bus.emit('tune-to', 14100000, 'CW')),

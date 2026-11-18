@@ -1147,3 +1147,38 @@ body.ht-view .fb-fab { left: 14px; bottom: auto; top: 10px; width: 34px; height:
 .wf-tools .wf-span { min-width: 64px; text-align: center; color: var(--text); }
 .wf-tools .wf-lab:not(:first-child) { margin-left: 10px; }
 #radio-panel.no-scope .wf-tools { display: none; }
+
+/* ---------------------------------------------------------------- Where you are (guide panel) and the whole-dial browser */
+.whereami { padding: 12px 16px; margin: 10px 0; }
+.wa-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.wa-title { flex: 1 1 240px; min-width: 0; } .wa-title h3 { margin: 1px 0 0; font-size: 1.02rem; }
+.wa-dot { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 3px; }
+.wa-verdicts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wa-k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.wa-chip { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 0.74rem; font-weight: 600; border: 1px solid currentColor; white-space: nowrap; }
+.wa-chip.ok { color: var(--ok); background: rgba(60, 191, 128, 0.1); } .wa-chip.warn { color: var(--warn); background: rgba(227, 166, 59, 0.1); } .wa-chip.bad { color: #ff8a82; background: rgba(229, 87, 78, 0.1); }
+.wa-spot { margin-top: 10px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 0.88rem; color: var(--text-2); }
+.wa-spot b { color: var(--text); }
+.wa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 6px 22px; margin-top: 10px; font-size: 0.86rem; color: var(--text-2); }
+.wa-grid h4, .wa-helper h4 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 8px 0 4px; }
+.wa-grid p { margin: 0 0 6px; } .wa-now { color: var(--text); }
+.wa-list { margin: 0 0 8px; padding-left: 1.15em; } .wa-list li { margin: 2px 0; }
+.wa-helper { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 4px 22px; margin-top: 10px; padding: 4px 14px 8px; border: 1px solid var(--accent-line); border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 0.86rem; color: var(--text-2); }
+.wa-note { grid-column: 1 / -1; margin: 4px 0 0; }
+.wa-next { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.whereami button.link, .dial button.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font-size: inherit; }
+body.ht-view #guide-panel { display: none; }
+
+.dial-strip { position: relative; height: 26px; margin-top: 12px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; }
+.dial-blk { position: absolute; top: 0; bottom: 0; border: 0; padding: 0; cursor: pointer; box-shadow: inset -1px 0 0 rgba(10, 14, 19, 0.55); }
+.dial-blk.dim { opacity: 0.18; } .dial-blk:hover { filter: brightness(1.25); }
+.dial-you { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 0 1px #000; pointer-events: none; }
+.dial-axis { position: relative; height: 18px; font-size: 0.7rem; color: var(--muted); } .dial-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.dial-cats { margin: 8px 0 12px; } .dial-cats .chip { display: inline-flex; align-items: center; gap: 6px; }
+.dial-helpers { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: var(--radius-sm); } .dial-helpers .row { margin-top: 8px; }
+.dial-row { border-bottom: 1px solid var(--line); } .dial-row.here { background: var(--accent-soft); } .dial-row.open { background: var(--surface-2); }
+.dial-sum { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; background: none; border: 0; padding: 8px 8px; text-align: left; cursor: pointer; font-size: 0.88rem; }
+.dial-sum:hover { background: var(--hover); } .dial-f { flex: none; width: 150px; color: var(--muted); font-size: 0.78rem; } .dial-v { margin-left: auto; display: flex; gap: 6px; }
+.dial-det { padding: 2px 12px 12px 28px; font-size: 0.87rem; color: var(--text-2); } .dial-det p { margin: 5px 0; } .dial-det b { color: var(--text); }
+.dial-legal { margin-top: 16px; color: var(--text-2); } .dial-legal b { color: var(--text); }
+@media (max-width: 640px) { .dial-f { width: auto; } .dial-v { margin-left: 0; } .dial-det { padding-left: 12px; } .wa-btns { width: 100%; } }

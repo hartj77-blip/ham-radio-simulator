@@ -841,6 +841,48 @@ export const LIBRARY = [
 
   // -------------------------------------------------------------- Receiving
   {
+    id: 'who-is-where',
+    cat: 'Receiving',
+    title: 'The whole dial: who uses which frequencies, and why',
+    summary: 'What each part of the radio spectrum is good at, who was given it, and whether a private person in the US may listen or transmit there.',
+    minutes: 7,
+    html: `
+<p>A receiver that tunes from 500 kHz to 500 MHz covers almost every kind of two-way radio there is. It is not a random jumble. Each service sits where the physics suits its job, and once you know the pattern you can guess what you are hearing from the frequency alone. In the simulator, the <b>Where you are</b> panel above the radio does this for whatever is tuned in, and <b>Whole dial</b> lists every band.</p>
+
+<h4>Frequency decides range</h4>
+<table><thead><tr><th>Range</th><th>How it travels</th><th>So it is used by</th></tr></thead><tbody>
+<tr><td>Below 2 MHz</td><td>Along the ground by day; reflected by the ionosphere at night</td><td>AM broadcasting, navigation beacons, time signals</td></tr>
+<tr><td>2 to 30 MHz (HF, "shortwave")</td><td>Reflected by the ionosphere, across oceans; which frequencies work depends on the hour and the sun</td><td>Anyone who needs distance with no infrastructure: international broadcasters, ships, aircraft over oceans, the military, and radio amateurs</td></tr>
+<tr><td>30 to 300 MHz (VHF)</td><td>Line of sight, a little past the horizon, over hills fairly well</td><td>County-wide services: fire, police, railways, boats, aircraft, FM radio, weather radio, the 2 m amateur band</td></tr>
+<tr><td>300 MHz and up (UHF)</td><td>Line of sight, short antennas, good inside buildings</td><td>Handhelds in towns: businesses, city services, FRS and GMRS walkie-talkies, the 70 cm amateur band</td></tr>
+</tbody></table>
+<p>The same rule explains <b>when</b> to use a band. In daylight the D layer of the ionosphere absorbs the lower shortwave frequencies and the F layer reflects the higher ones, so go high by day (20 m to 10 m) and low by night (40 m to 160 m). VHF and UHF do not care about the hour; they care about antenna height.</p>
+
+<h4>Why hams have bands everywhere</h4>
+<p>The amateur service is the only one given a slice in every part of the spectrum, so that amateurs can experiment with every kind of propagation. Each band has a personality: 80 m for regional evening nets, 40 m for something at any hour, 20 m for daytime worldwide contacts, 10 m for low-power miracles when the sun is active, and 2 m for local repeaters. Inside each band, Morse and data sit at the bottom and voice at the top, partly by rule and partly by agreement.</p>
+
+<h4>May I listen?</h4>
+<p>In the United States, almost always yes. Federal law allows reception of radio signals sent in the clear. The exceptions: cellular telephone calls may not be intercepted, and scrambled or encrypted traffic may not be decoded. What you overhear on channels that are not broadcast, amateur or CB is not yours to pass on or profit from (Communications Act section 705), and a few states restrict scanners in vehicles. Other countries are stricter. This is a summary, not legal advice.</p>
+<p>You need very little to listen for real: a $30 shortwave portable, a $25 handheld (owning one and listening needs no licence), a $30 RTL-SDR dongle for a computer, or nothing at all, using the web receivers on the Live feeds page.</p>
+
+<h4>May I transmit?</h4>
+<p>Only with authority, and the authority depends on the service.</p>
+<table><thead><tr><th>Step</th><th>What it takes</th><th>What you get</th></tr></thead><tbody>
+<tr><td>FRS, CB, MURS</td><td>Nothing: no licence, no exam. Use a radio certified for that service.</td><td>FRS: 2 W UHF walkie-talkies, a mile or so. CB: 4 W at 27 MHz, a few miles from a vehicle. MURS: 2 W VHF, five channels.</td></tr>
+<tr><td>GMRS</td><td>A $35 FCC licence, no exam, covering your family for ten years</td><td>Up to 50 W on the walkie-talkie channels, and repeaters</td></tr>
+<tr><td>Technician</td><td>One 35-question exam</td><td>Every amateur band above 30 MHz (6 m, 2 m, 70 cm and up), plus 10 m voice from 28.3 to 28.5 MHz and Morse on parts of 80, 40 and 15 m</td></tr>
+<tr><td>General</td><td>A second 35-question exam</td><td>Most of every HF band: worldwide voice, Morse and data</td></tr>
+<tr><td>Amateur Extra</td><td>A 50-question exam</td><td>The remaining HF segments</td></tr>
+</tbody></table>
+<p>Everything else is closed to private individuals. Aviation and marine channels are for aircraft and vessels. Police, fire, railway and business channels belong to the agency or company that holds the licence. Broadcast bands need a broadcast licence. Federal frequencies cannot be licensed at all. An amateur transceiver is not certified for CB, FRS, GMRS, MURS or marine use, so a ham licence does not let you use it there.</p>
+<p>The one exception is a real emergency. FCC rules never prevent an amateur station from using any means of radio at its disposal to call for help when human life is in immediate danger and normal communication is not available (47 CFR 97.403 and 97.405).</p>
+
+<h4>Helper channels</h4>
+<p>Every amateur band and every kind of non-amateur traffic in the simulator has a <b>helper channel</b>: the simulator's own station, which does not exist on the air. Tune to one and it explains aloud who is on that band, why they are there, what hardware you would connect to hear or use it, and which exam facts belong to it. The same briefing appears in writing in the panel above the radio. Because the helpers carry the explanation, the bands hold fewer invented stations than before.</p>
+`,
+    related: ['bandplan', 'licensing', 'tuning-searching', 'band-by-band'],
+  },
+  {
     id: 'bandplan',
     cat: 'Receiving',
     title: 'US amateur bands and license privileges',

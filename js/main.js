@@ -21,6 +21,7 @@ import { initMapUI, drawMap } from './map.js';
 import { initWorldView } from './worldview.js';
 import { openStation, applyLook, loadSlot } from './setups.js';
 import { initExplain, initFinder } from './guide.js';
+import { initWhereAmI } from './whereami.js';
 import { initTraining, initCourse } from './training.js';
 import { initLibrary } from './libraryui.js';
 import { MODES, initModes, migrateMode, welcome, initFreeConsole } from './modes.js';
@@ -105,6 +106,7 @@ function helpTab(el) {
         h('ol', { class: 'small steps' },
           h('li', {}, h('b', {}, 'Station wiring: '), 'connect DC power with correct polarity, run coax from the radio\'s ANT jack through the meter and tuner to the arrestor at the wall, bond every chassis to the ground bus, connect microphone and key, then switch on supply and radio.'),
           h('li', {}, h('b', {}, 'Antenna: '), 'choose a type, calculate the length (dipole ≈ 468 ÷ MHz ft), set height and feedline, raise it, then sweep with the analyzer and trim to resonance.'),
+          h('li', {}, h('b', {}, 'Where you are: '), 'the panel above the radio follows the dial and says who uses the frequency and why, when it works, what to do there, and whether you could listen or transmit in real life. Every band has a helper channel that explains it aloud. Whole dial lists every band.'),
           h('li', {}, h('b', {}, 'Radio: '), 'pick a band for the time of day, set the mode (LSB below 10 MHz, USB above), scan with a coarse step and fine-tune. Click the waterfall to jump to a signal.'),
           h('li', {}, h('b', {}, 'License study: '), 'practise the question pool and take the examination for transmit privileges.'),
           h('li', {}, h('b', {}, 'Contacts: '), 'answer a CQ with F4, send your exchange with F2 and 73 with F3, then log (Ctrl+Enter).'))),
@@ -169,6 +171,7 @@ function init() {
   initTraining($('#coach'));
   initExplain();
   initFinder($('#finder'));
+  initWhereAmI($('#guide-panel'));
   initHT($('#ht-panel'));
   initShackUI($('#tab-shack'));
   initAntennaUI($('#tab-antenna'));

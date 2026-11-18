@@ -19,6 +19,7 @@ export const REAL = [
 ];
 
 export const SIMULATED = [
+  ['Helper channels', 'The simulator\'s own guide stations, one per amateur band and per kind of traffic. They explain each band aloud and do not exist on the air.'],
   ['Radio signals', 'Nothing is transmitted or received over the air. Every signal you hear is computed or synthesized in the browser.'],
   ['Amateur stations', 'Operators, QSOs, contests, nets, beacons and repeaters are computer-generated; their callsigns are random and do not belong to real people.'],
   ['Short-range radio', 'CB, FRS walkie-talkie, GMRS and MURS conversations are invented. They are listen-only, as amateur radios may not transmit on those services.'],

@@ -18,12 +18,13 @@ python3 -m http.server 8000
 
 ## What you can do
 
-- **Learn:** follow the course, read the reference library (52 articles covering stations, antennas, measurement, RF analysis, receiving, propagation, operating, and etiquette and protocols), follow the free self-study path for RF communications, and study for the Technician, General and Extra exams with practice tests.
+- **Learn:** follow the course, read the reference library (53 articles covering stations, antennas, measurement, RF analysis, receiving, propagation, operating, and etiquette and protocols), follow the free self-study path for RF communications, and study for the Technician, General and Extra exams with practice tests.
 - **Build:** wire a station connector by connector (polarity, RF path, grounding), design antennas with a Method-of-Moments solver and an SWR/impedance analyzer, place them at a realistic site (yard, rooftop, balcony, park, vehicle and others), assess terrain, and assemble equipment from real-world specifications.
 - **Design in one click:** "Find my location & design the best antenna" chooses the band, antenna type, height, orientation and feedline for your goal and site, solves the exact length and explains each decision.
 - **Equipment replicas:** 20 radios (base, touchscreen SDR, flagship, mobile, portable, handheld and PC-software receivers) and their accessories, under generic names, each with a faceplate laid out like its real-world class and fully working keys and knobs. Every model has an original operating guide, opened from the radio.
 - **Measure (RF tools):** an FFT spectrum analyzer with waterfall, markers, averaging, max hold and five window functions. Nine test signals each teach one technique: resolution bandwidth, weak signals in noise, AM and FM sidebands, two-tone IMD, harmonics, key clicks and SSB. It can also analyse real audio from the microphone/line input, another browser tab (for example a web SDR) or a live feed. Calculators cover levels (W, dBm, µV, S-units), SWR, return loss and mismatch, feedline loss with SWR, electrical length, wattmeter accuracy, coupler directivity and mismatch uncertainty, test-equipment attenuation, EIRP/ERP, line-of-sight link budget, radio horizon and Fresnel zone, receiver sensitivity, FCC RF exposure (MPE), antenna lengths, LC resonance, Q and bandwidth, occupied bandwidth by mode and FFT resolution.
 - **Listen (Live feeds):** a checked directory of real web SDR receivers, amateur, air-band, scanner and weather audio, broadcast streams and live propagation spot networks; a search of the Radio Browser stream directory; and your own saved feeds (audio streams play in a built-in player that can send its audio to the spectrum analyzer; receiver pages open in a new tab). Feeds can be exported and imported.
+- **Get your bearings:** a "Where you are" panel above the radio follows the dial and answers four questions for whatever is tuned in: who uses this frequency and why, when it works, what to do there, and whether you could listen or transmit in real life (US rules, summarised). "Whole dial" lists every band from 500 kHz to 500 MHz the same way. Each amateur band and each kind of non-amateur traffic has a helper channel, the simulator's own station, which explains the band aloud and in writing: who is on it, what hardware to connect, and what the exam asks about it.
 - **Operate:** a transceiver with VFO, filters, AGC, RIT, tuner, meters and waterfall; a dial populated the way real spectrum is used (amateur voice, CW, FT8 and APRS, plus public safety, rail, marine, aviation, business and personal radio, with only a handful of broadcast stations); a propagation map with live ionosphere layers and click-to-analyse paths; a logger with contest practice; a handheld view for phones; and an optional shared band where other users can hear you over the internet.
 - **Give feedback:** the question-mark button opens a form that creates a GitHub issue.
 
@@ -44,6 +45,7 @@ python3 -m http.server 8000
 
 **Simulated**
 - All radio signals. Nothing is transmitted or received over the air.
+- Helper channels are the simulator's own guide stations and do not exist on the air.
 - Amateur stations, contacts, contests, beacons and repeaters are computer-generated; callsigns are random and do not belong to real people.
 - Propagation is a simplified model driven by the live data above; it is not a forecast.
 - Antenna impedance, SWR and patterns come from a numerical model; real installations differ by a few percent.
