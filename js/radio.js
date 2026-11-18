@@ -239,14 +239,16 @@ export function rxUpdate() {
   else agc = target < agc ? target : agc + (target - agc) * ({ fast: 0.3, mid: 0.08, slow: 0.025 }[spd] || 0.08);
   rx.agcDb = 20 * Math.log10(agc); rx.att = att; rx.bw = bw;
   audio.setNoise(noiseRms * agc * (r.nr && (owns('dsp') || rig().dsp) ? 0.55 : 1) * (S.settings.noiseLvl ?? 1));
+  const liveNow = new Set(); // live streams the receiver is on this tick
   for (const s of sigs) {
     let rms = s.audible && open ? NREF * db2amp(s.snr) * agc : 0;
     if (r.notch && rig().notch && s.tone > 0 && Math.abs(s.tone - (r.notchHz || 1000)) < 70 && ['cw', 'cwtone', 'amtone'].includes(s.st.tx.kind) || (r.notch && rig().notch && s.st.mode === 'CW' && Math.abs(s.tone - (r.notchHz || 1000)) < 70)) rms *= 0.04;
     if ((r.mode === 'FM' || r.mode === 'WFM') && (s.st.mode === 'FM' || s.st.mode === 'WFM') && s.audible) rms = open ? 0.25 : 0;
     if (s.st.tx.kind === 'stream') {
       const lvl = s.audible && open ? clamp((s.intelligible ? 1 : 0.35) * (s.st.mode === 'WFM' ? clamp((s.snr - 3) / 12, 0, 1) * 1.2 : NREF * db2amp(s.snr) * agc / 0.12), 0, 1.5) : 0;
-      if (lvl > 0.01 && !s.st.dead) { const rec = audio.stream(s.st.id, s.st.url); if (rec.dead) s.st.dead = true; }
-      audio.streamLevel(s.st.id, lvl, r.af);
+      if (lvl > 0.01 && !s.st.dead) { const rec = audio.stream(s.st.url, s.st.url); if (rec.dead) s.st.dead = true; }
+      liveNow.add(s.st.url); // keyed by address, so coming back reuses the stream that is still buffered
+      audio.streamLevel(s.st.url, lvl, r.af);
       if (lvl > 0.01 && S.settings.subtitles && s.st.lastSub !== s.st.id) { s.st.lastSub = s.st.id; opUi.transcript(s.st.op.call, `${s.st.op.name} — live${s.st.dead ? ' (stream unavailable)' : ''}`, 'rx'); }
       s.st.rxSnrRecent = s.snr;
       continue;
@@ -269,6 +271,7 @@ export function rxUpdate() {
   // (real thunderstorms nearby — from the live weather — make it much worse)
   const qrn = (f < 2.5 ? 0.08 : f < 5 ? 0.05 : f < 8 ? 0.025 : f < 15 ? 0.006 : 0) * (RW.wx?.storm ? 4 : 1);
   if (rs.antennaOk && S.settings.qrn !== false && r.mode !== 'FM' && r.mode !== 'WFM' && chance(qrn)) audio.crash(NREF * agc * rand(2, 8) * (r.nb ? 0.12 : 1)); // the noise blanker gates impulse noise
+  audio.muteStreamsExcept(liveNow);
   audio.streamGC();
   // S-meter
   const sm = Math.max(nf, strongDbm);

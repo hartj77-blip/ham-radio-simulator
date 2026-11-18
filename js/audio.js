@@ -248,8 +248,12 @@ class AudioEngine {
     rec.level = level;
     if (level > 0.001) rec.seen = performance.now();
     if (rec.direct) rec.el.volume = clamp(level * af * af * 1.6, 0, 1);
-    else if (rec.node) rec.node.gain.setTargetAtTime(level, this.t, 0.08);
+    else if (rec.node) rec.node.gain.setTargetAtTime(level, this.t, level > 0.001 ? 0.05 : 0.015); // cut fast, like a receiver leaving a signal
   }
+  // Silence every live stream except the ones the receiver is on right now. A stream whose
+  // station has left the band you are listening to is no longer updated by the receiver loop,
+  // so without this it would keep playing after you tune away.
+  muteStreamsExcept(keep) { if (this.streams) for (const [id, rec] of this.streams) if (!keep.has(id) && rec.level > 0) this.streamLevel(id, 0); }
   streamGC(keepMs = 15000) {
     if (!this.streams) return;
     const t = performance.now();
