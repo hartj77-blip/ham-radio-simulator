@@ -228,7 +228,15 @@ class AudioEngine {
     try {
       const src = this.ctx.createMediaElementSource(el);
       const g = this.ctx.createGain(); g.gain.value = 0;
-      src.connect(g); g.connect(this.rxIn); rec.node = g;
+      // Two paths: clean, and an off-tune path (hard clipped and thinned) that streamRough() blends in.
+      const dry = this.ctx.createGain(); dry.gain.value = 1;
+      const wet = this.ctx.createGain(); wet.gain.value = 0;
+      const sh = this.ctx.createWaveShaper(); const curve = new Float32Array(257);
+      for (let i = 0; i < 257; i++) curve[i] = clamp((i / 128 - 1) * 8, -1, 1) * 0.45;
+      sh.curve = curve;
+      const hp = this.ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1300;
+      src.connect(dry); dry.connect(g); src.connect(sh); sh.connect(hp); hp.connect(wet); wet.connect(g);
+      g.connect(this.rxIn); rec.node = g; rec.dry = dry; rec.wet = wet;
     } catch (e) { rec.direct = true; }
     el.addEventListener('error', () => {
       if (rec.direct || rec.dead) { rec.dead = true; return; }
@@ -249,6 +257,13 @@ class AudioEngine {
     if (level > 0.001) rec.seen = performance.now();
     if (rec.direct) rec.el.volume = clamp(level * af * af * 1.6, 0, 1);
     else if (rec.node) rec.node.gain.setTargetAtTime(level, this.t, level > 0.001 ? 0.05 : 0.015); // cut fast, like a receiver leaving a signal
+  }
+  // How badly off-tune a live stream is (0 clean .. 1): cross-fades towards the distorted path.
+  streamRough(id, x) {
+    const rec = this.streams?.get(id);
+    if (!rec || !rec.dry) return;
+    rec.dry.gain.setTargetAtTime(1 - 0.9 * x, this.t, 0.03);
+    rec.wet.gain.setTargetAtTime(x, this.t, 0.03);
   }
   // Silence every live stream except the ones the receiver is on right now. A stream whose
   // station has left the band you are listening to is no longer updated by the receiver loop,
