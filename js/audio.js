@@ -194,6 +194,13 @@ class AudioEngine {
     const g = this.sideGain.gain;
     for (const s of segs) { g.setTargetAtTime(level, start + s.t0, 0.004); g.setTargetAtTime(0, start + s.t1, 0.004); }
   }
+  // Live key-down / key-up tone for hand keying.
+  keyTone(on, pitch, level = 0.25) {
+    if (!this.ctx) return;
+    if (on && pitch) this.sideOsc.frequency.setValueAtTime(pitch, this.t);
+    this.sideGain.gain.cancelScheduledValues(this.t);
+    this.sideGain.gain.setTargetAtTime(on ? level : 0, this.t, 0.004);
+  }
   stopSidetone() { if (this.ctx) { this.sideGain.gain.cancelScheduledValues(this.t); this.sideGain.gain.setTargetAtTime(0, this.t, 0.005); } }
 
   beep(freq = 1000, dur = 0.12, level = 0.15, when = 0) {

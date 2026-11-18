@@ -550,6 +550,7 @@ export function updateDisplay() {
   $('#att-btn', panel)?.classList.toggle('active', !!r.rfAtt);
   $('#rit-btn', panel)?.classList.toggle('active', r.ritOn);
   panel.classList.toggle('mode-fm', r.mode === 'FM');
+  document.body.classList.toggle('op-cw', r.mode === 'CW');
   panel.fillFilters && panel.fillFilters();
   // rotator & manual tuner widgets
   if (rs.powered && rs.antennaOk && swr > 0 && swr < 2 && bandOf(r.freq) && !S.flags?.lowSwr) { (S.flags ||= {}).lowSwr = 1; save(); }
