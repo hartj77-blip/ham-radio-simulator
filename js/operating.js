@@ -2,6 +2,7 @@
 import { S, save } from './state.js';
 import { h, $, $$, clamp, toast, bus, now, wattsToDbm } from './util.js';
 import { checkTx, bandOf } from './data/bandplan.js';
+import { initHandKey, handKeyBox, handKeyEvent, handActive, releaseAll } from './handkey.js';
 import { CONTESTS } from './data/contests.js';
 import { DX_ENTITIES, stateBy, phonetic } from './data/world.js';
 import { audio } from './audio.js';
@@ -21,9 +22,10 @@ const R = () => S.radio;
 
 // ------------------------------------------------------------------ TX state
 export const txState = {
-  active: false, freq: 0, mode: 'USB', watts: 0, swr: 1, start: 0, sch: null, label: '', ptt: false, carrierOn: false,
+  active: false, freq: 0, mode: 'USB', watts: 0, swr: 1, start: 0, sch: null, label: '', ptt: false, carrierOn: false, hand: false, handDown: false,
   get keyed() {
     if (!this.active) return false;
+    if (this.hand) return this.handDown;
     if (this.sch) { const el = now() - this.start; return this.sch.segs.some((s) => el >= s.t0 && el <= s.t1); }
     return true;
   },
@@ -70,9 +72,9 @@ function prepare(modeOverride, quiet) {
   if (via === 'rf') {
     const chk = checkTx(S.license, txf, mode);
     if (!chk.ok) {
-      S.stats.violations++; save();
+      if (chk.code !== 'notsim') { S.stats.violations++; save(); }
       toast(`<b>Transmission blocked.</b> ${chk.reason}${chk.code === 'nolicense' ? '<br>Tip: you CAN transmit into the dummy load to practice.' : ''}`, 'bad', 9000);
-      if (chk.code === 'edge') elmer('band_edge'); else if (chk.code !== 'nolicense') elmer('privileges');
+      if (chk.code === 'edge') elmer('band_edge'); else if (chk.code !== 'nolicense' && chk.code !== 'notsim') elmer('privileges');
       if (chk.code === 'privilege' && S.license === 'T') elmer('tech_hf');
       bus.emit('helper-mistake', 'tx-blocked', chk.reason);
       return null;
@@ -134,6 +136,7 @@ function finishTx(p, text, mode) {
 export function sendCW(text) {
   text = String(text).toUpperCase().trim();
   if (!text) return;
+  if (handActive()) return;
   if (txState.active) return queueTx(() => sendCW(text), text);
   if (R().mode !== 'CW') { toast('Switch the radio to CW mode to send Morse.', 'warn'); return; }
   const p = prepare('CW');
@@ -165,6 +168,22 @@ export function sendVoice(tpl) {
   audio.speak(ph.say, { lang: 'en-US', seed: 7, rate: 1.08, volume: 0.35 * R().af }).then(end);
   setTimeout(end, est * 1000 + 6000);
 }
+
+// Hand keying (straight key or paddle): see handkey.js. The transmission lasts from the first
+// key-down until the operator pauses, and goes out as whatever the keying decoded to.
+const handHooks = {
+  prepare() { return txState.active || R().mode !== 'CW' ? null : prepare('CW'); },
+  begin(p) {
+    Object.assign(txState, { active: true, hand: true, handDown: false, freq: p.txf, mode: 'CW', watts: p.watts, swr: p.swr, start: now(), sch: null });
+    if (p.via === 'rf') playerTxStart(p.txf, 'CW', 'CW', 6);
+  },
+  keying(on) { txState.handDown = on; if (on && txState.hand && rigStatus().end === 'antenna') playerTxStart(txState.freq, 'CW', 'CW', 4); },
+  finish(p, text, wpm) {
+    txState.hand = false; txState.handDown = false;
+    if (text) { ui.transcript('You', text, 'tx', p.via, `hand keyed at about ${wpm} wpm`); net.sendCW && net.sendCW(text, wpm, p.txf); }
+    if (text) finishTx(p, text, 'CW'); else { txState.active = false; runPending(); }
+  },
+};
 
 // Push-to-talk (live microphone)
 let pttP = null;
@@ -223,6 +242,7 @@ function contestDef() { const c = activeContest(); return c ? CONTESTS[c.def.id]
 
 export function initOperatingUI(el) {
   root = el;
+  initHandKey(handHooks);
   render();
   bus.on('contest', maybeRender);
   bus.on('license', maybeRender);
@@ -291,6 +311,7 @@ function render() {
           h('button', { class: 'btn', onclick: wipe, title: 'Esc' }, 'Wipe'),
           h('span', { class: 'muted tiny' }, 'Enter = ESM · Ctrl+Enter = log · Esc = wipe/stop · Space in call field = next field')),
         h('div', { class: 'cw-box' }, h('div', { class: 'row' }, cwIn, h('label', { class: 'knobrow inline' }, h('span', {}, 'KEYER'), wpm, wpmV))),
+        handKeyBox(),
         h('div', { class: 'ptt-box' }, pttBtn, h('div', { class: 'muted tiny' },
           voice.recogSupported ? 'Speech recognition ON: say callsigns with phonetics ("Kilo Delta Nine…"). Simulated stations will answer.' : 'No speech recognition in this browser — macro buttons speak for you.')),
       ),
@@ -472,6 +493,7 @@ function onKey(e) {
   if (e.key === 'Escape') { e.preventDefault(); pendingTx = null; if (txState.active && txState.sch) { audio.stopSidetone(); clearTimeout(txState.timer); txState.active = false; } else wipe(); return; }
   if (typing && e.target.type !== 'range') return;
   const PK = S.settings.pttKey || ' ';
+  if (R().mode === 'CW' && e.target.type !== 'range' && !e.ctrlKey && !e.metaKey && !e.altKey && handKeyEvent(e, true, PK)) return;
   if (e.key === PK && !e.repeat) { e.preventDefault(); if (!spaceHeld) { spaceHeld = true; pttDown(); } return; }
   if (e.key === PK) { e.preventDefault(); return; }
   if (e.target.type === 'range') return; // arrow keys adjust the focused slider, not the VFO
@@ -479,6 +501,7 @@ function onKey(e) {
   if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); bus.emit('tune', -1); }
 }
 function onKeyUp(e) {
+  if (handKeyEvent(e, false, S.settings.pttKey || ' ')) { if (R().mode !== 'CW') releaseAll(); if (e.key !== (S.settings.pttKey || ' ') || !spaceHeld) return; }
   if (e.key === (S.settings.pttKey || ' ') && spaceHeld) { spaceHeld = false; e.preventDefault(); pttUp(); }
 }
 

@@ -14,6 +14,7 @@ const STATE_POS = () => stateBy(S.op.state) || stateBy('KS');
 import { runSolver } from './em/client.js';
 import { antOwned, feedOwned, maxHeight, owns } from './limits.js';
 import { mountYard, siteMaxHeight } from './yard.js';
+import { mountReach, refreshReach } from './reach.js';
 import { mountPlanner, autoSize, targetHz, P as planP, antDefaults } from './planner.js';
 
 export const ANT_TYPES = {
@@ -308,9 +309,9 @@ function render() {
     h('div', { class: 'row spread' }, h('h3', {}, 'Antenna analyzer'),
       h('div', { class: 'row' }, h('label', { class: 'inline' }, 'Sweep ', bandSel), h('label', { class: 'inline' }, atRig, ' measure at shack end of coax'))),
     canvas, info);
-  const planBox = h('div', { id: 'planner' }), yardBox = h('div', { id: 'yard' });
-  root.append(h('div', { class: 'ant-grid' }, controls, h('div', {}, svgBox, an)), yardBox, planBox);
-  mountYard(yardBox); mountPlanner(planBox);
+  const planBox = h('div', { id: 'planner' }), yardBox = h('div', { id: 'yard' }), reachBox = h('div', { id: 'reach' });
+  root.append(h('div', { class: 'ant-grid' }, controls, h('div', {}, svgBox, an)), reachBox, yardBox, planBox);
+  mountYard(yardBox); mountPlanner(planBox); mountReach(reachBox);
   renderInfo();
 }
 
@@ -321,6 +322,7 @@ function renderInfo() {
   if (!root || !info) return;
   drawSvg();
   drawAnalyzer();
+  refreshReach();
 }
 
 function sweep() {

@@ -3,7 +3,8 @@ import { S, save, licName } from './state.js';
 import { h, toast, bus, pick, modal } from './util.js';
 import { POOL, EXAM } from './data/questions.js';
 import { newLicenseeCall, STATES } from './data/world.js';
-import { BANDS, privilegeMap } from './data/bandplan.js';
+import { BANDS, privilegeMap, privRanges, allowLabel, fmtRange, OTHER_HAM } from './data/bandplan.js';
+import { powerLimit } from './limits.js';
 import { elmer } from './elmer.js';
 
 let root;
@@ -24,7 +25,7 @@ function render() {
   const status = h('div', { class: 'card lic-status' },
     h('h3', {}, 'Your license'),
     h('div', { class: 'lic-big' }, S.call ? h('span', { class: 'callsign' }, S.call) : h('span', { class: 'muted' }, 'No callsign yet'), ' ', h('span', { class: `badge lic-${lic || 'none'}` }, licName())),
-    h('p', { class: 'small' }, lic ? 'You may transmit within your privileges (green/blue bars on the radio\'s band scope).' : 'You can listen to everything, and transmit into the dummy load to practice. Pass the Technician exam to get on the air!'),
+    h('p', { class: 'small' }, lic ? 'You may transmit within your privileges. The summary below compares the classes; the full frequency list is under "Where you can transmit".' : 'You can listen to everything, and transmit into the dummy load to practice. Pass the Technician exam to get on the air!'),
     privTable(),
   );
   const study = h('div', { class: 'card' }, h('h3', {}, 'Study & exams'),
@@ -46,7 +47,56 @@ function render() {
     S.exams.history.length ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Date'), h('th', {}, 'Element'), h('th', {}, 'Type'), h('th', {}, 'Score'), h('th', {}, 'Result')),
       ...S.exams.history.slice(-12).reverse().map((x) => h('tr', {}, h('td', {}, new Date(x.t).toLocaleDateString()), h('td', {}, x.el), h('td', {}, x.real ? 'VE session' : 'practice'), h('td', {}, `${x.score}/${x.n}`), h('td', { class: x.pass ? 'ok' : 'bad' }, x.pass ? 'PASS' : 'fail'))))
       : h('p', { class: 'muted' }, 'No exams taken yet.'));
-  root.append(h('div', { class: 'exam-grid' }, status, study, hist));
+  root.append(h('div', { class: 'exam-grid' }, status, study, privGuide(), hist));
+}
+
+// What each licence class adds, in plain words.
+const GIVES = {
+  T: ['Entry licence: one 35-question exam, no Morse code.',
+    'Every amateur privilege above 50 MHz: all of 6 m, 2 m, 1.25 m, 70 cm and the microwave bands, up to 1500 W. This is where local FM repeaters, simplex, satellites and the ISS are.',
+    'A small slice of HF. On 10 m: CW, RTTY and data on 28.000–28.300 MHz and SSB voice on 28.300–28.500 MHz.',
+    'CW only on parts of 80 m (3.525–3.600), 40 m (7.025–7.125) and 15 m (21.025–21.200 MHz).',
+    'HF power is limited to 200 W PEP.',
+    'Nothing on 160, 60, 30, 20, 17 or 12 m.'],
+  G: ['Everything a Technician has, plus the Technician HF power cap is lifted (1500 W PEP; 200 W on 30 m).',
+    'Voice, CW and data on every HF band: 160, 80, 60, 40, 30, 20, 17, 15, 12 and 10 m. This is the worldwide-contact licence.',
+    'All of 160, 30, 17, 12 and 10 m, with nothing held back.',
+    'On 80, 40, 20 and 15 m you get most of each band; the bottom 25 kHz of the CW/data part and the lower end of the phone part are reserved for Extra.'],
+  E: ['Every US amateur frequency and mode. Nothing is held back.',
+    'Adds the Extra-only segments on 80, 40, 20 and 15 m: the bottom 25 kHz of each (prime DX CW territory) and the lower phone segments (3.600–3.800, 7.125–7.175, 14.150–14.225 and 21.200–21.275 MHz).',
+    'Eligible for the shortest (Group A) callsigns.'],
+};
+let guideLic = null;
+function privGuide() {
+  const lic = guideLic || S.license || 'T';
+  const next = { T: 'G', G: 'E' };
+  const rows = [];
+  for (const b of BANDS) {
+    const rs = privRanges(lic, b);
+    if (!rs.length) { const need = ORDER.find((l) => privRanges(l, b).length); rows.push(h('tr', { class: 'none' }, h('td', {}, b.name), h('td', { colspan: 3 }, `No privileges. Needs ${licName(need)}.`))); continue; }
+    rs.forEach((r, i) => rows.push(h('tr', { class: i < rs.length - 1 ? 'cont' : '' }, h('td', {}, i ? '' : h('b', {}, b.name)), h('td', { class: 'f' }, fmtRange(r.lo, r.hi)),
+      h('td', { class: `m-${r.allow}` }, allowLabel(r.allow, b.name)), h('td', {}, `${powerLimit(lic, r.lo)} W`))));
+  }
+  const others = OTHER_HAM.map((o) => h('tr', { class: o.lic.includes(lic) ? '' : 'none' }, h('td', {}, h('b', {}, o.name)), h('td', {}, o.ranges), h('td', {}, o.lic.includes(lic) ? o.note : `No privileges. Needs ${licName(o.lic[0])}.`)));
+  return h('div', { class: 'card priv-guide' },
+    h('h3', {}, 'Where you can transmit'),
+    h('p', { class: 'small' }, S.license ? `You hold ${licName()}. Pick a class to see exactly what it allows.` : 'You are unlicensed: you may listen on any frequency and transmit only into the dummy load. Pick a class to see exactly what it would allow.'),
+    h('div', { class: 'seg' }, ...ORDER.map((l) => h('button', { class: l === lic ? 'active' : '', onclick: () => { guideLic = l; render(); } }, licName(l) + (l === S.license ? ' (yours)' : '')))),
+    h('h4', {}, `What ${licName(lic)} gives you`),
+    h('ul', { class: 'small' }, ...GIVES[lic].map((t) => h('li', {}, t)), next[lic] ? h('li', { class: 'muted' }, `Next step: ${licName(next[lic])}. Select it above to compare.`) : null),
+    h('h4', {}, `${licName(lic)} transmit frequencies (MHz)`),
+    h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Band'), h('th', {}, 'Frequencies'), h('th', {}, 'What you may send'), h('th', {}, 'Max power (PEP)')), ...rows)),
+    h('h4', {}, 'Other amateur bands (real-world rules; not simulated for transmitting)'),
+    h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, 'Band'), h('th', {}, 'Frequencies'), h('th', {}, 'Rules')), ...others)),
+    h('h4', {}, 'Rules that apply to every class'),
+    h('ul', { class: 'small' },
+      h('li', {}, 'Your whole signal must stay inside your segment, not just the dial frequency. SSB spreads about 3 kHz to one side of the dial (above it on USB, below on LSB), so stay 3 kHz inside the edge. FM needs about 8 kHz each side.'),
+      h('li', {}, 'CW is allowed anywhere you have any privileges. Phone is allowed only in the phone segments.'),
+      h('li', {}, 'On a repeater, it is your transmit frequency (receive frequency plus offset) that must be inside your privileges.'),
+      h('li', {}, 'Use the minimum power needed, and give your callsign every 10 minutes and at the end of a contact.'),
+      h('li', {}, 'Outside the amateur bands you may only listen. CB, FRS, GMRS, MURS, marine, aviation and public-safety channels are never legal with an amateur transceiver, whatever your licence class.'),
+      h('li', {}, 'On the radio: the green bar under the band scope marks where you may use phone, blue is CW/data only, and the display shows TX OK or NO TX for the frequency and mode you are on.')),
+    h('p', { class: 'muted tiny' }, 'US rules (FCC Part 97), simplified. Legacy Novice and Advanced classes are not shown. A simulated licence has no legal standing; check the current FCC rules or the ARRL band chart before transmitting on a real radio.'));
 }
 
 function privTable() {
