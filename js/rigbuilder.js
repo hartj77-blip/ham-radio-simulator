@@ -76,6 +76,22 @@ export function analyze(d) {
 const NS = 'http://www.w3.org/2000/svg';
 const s = (tag, a = {}, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); for (const c of kids) if (c != null) e.append(typeof c === 'string' ? document.createTextNode(c) : c); return e; };
 const label = (x, y, t, cls = 'rb-lbl') => s('text', { x, y, class: cls, 'text-anchor': 'middle' }, t);
+// Device name under the bench, below where the cables hang, wrapped to two lines when it is
+// wider than the device so neighbouring names never run into each other.
+function caption(cx, name, w) {
+  const fits = (t) => t.length * 6.9 <= w + 18;
+  let lines = [name];
+  if (!fits(name) && name.includes(' ')) {
+    const words = name.split(' ');
+    let best = 1, diff = Infinity;
+    for (let i = 1; i < words.length; i++) { const d = Math.abs(words.slice(0, i).join(' ').length - words.slice(i).join(' ').length); if (d < diff) { diff = d; best = i; } }
+    lines = [words.slice(0, best).join(' '), words.slice(best).join(' ')];
+  }
+  const longest = Math.max(...lines.map((l) => l.length));
+  const t = s('text', { x: cx, y: 238, class: 'rb-lbl', 'text-anchor': 'middle' }, ...lines.map((l, i) => s('tspan', { x: cx, dy: i ? 15 : 0 }, l)));
+  if (longest * 6.9 > w + 18) t.setAttribute('font-size', Math.max(9, Math.floor(12 * (w + 18) / (longest * 6.9))));
+  return t;
+}
 const knob = (x, y, r, fill = 'url(#rbKnob)') => s('g', {}, s('circle', { cx: x, cy: y, r, fill, stroke: '#0a0b0d', 'stroke-width': 1.5 }), s('circle', { cx: x, cy: y - r * 0.6, r: r * 0.12, fill: '#cfd6dd' }));
 const keys = (x, y, n, w = 14, hgt = 7, gap = 4) => s('g', {}, ...Array.from({ length: n }, (_, i) => s('rect', { x: x + i * (w + gap), y, width: w, height: hgt, rx: 1.5, fill: '#2b3036', stroke: '#0c0e10' })));
 
@@ -86,7 +102,7 @@ function drawRadio(r, x, y) {
     g.append(s('rect', { x: 40, y: -40, width: 6, height: 50, rx: 3, fill: '#111' }), s('rect', { x: 20, y: 0, width: 70, height: 150, rx: 12, fill: c.body || '#16181b', stroke: '#000' }),
       s('rect', { x: 30, y: 30, width: 50, height: 28, rx: 3, fill: c.lcd === 'amber' ? '#c98a2a' : c.lcd === 'white' ? '#d7dde1' : '#4c8a5a' }),
       s('rect', { x: 30, y: 8, width: 50, height: 16, rx: 3, fill: '#0b0c0d' }), ...[0, 1, 2, 3].map((i) => keys(30, 66 + i * 12, 3, 13, 8, 5)),
-      s('rect', { x: 20, y: 40, width: 4, height: 30, fill: c.accent || '#f39a1e' }), label(55, 170, r.name));
+      s('rect', { x: 20, y: 40, width: 4, height: 30, fill: c.accent || '#f39a1e' }), caption(55, r.name, 110));
     return g;
   }
   const W = r.look === 'contest' ? 330 : r.look === 'portable' ? 190 : r.look === 'mobile' ? 170 : r.look === 'sdr' ? 120 : 270, H = r.look === 'contest' ? 120 : r.look === 'mobile' ? 62 : r.look === 'sdr' ? 34 : 98;
@@ -108,27 +124,27 @@ function drawRadio(r, x, y) {
       s('text', { x: 22, y: top + 10 + H * 0.3, class: 'rb-lcdtxt amber' }, '14.250.00'),
       keys(14, top + H * 0.6, 6, 16, 8), keys(14, top + H * 0.78, 6, 16, 8), knob(W * 0.78, top + H / 2, Math.min(30, H / 2 - 6)));
   }
-  g.append(s('circle', { cx: 12, cy: 150 - 10, r: 3, fill: '#ff4a3a', class: 'rb-led' }), label(W / 2, 170, r.name));
+  g.append(s('circle', { cx: 12, cy: 150 - 10, r: 3, fill: '#ff4a3a', class: 'rb-led' }), caption(W / 2, r.name, W));
   g.w = W;
   return g;
 }
 function box(x, y, w, hh, name, inner) {
   const g = s('g', { transform: `translate(${x},${y})` }, s('rect', { x: 0, y: 150 - hh, width: w, height: hh, rx: 6, fill: 'url(#rbMetal)', stroke: '#0a0b0d', 'stroke-width': 1.5 }));
   inner && inner(g, 150 - hh, w, hh);
-  g.append(label(w / 2, 170, name));
+  g.append(caption(w / 2, name, w));
   return g;
 }
 const meterFace = (g, x, y, w, hh, n = 1) => { g.append(s('rect', { x, y, width: w, height: hh, rx: 3, fill: '#efe7cf', stroke: '#222' })); for (let i = 0; i < n; i++) g.append(s('line', { x1: x + w * (n === 2 ? (i ? 0.85 : 0.15) : 0.5), y1: y + hh - 2, x2: x + w * (n === 2 ? 0.5 : 0.65), y2: y + 5, stroke: i ? '#c22' : '#111', 'stroke-width': 1.2 })); };
 
 function drawDesk(A, d) {
-  const svg = s('svg', { viewBox: '0 0 1100 260', class: 'rb-desk' },
+  const svg = s('svg', { viewBox: '0 0 1100 270', class: 'rb-desk' },
     s('defs', {},
       s('linearGradient', { id: 'rbMetal', x1: 0, y1: 0, x2: 0, y2: 1 }, s('stop', { offset: 0, 'stop-color': '#3a4048' }), s('stop', { offset: 1, 'stop-color': '#1b1f24' })),
       s('radialGradient', { id: 'rbKnob', cx: 0.35, cy: 0.3 }, s('stop', { offset: 0, 'stop-color': '#5a616a' }), s('stop', { offset: 1, 'stop-color': '#111418' })),
       s('linearGradient', { id: 'rbScope', x1: 0, y1: 0, x2: 0, y2: 1 }, s('stop', { offset: 0, 'stop-color': '#0b2340' }), s('stop', { offset: 1, 'stop-color': '#1e7fd0' })),
       s('linearGradient', { id: 'rbWf', x1: 0, y1: 0, x2: 1, y2: 0 }, s('stop', { offset: 0, 'stop-color': '#061a3a' }), s('stop', { offset: 0.4, 'stop-color': '#0a3a6a' }), s('stop', { offset: 0.45, 'stop-color': '#f2d33a' }), s('stop', { offset: 0.5, 'stop-color': '#0a3a6a' }), s('stop', { offset: 1, 'stop-color': '#061a3a' })),
       s('linearGradient', { id: 'rbWood', x1: 0, y1: 0, x2: 0, y2: 1 }, s('stop', { offset: 0, 'stop-color': '#7a5634' }), s('stop', { offset: 1, 'stop-color': '#4e3520' }))),
-    s('rect', { x: 0, y: 150, width: 1100, height: 30, fill: 'url(#rbWood)' }), s('rect', { x: 0, y: 180, width: 1100, height: 80, fill: '#11151a' }));
+    s('rect', { x: 0, y: 150, width: 1100, height: 30, fill: 'url(#rbWood)' }), s('rect', { x: 0, y: 180, width: 1100, height: 90, fill: '#11151a' }));
   let x = 20;
   const place = (g, w) => { svg.append(g); const cx = x; x += w + 26; return cx; };
   const psuX = place(box(x, 0, 120, A.psu.kind === 'battery' ? 50 : 70, A.psu.name.replace(/^Generic /, ''), (g, t, w, hh) => {
@@ -154,11 +170,11 @@ function drawDesk(A, d) {
   for (let i = 0; i + 1 < chain.length; i += 2) cab(chain[i], chain[i + 1], '#33383e', 14);
   const last = chain[chain.length - 1];
   const wallX = Math.max(1000, x + 40);
-  svg.setAttribute('viewBox', `0 0 ${wallX + 60} 260`);
+  svg.setAttribute('viewBox', `0 0 ${wallX + 60} 270`);
   svg.querySelectorAll('rect[width="1100"]').forEach((r) => r.setAttribute('width', wallX + 60));
   svg.append(s('rect', { x: wallX, y: 20, width: 14, height: 160, fill: '#2a2f35' }), s('circle', { cx: wallX + 7, cy: 120, r: 6, fill: '#c9a227' }));
   cable(`M${last} 164 C ${last} 235, ${wallX + 7} 235, ${wallX + 7} 126`, '#33383e', 5);
-  svg.append(label(wallX + 7, 12, 'wall feedthrough → antenna'));
+  svg.append(s('text', { x: wallX + 52, y: 14, class: 'rb-lbl', 'text-anchor': 'end' }, 'wall feedthrough → antenna'));
   return svg;
 }
 

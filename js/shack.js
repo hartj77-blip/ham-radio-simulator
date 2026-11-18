@@ -200,7 +200,12 @@ function draw() {
   for (const [k, d] of Object.entries(DEV)) {
     const g = s('g', { class: `dev dev-${k}` });
     g.append(s('rect', { x: d.x, y: d.y, width: d.w, height: d.h, rx: 6 }));
-    g.append(s('text', { x: d.x + 6, y: d.y + 16, class: 'devlabel' }, d.label));
+    // Names come from the chosen equipment and vary in length: keep each inside its own box
+    // (or beside it for the narrow ones) and shrink it when it would still spill out.
+    const at = k === 'arr' ? { x: d.x - 12, y: d.y + 16, 'text-anchor': 'end' } : k === 'gb' ? { x: d.x + 6, y: d.y + 30 } : { x: d.x + 6, y: d.y + 16 };
+    const room = k === 'arr' ? 150 : k === 'gb' ? d.w : d.w - 12;
+    const need = d.label.length * 5.9;
+    g.append(s('text', { ...at, class: 'devlabel', ...(need > room ? { 'font-size': Math.max(8, 11 * room / need).toFixed(1), textLength: room, lengthAdjust: 'spacingAndGlyphs' } : {}) }, d.label));
     svg.append(g);
   }
   // rig front panel details
@@ -260,7 +265,7 @@ function draw() {
     const g = s('g', { class: `port t-${p.t}${sel === p.id ? ' sel' : ''}${used ? ' used' : ''}`, style: 'cursor:pointer', 'data-port': p.id });
     g.append(s('circle', { cx: p.x, cy: p.y, r: p.t === 'gbus' ? 7 : 9 }));
     if (p.pol) g.append(s('text', { x: p.x, y: p.y + 4, 'text-anchor': 'middle', class: 'pol' }, p.pol === '+' ? '+' : '−'));
-    if (p.label) g.append(s('text', { x: p.x, y: p.y + (p.y > 400 && p.dev !== 'dl' ? 24 : -14), 'text-anchor': 'middle', class: 'plabel' }, p.label));
+    if (p.label && p.t !== 'post') g.append(s('text', { x: p.x, y: p.y + (p.y > 400 && p.dev !== 'dl' ? 24 : -14), 'text-anchor': 'middle', class: 'plabel' }, p.label));
     g.append(s('title', {}, `${DEV[p.dev].label}: ${p.label || 'connector'}`));
     g.onclick = (e) => { e.stopPropagation(); clickPort(p.id); };
     svg.append(g);
