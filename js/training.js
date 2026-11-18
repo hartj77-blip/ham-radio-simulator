@@ -266,7 +266,7 @@ export const STEPS = [
     done: () => !!S.license, praise: 'Licensed. Your callsign is shown in the status bar.' },
 
   // ---------------- Module 7: first contact
-  { m: 'qso', tab: 'radio', sel: '#finder', title: 'Find a station calling CQ', ref: 'qso',
+  { m: 'qso', tab: 'radio', sel: '#find-btn', title: 'Find a station calling CQ', ref: 'qso',
     text: 'Use <b>Find: Voice CQ</b> (or CW CQ), or search the band yourself.',
     why: 'CQ means "calling any station". Answering a CQ is the simplest way to make a contact.',
     how: 'The Find bar is above the radio.',

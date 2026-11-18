@@ -75,7 +75,7 @@ export function applyLook() {
   b.dataset.face = face;
   b.dataset.lcd = S.settings.lcd && S.settings.lcd !== 'auto' ? S.settings.lcd : modelLcd();
   const P = S.settings.panels || {};
-  for (const [k, sel] of Object.entries({ players: '#net-panel', scanner: '#scanner-panel', logger: '#operating', map: '#map-panel', world: '#world-panel', finder: '#finder' })) {
+  for (const [k, sel] of Object.entries({ logger: '#operating' })) {
     const el = document.querySelector(sel);
     if (el) el.hidden = P[k] === false;
   }
@@ -119,7 +119,7 @@ export function openStation(tab = 'setups') {
         sel('face', [['auto', 'Match radio model'], ['graphite', 'Graphite'], ['black', 'Black'], ['silver', 'Silver'], ['retro', 'Retro wood & cream']], 'Faceplate'),
         sel('lcd', [['auto', 'Match radio model'], ['green', 'Green'], ['amber', 'Amber'], ['blue', 'Ice blue'], ['white', 'Paper white']], 'Display colour'),
         h('h4', {}, 'Radio page panels'),
-        h('div', { class: 'row wrap' }, chk('finder', 'Find bar'), chk('players', 'Online operators'), chk('scanner', 'Signals near you'), chk('logger', 'Logger'), chk('map', 'Propagation map'), chk('world', 'World view')),
+        h('div', { class: 'row wrap' }, chk('logger', 'Logger')),
         h('h4', {}, 'Engineering'),
         h('label', { class: 'inline' }, lab, ' Lab readouts on the band scope (signal / noise dBm, SNR, path, distance)'),
         h('br'), h('label', { class: 'inline' }, ex, ' Explain mode — hover any control to learn what it does'));

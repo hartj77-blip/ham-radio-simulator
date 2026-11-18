@@ -784,9 +784,7 @@ body:not(.coach-on) #coach { width: auto; background: none; border: none; top: a
 .lib-pager { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
 
 /* ---------- Free Play console ---------- */
-#tab-radio { display: flex; flex-direction: column; }
-body[data-mode="free"] #free-console { order: -3; }
-body[data-mode="free"] #map-panel { order: -2; }
+
 .free-console { border-color: var(--accent-line); background: linear-gradient(180deg, rgba(65, 184, 232, 0.05), transparent 60%), var(--surface); }
 .fc-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
 .fc-head h3 { margin: 2px 0 0; font-size: 1.05rem; }
@@ -1218,3 +1216,88 @@ body.ht-view .subnav, .subnav[hidden] { display: none; }
 .info-pop p { margin: 0 0 0.6em; } .info-pop p:last-child { margin: 0; } .info-pop ul { margin: 0; padding-left: 1.1em; }
 .mode-grid.two { grid-template-columns: 1fr 1fr; }
 @media (max-width: 640px) { .mode-grid.two { grid-template-columns: 1fr; } .subnav { padding: 6px 12px 0; } }
+
+
+/* ============================ redesign: Radio page ============================ */
+#tab-radio { display: flex; flex-direction: column; gap: 14px; }
+#tab-radio > * { margin: 0; }
+.radio-lower { display: grid; grid-template-columns: minmax(360px, 5fr) minmax(0, 7fr); gap: 14px; align-items: start; }
+.radio-lower #operating[hidden] + #radio-side { grid-column: 1 / -1; }
+#operating .op-grid { grid-template-columns: 1fr; gap: 14px; }
+#operating .card, .side-card { margin: 0; }
+#radio-side { min-width: 0; position: sticky; top: calc(var(--top-h) + 44px); }
+.side-tabs { display: flex; gap: 2px; background: var(--bg-2); border: 1px solid var(--line-2); border-bottom: none; border-radius: var(--radius) var(--radius) 0 0; padding: 4px; }
+.side-tabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px; background: none; border: none; border-radius: 7px; padding: 8px 6px; color: var(--muted); font: inherit; font-size: 0.86rem; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.side-tabs button:hover { color: var(--text); background: var(--surface-2); }
+.side-tabs button.active { background: var(--raised); color: #fff; box-shadow: inset 0 0 0 1px var(--line-2); }
+.side-tabs button.active .ic { color: var(--accent); }
+.side-tabs .ic { width: 16px; height: 16px; }
+.side-tabs .count { background: var(--accent); color: var(--accent-ink, #04121b); border-radius: 9px; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; }
+.side-pane > .card, .side-pane .side-card { border-radius: 0 0 var(--radius) var(--radius); }
+.side-pane { max-height: calc(100vh - var(--top-h) - 110px); overflow: auto; border-radius: 0 0 var(--radius) var(--radius); }
+.side-pane[hidden] { display: none; }
+.map-scale { margin-bottom: 10px; }
+.map-card { padding: 0; }
+.map-layers { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.layer-seg { flex-wrap: wrap; }
+.scan-pick { max-width: 100%; }
+.scanner .tbl-wrap { overflow-x: auto; margin-top: 8px; }
+.roster-tbl { font-size: 0.84rem; }
+#net-card .roster { overflow-x: auto; }
+
+/* drawers under the radio (Find shortcuts, Quick setup) */
+.radio-drawer { display: none; }
+.radio-drawer.open { display: block; }
+.radio-drawer .finder { display: flex; flex-wrap: wrap; align-items: center; }
+.radio-drawer .free-console { margin: 0; }
+#find-btn.active, #quick-btn.active { box-shadow: 0 0 0 2px var(--accent-line); }
+.rig-bar .btn .ic { width: 15px; height: 15px; }
+
+/* the radio: bands and modes always there, everything else one click away */
+.rig .rig-controls { display: block !important; }
+.rig-quick { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; }
+.rig-more { margin-top: 10px; }
+.rig-more > summary, .keying > summary, .wa-more > summary { cursor: pointer; color: var(--text-2); font-size: 0.82rem; font-weight: 600; letter-spacing: 0.04em; padding: 6px 2px; list-style: none; display: flex; align-items: center; gap: 8px; }
+.rig-more > summary::before, .keying > summary::before, .wa-more > summary::before { content: '+'; display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--line-2); border-radius: 5px; font-weight: 700; color: var(--muted); }
+.rig-more[open] > summary::before, .keying[open] > summary::before, .wa-more[open] > summary::before { content: '−'; }
+.rig-more > summary::-webkit-details-marker, .keying > summary::-webkit-details-marker, .wa-more > summary::-webkit-details-marker { display: none; }
+.rig-more-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 8px; }
+.rig-more-grid .tx-group[hidden] { display: none; }
+
+/* logger */
+.logger .log-actions { margin: 10px 0; }
+.logger .ptt-box { margin: 0 0 6px; }
+.keying { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 4px; }
+.rxlog .transcript { max-height: 220px; }
+
+/* guide */
+.whereami .wa-head { display: flex; gap: 10px; align-items: flex-start; }
+.whereami .wa-verdicts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0 4px; }
+.wa-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 12px 0 4px; }
+.whereami p { margin: 0 0 6px; font-size: 0.88rem; color: var(--text-2); }
+.whereami .wa-list { font-size: 0.88rem; color: var(--text-2); margin: 0; padding-left: 1.1em; }
+.whereami .wa-next { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.wa-more { margin-top: 8px; }
+
+/* area map */
+.area-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.area-canvas { position: relative; }
+.area-map { width: 100%; display: block; border-radius: var(--radius-sm); border: 1px solid var(--line); touch-action: none; }
+.area-pm { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.area-pm button { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line-2); background: rgba(12, 18, 26, 0.85); color: #fff; font-size: 1.1rem; line-height: 1; cursor: pointer; }
+.area-pm button:hover { border-color: var(--accent-line); }
+.area-tip { min-height: 2.6em; font-size: 0.84rem; color: var(--text-2); padding: 8px 2px 4px; }
+.area-legend { display: flex; flex-wrap: wrap; gap: 6px; }
+.area-chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-2); background: transparent; color: var(--muted); border-radius: 16px; padding: 4px 10px; font: inherit; font-size: 0.8rem; cursor: pointer; }
+.area-chip i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); opacity: 0.35; }
+.area-chip.on { color: var(--text); border-color: color-mix(in srgb, var(--c) 55%, var(--line-2)); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.area-chip.on i { opacity: 1; }
+.area-chip span { color: var(--muted); font-size: 0.74rem; }
+
+@media (max-width: 1180px) {
+  .radio-lower { grid-template-columns: 1fr; }
+  #radio-side { position: static; }
+  .side-pane { max-height: none; }
+  .rig-quick { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) { .side-tabs button { font-size: 0.78rem; gap: 4px; padding: 8px 2px; } .side-tabs .ic { display: none; } }

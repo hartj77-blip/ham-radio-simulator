@@ -129,49 +129,43 @@ function ideas(c) {
 // ------------------------------------------------------------------ panel
 let root, lastKey = '';
 // On a phone the full guide would push the radio off the screen, so it starts as a one-line summary.
-const isMin = () => S.settings.guideMin ?? window.innerWidth < 760;
+const isMin = () => false;
 const keyOf = (c) => [c.a?.name, c.a?.lo, c.spot?.name, c.seg?.id, c.seg?.label, c.helper?.id, c.mode, c.want, c.lic, c.hour, isMin(), rig().name, c.b ? checkTx(c.lic, c.hz, c.mode).ok : ''].join('|');
 
 function render(c) {
   root.innerHTML = '';
   const { a, spot, seg, helper } = c;
   const [catName, color] = a ? CATS[a.cat] : ['Unallocated', '#5b6879'];
-  const min = isMin();
   const title = a ? a.name + (seg ? `: ${seg.label}` : '') : 'Outside the bands this panel covers';
   const tx = a ? txIRL(c) : null;
   const head = h('div', { class: 'wa-head' },
     h('span', { class: 'wa-dot', style: { background: color } }),
-    h('div', { class: 'wa-title' }, h('div', { class: 'eyebrow' }, `Where you are · ${catName}`), h('h3', {}, helper ? `Helper channel for ${helper.label}` : title)),
-    a ? h('div', { class: 'wa-verdicts' }, h('span', { class: 'wa-k' }, 'Real life:'), chip('Listen: yes', 'ok'), chip(`Transmit: ${VERDICT[tx.v][0].toLowerCase()}`, VERDICT[tx.v][1])) : null,
-    h('div', { class: 'row wa-btns' },
-      h('button', { class: 'btn small', onclick: openDial, title: 'Every band on the dial: who uses it, why, and whether you can listen or transmit' }, 'Whole dial'),
-      h('button', { class: 'btn small ghost', onclick: () => { S.settings.guideMin = !min; save(); tick(true); } }, min ? 'Show guide' : 'Hide')));
-  const card = h('div', { class: 'card whereami' }, head);
+    h('div', { class: 'wa-title' }, h('div', { class: 'eyebrow' }, catName), h('h3', {}, helper ? `Helper channel for ${helper.label}` : title)));
+  const card = h('div', { class: 'card side-card whereami' }, head);
   root.append(card);
-  if (min || !a) return;
+  if (a) card.append(h('div', { class: 'wa-verdicts' }, h('span', { class: 'wa-k' }, 'In real life'), chip('Listen: yes', 'ok'), chip(`Transmit: ${VERDICT[tx.v][0].toLowerCase()}`, VERDICT[tx.v][1])));
+  if (!a) { card.append(h('button', { class: 'btn small', onclick: openDial }, 'Show the whole dial')); return; }
   if (spot) card.append(h('div', { class: 'wa-spot' }, h('b', {}, `${spot.name}. `), spot.text));
   const wrongMode = c.want && c.mode !== c.want && rig().modes.includes(c.want) && !(c.seg?.id === 'data');
   const list = (items) => h('ul', { class: 'wa-list' }, ...items.map((x) => h('li', {}, x)));
   const w = whenLine(c);
-  card.append(h('div', { class: 'wa-grid' },
-    h('div', {}, h('h4', {}, 'Who is here, and why'), h('p', {}, a.who), h('p', {}, a.why)),
-    h('div', {}, h('h4', {}, 'When it works'), a.when ? h('p', {}, a.when) : null, w ? h('p', { class: 'wa-now' }, w) : null, !a.when && !w ? h('p', {}, 'Line of sight: the same by day and by night. Range depends on antenna height, not the hour.') : null,
-      h('h4', {}, 'What to do here'), list(todo(c)),
-      wrongMode ? h('button', { class: 'btn small primary', onclick: () => bus.emit('tune-to', S.radio.freq, c.want) }, `You are on ${c.mode}. Switch to ${c.want}`) : null),
-    h('div', {}, h('h4', {}, 'In real life'),
-      h('p', {}, chip('Listen: yes', 'ok'), ' ', listenIRL(c).text),
-      h('p', {}, chip(`Transmit: ${VERDICT[tx.v][0].toLowerCase()}`, VERDICT[tx.v][1]), ' ', tx.text),
-      h('p', { class: 'tiny muted' }, 'US rules, summarised. ', h('button', { class: 'link', onclick: openDial }, 'Details and exceptions'), '.'))));
-  if (helper) card.append(h('div', { class: 'wa-helper' },
-    h('div', {}, h('h4', {}, 'Hardware to connect'), list(helper.hardware), helper.build ? h('p', { class: 'small muted' }, helper.build) : null),
-    h('div', {}, h('h4', {}, 'For the exam'), list(helper.exam), h('button', { class: 'btn small', onclick: () => bus.emit('goto', 'license') }, 'Practise exam questions')),
-    h('p', { class: 'tiny muted wa-note' }, 'The helper channel is the simulator\'s own station and does not exist on the air. It repeats this briefing aloud; subtitles show the text.')));
+  if (w) card.append(h('p', { class: 'wa-now' }, w));
+  card.append(h('h4', { class: 'wa-h' }, 'What to do here'), list(todo(c).slice(0, 4)));
+  if (wrongMode) card.append(h('button', { class: 'btn small primary', onclick: () => bus.emit('tune-to', S.radio.freq, c.want) }, `You are on ${c.mode}. Switch to ${c.want}`));
+  card.append(h('details', { class: 'wa-more' }, h('summary', {}, 'More about this band'),
+    h('h4', { class: 'wa-h' }, 'Who is here, and why'), h('p', {}, a.who), h('p', {}, a.why),
+    a.when ? h('div', {}, h('h4', { class: 'wa-h' }, 'When it works'), h('p', {}, a.when)) : null,
+    h('h4', { class: 'wa-h' }, 'In real life'),
+    h('p', {}, chip('Listen: yes', 'ok'), ' ', listenIRL(c).text),
+    h('p', {}, chip(`Transmit: ${VERDICT[tx.v][0].toLowerCase()}`, VERDICT[tx.v][1]), ' ', tx.text),
+    helper ? h('div', {}, h('h4', { class: 'wa-h' }, 'Hardware to connect'), list(helper.hardware), h('h4', { class: 'wa-h' }, 'For the exam'), list(helper.exam)) : null,
+    h('button', { class: 'btn small', onclick: openDial }, 'Show the whole dial')));
   const next = ideas(c);
-  if (next.length) card.append(h('div', { class: 'wa-next' }, h('span', { class: 'wa-k' }, 'Try next:'), ...next.map((x) => h('button', { class: `chip ${x.primary ? 'active' : ''}`, title: x.why, onclick: () => { x.go(); toast(`<b>${x.label}.</b> ${x.why}`, 'info', 7000); } }, x.label))));
+  if (next.length) card.append(h('div', { class: 'wa-next' }, h('span', { class: 'wa-k' }, 'Try next'), ...next.map((x) => h('button', { class: `chip ${x.primary ? 'active' : ''}`, title: x.why, onclick: () => { x.go(); toast(`<b>${x.label}.</b> ${x.why}`, 'info', 7000); } }, x.label))));
 }
 
 function tick(force) {
-  if (!root || (document.body.dataset.tab !== 'radio' && !force)) return;
+  if (!root || ((document.body.dataset.tab !== 'radio' || root.hidden) && !force)) return;
   const c = context(), k = keyOf(c);
   if (k === lastKey && !force) return;
   lastKey = k;
@@ -183,6 +177,7 @@ export function initWhereAmI(el) {
   tick(true);
   setInterval(tick, 400);
   for (const ev of ['license', 'rig', 'tab', 'qth']) bus.on(ev, () => tick(true));
+  bus.on('radio-side', () => setTimeout(() => tick(true)));
   bus.on('whole-dial', openDial);
 }
 

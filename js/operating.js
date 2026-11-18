@@ -1,6 +1,7 @@
 // Operating position: logger, macros, CW keyboard, push-to-talk, and the TX path.
 import { S, save } from './state.js';
 import { h, $, $$, clamp, toast, bus, now, wattsToDbm } from './util.js';
+import { info as hInfo } from './util.js';
 import { checkTx, bandOf } from './data/bandplan.js';
 import { initHandKey, handKeyBox, handKeyEvent, handActive, releaseAll } from './handkey.js';
 import { CONTESTS } from './data/contests.js';
@@ -305,18 +306,19 @@ function render() {
         h('div', { class: 'row spread' }, h('h3', {}, cd ? `${cd.name} logger` : 'Logger'),
           h('div', { class: 'row' }, runBtn, spBtn, h('label', { class: 'inline small', title: 'Enter Sends Message (N1MM-style)' }, esmChk, ' ESM'))),
         row, info,
-        macroBox,
-        h('div', { class: 'row' },
-          h('button', { class: 'btn primary', onclick: logQso, title: 'Ctrl+Enter' }, '✓ Log QSO'),
-          h('button', { class: 'btn', onclick: wipe, title: 'Esc' }, 'Wipe'),
-          h('span', { class: 'muted tiny' }, 'Enter = ESM · Ctrl+Enter = log · Esc = wipe/stop · Space in call field = next field')),
-        h('div', { class: 'cw-box' }, h('div', { class: 'row' }, cwIn, h('label', { class: 'knobrow inline' }, h('span', {}, 'KEYER'), wpm, wpmV))),
-        handKeyBox(),
-        h('div', { class: 'ptt-box' }, pttBtn, h('div', { class: 'muted tiny' },
-          voice.recogSupported ? 'Speech recognition ON: say callsigns with phonetics ("Kilo Delta Nine…"). Simulated stations will answer.' : 'No speech recognition in this browser — macro buttons speak for you.')),
+        h('div', { class: 'row log-actions' },
+          h('button', { class: 'btn primary', onclick: logQso, title: 'Ctrl+Enter' }, 'Log contact'),
+          h('button', { class: 'btn', onclick: wipe, title: 'Esc' }, 'Clear'),
+          hInfo('<p><b>Enter</b> sends the next message. <b>Ctrl+Enter</b> logs the contact. <b>Esc</b> clears or stops sending. <b>Space</b> in the call field jumps to the next field.</p>' + (voice.recogSupported ? '<p>Speech recognition is on: say callsigns with phonetics ("Kilo Delta Nine…") and simulated stations will answer.</p>' : '<p>This browser has no speech recognition, so the message buttons speak for you.</p>'), 'Logger shortcuts')),
+        h('div', { class: 'ptt-box' }, pttBtn),
+        h('details', { class: 'keying', id: 'keying', open: S.settings.keyingOpen ?? true, ontoggle: (e) => { S.settings.keyingOpen = e.target.open; save(); } },
+          h('summary', {}, 'Messages and Morse key'),
+          macroBox,
+          h('div', { class: 'cw-box' }, h('div', { class: 'row' }, cwIn, h('label', { class: 'knobrow inline' }, h('span', {}, 'KEYER'), wpm, wpmV))),
+          handKeyBox()),
       ),
       h('div', { class: 'card rxlog' },
-        h('div', { class: 'row spread' }, h('h3', {}, 'What you hear'), h('div', { class: 'row' }, h('label', { class: 'inline small' }, subChk, ' subtitles'), h('label', { class: 'inline small' }, decChk, ' CW decoder'))),
+        h('div', { class: 'row spread' }, h('h3', {}, 'Heard'), h('div', { class: 'row' }, h('label', { class: 'inline small' }, subChk, ' subtitles'), h('label', { class: 'inline small' }, decChk, ' CW decoder'))),
         decoderBox, transcriptBox),
     ),
   );

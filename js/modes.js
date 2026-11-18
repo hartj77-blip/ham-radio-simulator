@@ -130,8 +130,7 @@ export function tuneToTarget(an, bandName = an.best?.band) {
 export function initFreeConsole(el) {
   const draw = () => {
     el.innerHTML = '';
-    if (S.mode !== 'simulation') { el.hidden = true; return; }
-    el.hidden = false;
+    if (S.mode !== 'simulation') { el.classList.remove('open'); return; }
     const sel = (opts, cur, on, id) => { const s = h('select', { id }, ...opts.map(([v, l]) => h('option', { value: v, selected: String(v) === String(cur) }, l))); s.onchange = () => on(s.value); return s; };
     const field = (label, ctl) => h('label', { class: 'fc-field' }, h('span', {}, label), ctl);
     const hour = h('input', { type: 'range', min: 0, max: 23.5, step: 0.5, value: S.settings.hour ?? new Date().getUTCHours() });
@@ -139,8 +138,8 @@ export function initFreeConsole(el) {
     hour.oninput = () => { S.settings.hour = +hour.value; hourLbl.textContent = `${String(Math.floor(hour.value)).padStart(2, '0')}:${hour.value % 1 ? '30' : '00'}Z`; save(); };
     hour.onchange = () => { world.repopulate(); bus.emit('solar'); };
     el.append(h('div', { class: 'card free-console' },
-      h('div', { class: 'fc-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Free Play'), h('h3', {}, 'Station console')),
-        h('div', { class: 'row' }, h('div', { class: 'fc-hint' }, h('span', { html: icon('pin') }), 'Click anywhere on the map below to tune to the best band for that location.'), h('button', { class: 'btn primary small', onclick: () => openDesigner() }, h('span', { html: icon('wand') }), 'Design the best antenna for my location'), h('button', { class: 'btn small', onclick: () => openStationPlan() }, h('span', { html: icon('compass') }), 'Station plan'))),
+      h('div', { class: 'fc-head' }, h('h3', {}, 'Quick setup'),
+        h('div', { class: 'row' }, h('button', { class: 'btn primary small', onclick: () => openDesigner() }, h('span', { html: icon('wand') }), 'Design my antenna'), h('button', { class: 'btn small', onclick: () => openStationPlan() }, h('span', { html: icon('compass') }), 'Station plan'))),
       h('div', { class: 'fc-grid' },
         field('Station preset', sel(SETUPS.map((p) => [p.id, p.name]), S.setup || 'home', (v) => { applySetup(v, { quiet: true }); autoMatch(); draw(); toast(`Station changed: ${SETUPS.find((p) => p.id === v).name}.`, 'good', 3000); })),
         field('Radio', sel(Object.entries(RIGS).map(([id, r]) => [id, r.name]), S.rig || 'allmode', (v) => { S.rig = v; save(); bus.emit('rig'); autoMatch(); })),

@@ -7,7 +7,7 @@
 // a heartbeat every 2 s and gets the roster back. If the lobby host leaves, the next player
 // to notice claims the ID and takes over.
 import { S, save } from './state.js';
-import { h, toast, bus, now, randi, rand } from './util.js';
+import { h, toast, bus, now, randi, rand, info } from './util.js';
 import { audio } from './audio.js';
 import { voice } from './voice.js';
 import { world, Station, player } from './world.js';
@@ -363,9 +363,8 @@ function render() {
   const idIn = h('input', { placeholder: 'station ID (optional)', size: 24 });
   statusEl = h('span', { class: `badge ${net.online ? 'ok' : ''}` }, net.status);
   rosterBox = h('div', { class: 'roster' });
-  root.append(h('div', { class: 'card net', id: 'net-card' },
-    h('div', { class: 'row spread' }, h('h3', {}, 'Who\'s on the air (real players)'), h('div', { class: 'row' }, net.hosting ? h('span', { class: 'badge', title: 'Your browser is currently keeping the player list' }, 'lobby host') : null, statusEl)),
-    h('p', { class: 'small muted' }, 'A shared, simulated band with other people using the app. You hear anyone who transmits where you\'re tuned — just like a real receiver — if the band is open between your QTHs. Mistuned voices sound garbled; the wrong sideband sounds like Donald Duck. Tune to anyone\'s frequency (or press Join) and hold SPACE to talk. Everyone shares the same simulated stations, space weather and UTC clock. Voices travel over the internet (WebRTC), never over the air. Others see your callsign, state and frequency while you\'re on the air.'),
+  root.append(h('div', { class: 'card side-card net', id: 'net-card' },
+    h('div', { class: 'row spread' }, h('h3', {}, 'Players', info('A shared, simulated band with other people using the app. You hear anyone who transmits where you are tuned, if the band is open between you. Tune to their frequency (or press Join) and hold SPACE to talk. Voices go directly between browsers; nothing is recorded. Others see your callsign, state and frequency.', 'About players')), h('div', { class: 'row' }, net.hosting ? h('span', { class: 'badge', title: 'Your browser is currently keeping the player list' }, 'lobby host') : null, statusEl)),
     net.online
       ? h('div', {},
         rosterBox,
@@ -373,7 +372,7 @@ function render() {
           h('div', { class: 'row' }, h('span', {}, 'Your ID: '), h('code', { class: 'peer-id' }, net.id || '…'), h('button', { class: 'btn small', onclick: () => { navigator.clipboard?.writeText(net.id); toast('Copied!', 'good'); } }, 'Copy')),
           h('div', { class: 'row' }, idIn, h('button', { class: 'btn small', onclick: () => connect(idIn.value) }, 'Connect'))),
         h('div', { class: 'row' }, autoChk(), h('button', { class: 'btn small', onclick: goOffline }, 'Go offline')))
-      : h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => { S.settings.autoOnline = true; save(); goOnline(); } }, 'Go on the air with real players'), h('span', { class: 'muted small' }, 'You\'ll stay on the air automatically next time (untick to stop).')),
+      : h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => { S.settings.autoOnline = true; save(); goOnline(); } }, 'Go on the air with real players')),
   ));
   renderRoster();
 }
