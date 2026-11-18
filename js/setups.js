@@ -14,6 +14,8 @@ export const cutFor = (type, band) => { const b = bandByName(band); const f = (b
 export const SETUPS = [
   { id: 'home', name: 'Classic home HF station', rig: 'allmode', ant: { type: 'dipole', band: '40m', height: 35, feed: 'RG-8X', feedLen: 75, axis: 90 }, tune: ['40m', 'LSB'], needs: [],
     desc: '40 m dipole in the trees, 100 W, internal tuner. Also works 15 m (3rd harmonic) and, with the tuner, most bands.' },
+  { id: 'mobile', name: 'Mobile (in a vehicle)', rig: 'allmode', env: 'vehicle', ant: { type: 'vertical', band: '20m', radials: 4, feed: 'RG-58', feedLen: 15 }, tune: ['20m', 'USB'], needs: [],
+    desc: 'A loaded whip on the car, 100 W from the vehicle battery. Pick the vehicle and the mount on the Location page.' },
   { id: 'apartment', name: 'Apartment / stealth', rig: 'allmode', ant: { type: 'efhw', band: '40m', height: 20, feed: 'RG-58', feedLen: 40, axis: 0 }, tune: ['20m', 'USB'], needs: ['unun'],
     desc: 'One thin end-fed wire out the window to a tree. Resonant on 40/20/15/10 m with no tuner.' },
   { id: 'vertical', name: 'Backyard vertical (DX on a budget)', rig: 'allmode', ant: { type: 'vertical', band: '20m', radials: 16, feed: 'RG-213', feedLen: 50 }, tune: ['20m', 'USB'], needs: ['rg213'],
@@ -40,6 +42,10 @@ export function applySetup(id, { quiet } = {}) {
   const amp = p.needs.some((n) => /^amp/.test(n));
   S.gear = { ...(S.gear || {}), tuner: amp ? 'at2k' : (S.gear?.tuner || 'gen300'), meter: amp ? 'cn901' : S.gear?.meter || 'gen200', amp: 'none' };
   wireStation();
+  // Presets that belong to a place move you there; the others bring you home from the car.
+  const yd = (S.yard ||= {});
+  if (p.env) yd.env = p.env; else if (yd.env === 'vehicle') yd.env = 'suburban';
+  (S.plan ||= { band: '40m', seg: 'center', goal: 'regional', dir: 'EU' }).band = p.ant.band;
   const a = S.antenna;
   Object.assign(a, { type: p.ant.type, length: cutFor(p.ant.type, p.ant.band), height: p.ant.height ?? a.height, feed: p.ant.feed, feedLen: p.ant.feedLen, radials: p.ant.radials ?? a.radials, axis: p.ant.axis ?? a.axis, heading: p.ant.heading ?? a.heading, built: true, spliced: 0, sizedBy: 'setup' });
   const r = S.radio;

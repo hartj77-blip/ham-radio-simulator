@@ -1,9 +1,10 @@
 // The Shack: wire up the station (power, coax, ground, mic, key).
 import { S, save } from './state.js';
-import { h, toast, bus, $ } from './util.js';
+import { h, toast, bus, $, info } from './util.js';
 import { elmer } from './elmer.js';
 import { audio } from './audio.js';
 import { rig, gearOf, isHT } from './rigs.js';
+import { s as el, at, defs, radio as radioArt, psu as psuArt, tuner as tunerArt, swrMeter, microphone, morseKey, dummyLoad, arrestor, groundBus, connector, cabinet } from './draw.js';
 
 const DEV = {
   psu: { x: 30, y: 290, w: 180, h: 120, label: '13.8 V DC · 30 A power supply' },
@@ -18,15 +19,15 @@ const DEV = {
 };
 
 export const PORTS = [
-  { id: 'psu_pos', dev: 'psu', x: 150, y: 320, t: 'post', pol: '+', label: '+' },
-  { id: 'psu_neg', dev: 'psu', x: 185, y: 320, t: 'post', pol: '-', label: '−' },
-  { id: 'psu_gnd', dev: 'psu', x: 185, y: 395, t: 'gnd', label: 'GND' },
+  { id: 'psu_pos', dev: 'psu', x: 148, y: 388, t: 'post', pol: '+', label: '+' },
+  { id: 'psu_neg', dev: 'psu', x: 172, y: 388, t: 'post', pol: '-', label: '−' },
+  { id: 'psu_gnd', dev: 'psu', x: 112, y: 388, t: 'gnd', label: 'GND' },
   { id: 'rig_red', dev: 'rig', x: 262, y: 395, t: 'lead', pol: '+', label: 'DC red' },
   { id: 'rig_blk', dev: 'rig', x: 300, y: 395, t: 'lead', pol: '-', label: 'DC blk' },
   { id: 'rig_gnd', dev: 'rig', x: 345, y: 395, t: 'gnd', label: 'GND' },
   { id: 'rig_key', dev: 'rig', x: 395, y: 395, t: 'keyjack', label: 'KEY' },
   { id: 'rig_ant', dev: 'rig', x: 540, y: 395, t: 'coax', label: 'ANT' },
-  { id: 'rig_mic', dev: 'rig', x: 530, y: 345, t: 'micjack', label: 'MIC' },
+  { id: 'rig_mic', dev: 'rig', x: 452, y: 395, t: 'micjack', label: 'MIC' },
   { id: 'swr_tx', dev: 'swr', x: 618, y: 365, t: 'coax', label: 'TX' },
   { id: 'swr_ant', dev: 'swr', x: 712, y: 365, t: 'coax', label: 'ANT' },
   { id: 'atu_in', dev: 'atu', x: 780, y: 365, t: 'coax', label: 'TX IN' },
@@ -134,11 +135,10 @@ function render() {
   statusBox = h('div', { class: 'card shack-status' });
   const tools = h('div', { class: 'row' },
     h('button', { class: 'btn', onclick: () => { if (confirm('Disconnect every cable?')) { S.shack.conn = []; S.shack.rigOn = false; save(); draw(); } } }, 'Unplug everything'),
-    h('button', { class: 'btn', title: 'Skip the wiring lesson', onclick: autoWire }, 'Auto-wire (skip lesson)'),
+    h('button', { class: 'btn', title: 'Connect everything correctly', onclick: autoWire }, 'Auto-wire'),
   );
   root.append(h('div', { class: 'shack-grid' },
-    h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', {}, 'Wire up your station'), tools),
-      h('p', { class: 'muted small' }, 'Click a connector, then click where the cable should go. Click a cable to unplug it. Coax runs from the radio\'s ANT jack through optional meter/tuner to the wall feedthrough (antenna) or the dummy load.'),
+    h('div', { class: 'card' }, h('div', { class: 'row spread' }, h('h3', {}, 'Wire your station', info('Click a connector, then click where the cable should go. Click a cable to unplug it. Coax runs from the radio\'s ANT jack through the meter and tuner to the arrestor at the wall, or to the dummy load. Dashed yellow outlines are switches: click them.', 'How to wire')), tools),
       svg),
     statusBox));
   draw();
@@ -188,48 +188,49 @@ function gearLabels() {
 function draw() {
   gearLabels();
   svg.innerHTML = '';
-  svg.append(s('rect', { x: 0, y: 0, width: 1040, height: 560, class: 'shack-bg' }));
-  svg.append(s('rect', { x: 10, y: 410, width: 930, height: 18, class: 'desk' }));
-  svg.append(s('line', { x1: 945, y1: 0, x2: 945, y2: 560, class: 'wall' }));
+  svg.append(defs());
+  svg.append(s('rect', { x: 0, y: 0, width: 1040, height: 560, fill: 'url(#arWall)' }));
+  svg.append(s('rect', { x: 10, y: 410, width: 930, height: 18, fill: 'url(#arWood)' }), s('path', { d: 'M10 411 H940', stroke: '#fff', 'stroke-opacity': 0.22 }), s('rect', { x: 10, y: 428, width: 930, height: 5, fill: '#000', opacity: 0.35 }));
+  svg.append(s('rect', { x: 940, y: 0, width: 10, height: 560, fill: '#2a323c' }), s('rect', { x: 950, y: 0, width: 90, height: 560, fill: '#0f1a26' }));
   svg.append(s('text', { x: 1000, y: 30, class: 'svgt', 'text-anchor': 'middle' }, 'OUTSIDE'));
   svg.append(s('path', { d: 'M996 175 C 1030 175 1020 80 1035 40', class: 'cable-casing coax' }));
   svg.append(s('path', { d: 'M996 175 C 1030 175 1020 80 1035 40', class: 'coax-out' }));
   svg.append(s('text', { x: 1010, y: 300, class: 'svgt small', 'text-anchor': 'middle', transform: 'rotate(90 1010 300)' }, S.antenna.built ? 'feedline to antenna ✓' : 'feedline (no antenna up)'));
   svg.append(s('path', { d: 'M720 527 L 940 527 L 940 556', class: 'gnd-wire' }));
   svg.append(s('text', { x: 860, y: 550, class: 'svgt small' }, '⏚ ground rod'));
-  for (const [k, d] of Object.entries(DEV)) {
-    const g = s('g', { class: `dev dev-${k}` });
-    g.append(s('rect', { x: d.x, y: d.y, width: d.w, height: d.h, rx: 6 }));
-    // Names come from the chosen equipment and vary in length: keep each inside its own box
-    // (or beside it for the narrow ones) and shrink it when it would still spill out.
-    const at = k === 'arr' ? { x: d.x - 12, y: d.y + 16, 'text-anchor': 'end' } : k === 'gb' ? { x: d.x + 6, y: d.y + 30 } : { x: d.x + 6, y: d.y + 16 };
-    const room = k === 'arr' ? 150 : k === 'gb' ? d.w : d.w - 12;
-    const need = d.label.length * 5.9;
-    g.append(s('text', { ...at, class: 'devlabel', ...(need > room ? { 'font-size': Math.max(8, 11 * room / need).toFixed(1), textLength: room, lengthAdjust: 'spacingAndGlyphs' } : {}) }, d.label));
-    svg.append(g);
-  }
-  // rig front panel details
   const st = rigStatus();
+  const name = (k, x, y, anchor = 'start', room = 200) => { const need = DEV[k].label.length * 5.9; svg.append(s('text', { x, y, class: 'devlabel', 'text-anchor': anchor, ...(need > room ? { 'font-size': Math.max(8, 11 * room / need).toFixed(1) } : {}) }, DEV[k].label)); };
+  // rear-connector strips under the boxes that have connectors along the bottom
+  for (const k of ['rig', 'swr', 'atu']) svg.append(el('rect', { x: DEV[k].x + 4, y: DEV[k].y + DEV[k].h - 4, width: DEV[k].w - 8, height: 30, rx: 4, fill: '#15191e', stroke: '#07080a' }));
+  // the equipment itself
+  const R0 = rig(), d = DEV;
+  svg.append(at(psuArt(gearOf('psu'), d.psu.w, d.psu.h, { on: S.shack.psuOn, posts: false }), d.psu.x, d.psu.y)); name('psu', d.psu.x, d.psu.y - 8, 'start', d.psu.w);
+  const rg = radioArt({ ...R0, look: R0.look === 'ht' ? 'classic' : R0.look }, d.rig.w, d.rig.h, { on: st.powered, freq: (S.radio.freq / 1e6).toFixed(3), mode: S.radio.mode });
+  svg.append(at(rg, d.rig.x, d.rig.y)); name('rig', d.rig.x, d.rig.y - 8, 'start', d.rig.w);
+  svg.append(at(swrMeter(gearOf('meter'), d.swr.w, d.swr.h), d.swr.x, d.swr.y)); name('swr', d.swr.x, d.swr.y - 8, 'start', d.swr.w);
+  const tn = gearOf('tuner');
+  if (tn.usd && !tn.auto) svg.append(at(tunerArt(tn, d.atu.w, d.atu.h), d.atu.x, d.atu.y));
+  else { const c = cabinet(d.atu.w, tn.usd ? 46 : 40, { tone: 'black' }); c.append(el('text', { x: d.atu.w / 2, y: 26, 'text-anchor': 'middle', 'font-size': 9, fill: '#aeb8c2', 'font-family': 'Inter, sans-serif', 'font-weight': 600 }, tn.usd ? 'AUTO TUNER' : 'THROUGH (no tuner)')); svg.append(at(c, d.atu.x, d.atu.y + d.atu.h - (tn.usd ? 46 : 40))); }
+  name('atu', d.atu.x, d.atu.y - 8, 'start', d.atu.w);
+  svg.append(at(dummyLoad(d.dl.w, d.dl.h), d.dl.x, d.dl.y)); name('dl', d.dl.x + d.dl.w / 2, d.dl.y + d.dl.h + 16, 'middle');
+  svg.append(at(arrestor(d.arr.w, d.arr.h), d.arr.x, d.arr.y)); name('arr', d.arr.x - 10, d.arr.y + 16, 'end', 150);
+  svg.append(at(groundBus(d.gb.w, d.gb.h), d.gb.x, d.gb.y)); name('gb', d.gb.x + 6, d.gb.y + 30, 'start', d.gb.w);
+  svg.append(at(microphone(gearOf('mic'), d.mic.w, d.mic.h), d.mic.x, d.mic.y + 8), at(morseKey(gearOf('key'), d.key.w, d.key.h), d.key.x, d.key.y + 4));
+  name('mic', d.mic.x + d.mic.w / 2, d.mic.y + d.mic.h + 24, 'middle'); name('key', d.key.x + d.key.w / 2, d.key.y + d.key.h + 22, 'middle');
+  // live controls on top of the artwork: radio power, supply switch
+  const hot = rg.hot || {};
   const rigOnBtn = s('g', { class: 'btn-svg', style: 'cursor:pointer', 'data-ctl': 'rig-power' });
-  rigOnBtn.append(s('circle', { cx: 268, cy: 250, r: 13, class: S.shack.rigOn ? 'pwr on' : 'pwr' }));
-  rigOnBtn.append(s('text', { x: 284, y: 255, class: 'svgt small' }, 'POWER'));
+  rigOnBtn.append(s('circle', { cx: d.rig.x + (hot.power?.[0] ?? 28), cy: d.rig.y + (hot.power?.[1] ?? 60), r: 15, fill: 'transparent', stroke: S.shack.rigOn ? '#3cff8a' : '#ffd54f', 'stroke-width': 1.5, 'stroke-dasharray': S.shack.rigOn ? '' : '3 3' }));
+  rigOnBtn.append(s('title', {}, 'Radio power'));
   rigOnBtn.onclick = () => { S.shack.rigOn = !S.shack.rigOn; save(); checkPowerUp(); draw(); bus.emit('shack'); };
   svg.append(rigOnBtn);
-  svg.append(s('rect', { x: 340, y: 240, width: 160, height: 46, rx: 4, class: st.powered ? 'lcd on' : 'lcd' }));
-  svg.append(s('text', { x: 350, y: 270, class: 'lcdtxt' }, st.powered ? (S.radio.freq / 1e6).toFixed(3) + ' ' + S.radio.mode : ''));
-  svg.append(s('circle', { cx: 530, cy: 270, r: 26, class: 'knob' }));
-  // psu switch + meter
   const sw = s('g', { style: 'cursor:pointer', 'data-ctl': 'psu-switch' });
-  sw.append(s('rect', { x: 45, y: 345, width: 40, height: 24, rx: 4, class: S.shack.psuOn ? 'sw on' : 'sw' }));
-  sw.append(s('text', { x: 92, y: 362, class: 'svgt small' }, S.shack.psuOn ? 'ON' : 'OFF'));
+  sw.append(s('rect', { x: d.psu.x + 20, y: d.psu.y + d.psu.h - 34, width: 30, height: 24, rx: 4, fill: 'transparent', stroke: S.shack.psuOn ? '#3cff8a' : '#ffd54f', 'stroke-width': 1.5, 'stroke-dasharray': S.shack.psuOn ? '' : '3 3' }));
+  sw.append(s('title', {}, 'Power supply switch'));
   sw.onclick = () => { S.shack.psuOn = !S.shack.psuOn; save(); checkPowerUp(); draw(); bus.emit('shack'); };
   svg.append(sw);
-  svg.append(s('text', { x: 45, y: 335, class: 'svgt small' }, S.shack.psuOn ? `${st.powered ? '13.8 V  2.1 A' : '13.8 V  0.0 A'}` : '—'));
-  svg.append(s('text', { x: 795, y: 300, class: 'svgt small' }, 'TUNE    LOAD'));
-  svg.append(s('circle', { cx: 808, cy: 320, r: 14, class: 'knob' })); svg.append(s('circle', { cx: 870, cy: 320, r: 14, class: 'knob' }));
-  svg.append(s('path', { d: 'M620 330 A 45 45 0 0 1 710 330', class: 'meter-arc' }));
-  svg.append(s('line', { id: 'swr-needle', x1: 665, y1: 335, x2: 628, y2: 305, stroke: '#ff5252', 'stroke-width': 2 }));
-  svg.append(s('text', { id: 'swr-read', x: 640, y: 345, class: 'svgt small' }, ''));
+  svg.append(s('line', { id: 'swr-needle', x1: 665, y1: 316, x2: 630, y2: 290, stroke: '#111', 'stroke-width': 1.6, 'stroke-linecap': 'round' }));
+  svg.append(s('text', { id: 'swr-read', x: 665, y: 248, class: 'svgt small', 'text-anchor': 'middle' }, ''));
   // window on the wall + ON AIR sign
   svg.append(s('rect', { x: 620, y: 40, width: 150, height: 110, rx: 4, fill: '#0f2236', stroke: '#6b5a48', 'stroke-width': 6 }));
   svg.append(s('line', { x1: 695, y1: 40, x2: 695, y2: 150, stroke: '#6b5a48', 'stroke-width': 4 }));
@@ -240,7 +241,6 @@ function draw() {
   oa.append(s('text', { x: 400, y: 63 }, 'ON THE AIR'));
   svg.append(oa);
   // desk lamp glow
-  svg.append(s('circle', { cx: 160, cy: 230, r: 60, fill: 'rgba(255,210,120,0.06)' }));
   // fuse holder on red lead
   svg.append(s('rect', { x: 255, y: 440, width: 22, height: 10, rx: 3, class: S.shack.fuseBlown ? 'fuse blown' : 'fuse' }));
   svg.append(s('text', { x: 252, y: 465, class: 'svgt small' }, S.shack.fuseBlown ? 'FUSE ✗' : 'fuse'));
@@ -262,10 +262,10 @@ function draw() {
   }
   for (const p of PORTS) {
     const used = partners(p.id).length > 0;
-    const g = s('g', { class: `port t-${p.t}${sel === p.id ? ' sel' : ''}${used ? ' used' : ''}`, style: 'cursor:pointer', 'data-port': p.id });
-    g.append(s('circle', { cx: p.x, cy: p.y, r: p.t === 'gbus' ? 7 : 9 }));
-    if (p.pol) g.append(s('text', { x: p.x, y: p.y + 4, 'text-anchor': 'middle', class: 'pol' }, p.pol === '+' ? '+' : '−'));
-    if (p.label && p.t !== 'post') g.append(s('text', { x: p.x, y: p.y + (p.y > 400 && p.dev !== 'dl' ? 24 : -14), 'text-anchor': 'middle', class: 'plabel' }, p.label));
+    const g = s('g', { class: `conn t-${p.t}${sel === p.id ? ' sel' : ''}${used ? ' used' : ''}`, style: 'cursor:pointer', 'data-port': p.id });
+    g.append(connector(p.t, p.x, p.y, { pol: p.pol, sel: sel === p.id, used }));
+    g.append(s('circle', { cx: p.x, cy: p.y, r: 14, fill: 'transparent' }));
+    if (p.label && p.t !== 'post') g.append(s('text', { x: p.x, y: p.y + (p.dev === 'dl' || p.dev === 'arr' ? -16 : 25), 'text-anchor': 'middle', class: 'plabel' }, p.label));
     g.append(s('title', {}, `${DEV[p.dev].label}: ${p.label || 'connector'}`));
     g.onclick = (e) => { e.stopPropagation(); clickPort(p.id); };
     svg.append(g);
@@ -306,7 +306,8 @@ export function shackTick(tx, effSwr) {
   const n = document.getElementById('swr-needle'), rd = document.getElementById('swr-read');
   const frac = tx.active ? Math.min(1, Math.sqrt((tx.keyed ? tx.watts : 0) / 100)) : 0;
   const a = Math.PI * (1 - frac);
-  n.setAttribute('x2', (665 + Math.cos(a) * 40).toFixed(1));
-  n.setAttribute('y2', (335 - Math.sin(a) * 40).toFixed(1));
+  const na = Math.PI * (0.78 - frac * 0.56);
+  n.setAttribute('x2', (665 + Math.cos(na) * 44).toFixed(1));
+  n.setAttribute('y2', (316 - Math.sin(na) * 44).toFixed(1));
   rd.textContent = tx.active ? `${Math.round(tx.watts)}W  SWR ${tx.swr > 50 ? '∞' : tx.swr.toFixed(1)}` : '';
 }

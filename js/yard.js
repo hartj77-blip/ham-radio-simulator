@@ -4,14 +4,14 @@
 // (all of which feed the simulation), plus the local rules. Then a real bill of materials and the
 // build steps, like an actual weekend project.
 import { S, save } from './state.js';
-import { h, bus, toast, clamp } from './util.js';
+import { h, bus, toast, clamp, info } from './util.js';
+import { s, at, VEHICLES, MOUNT_NAMES, PAINTS, vehicle as vehicleArt, whip } from './draw.js';
+import { STATES, stateBy } from './data/world.js';
+import { grid } from './propagation.js';
 import { maxHeight } from './limits.js';
 import { ANT_TYPES, FEEDS } from './antenna.js';
 import { targetHz } from './planner.js';
 import { GROUNDS } from './em/models.js';
-
-const NS = 'http://www.w3.org/2000/svg';
-const s = (tag, a = {}, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); for (const c of kids) if (c != null) e.append(typeof c === 'string' ? document.createTextNode(c) : c); return e; };
 
 // noise: man-made noise vs. a typical residential area, dB (after ITU-R P.372 environment
 // categories: city/business ≈ +6…+10, quiet rural ≈ −8). loss(fMHz): extra system loss in dB
@@ -89,6 +89,30 @@ export const ENVS = {
     rules: ['Put verticals within a wavelength of the water: up to ~10 dB more at low angles out over the sea.', 'Abroad you operate under a reciprocal licence (CEPT, IARP) or a local permit — sign e.g. "FG/W1ABC" and follow the host country\'s band plan.', 'Salt spray eats connectors: seal everything.'],
   },
 };
+// ------------------------------------------------------------------ vehicles
+// How much of the body's ground plane each mount position really uses (roof centre = all of it).
+const MOUNT_PLANE = { roof: 1, trunk: 0.8, hood: 0.75, hatch: 0.7, toolbox: 0.75, stake: 0.7, cage: 0.7, bumper: 0.6, hitch: 0.6, ladder: 0.6, rack: 0.6, frame: 0.55, mirror: 0.5 };
+const ROAD_CLEARANCE = 13.5; // ft: bridges and drive-throughs
+export const SHACKS = { room: 'Spare room', basement: 'Basement', garage: 'Garage', shed: 'Garden shed', gobox: 'Go-box (portable)' };
+export function vehicleCfg() {
+  const v = (YS().vehicle ||= { type: 'sedan', mount: 'trunk', paint: 'red' });
+  if (!VEHICLES[v.type]) v.type = 'sedan';
+  if (!VEHICLES[v.type].mounts[v.mount]) v.mount = Object.keys(VEHICLES[v.type].mounts)[0];
+  return v;
+}
+// Mount point: feet from the front bumper, feet above the road, longest whip that clears bridges.
+export function vehicleMount() {
+  const v = vehicleCfg(), V = VEHICLES[v.type], [x, y] = V.mounts[v.mount];
+  return { v, V, x, h: -y, maxWhip: Math.max(1.5, Math.min(9, ROAD_CLEARANCE - (-y))), plane: V.plane * (MOUNT_PLANE[v.mount] ?? 0.6) };
+}
+// Extra loss from a small or badly placed ground plane, on top of the loaded-whip loss.
+const vehicleLoss = (fMHz) => { const m = vehicleMount(); return Math.round((1 - m.plane) * (fMHz < 30 ? 6 : 2) * 10) / 10; };
+function syncVehicle(st) {
+  const m = vehicleMount();
+  st.lot = Math.ceil(m.V.len + 8);
+  st.sup = [{ id: 'car', kind: 'car', name: MOUNT_NAMES[m.v.mount] || 'Mount', x: Math.round((m.x + 4) * 10) / 10, h: Math.round(m.h * 10) / 10 }];
+}
+
 const envState = (id) => { const E = ENVS[id]; return { lot: E.lot, sup: E.sup.map((x) => ({ ...x })), ends: { ...E.ends }, stake: E.stake ?? 8, floor: E.floors ?? 0 }; };
 const YS = () => {
   const y = (S.yard ||= {});
@@ -96,7 +120,7 @@ const YS = () => {
   y.env = ENVS[y.env] ? y.env : 'suburban'; y.envs ||= {}; y.steps ||= {};
   return y;
 };
-const Y = () => { const y = YS(); return (y.envs[y.env] ||= envState(y.env)); };
+const Y = () => { const y = YS(); const st = (y.envs[y.env] ||= envState(y.env)); if (y.env === 'vehicle') syncVehicle(st); return st; };
 export const env = () => ENVS[YS().env];
 const mastH = () => maxHeight(); // a mast/tower's height is what you bought (35 ft push-up pole to start)
 // Height above ground of a support's base (roof / balcony floor).
@@ -110,7 +134,7 @@ const stakeH = () => { const y = Y(), E = env(); return y.stake + (E.stakeOnFloo
 // What the place does to your signal (used by the receiver and transmitter).
 export function siteEffects(fMHz) {
   const E = env();
-  return { noiseDb: E.noise * (fMHz > 30 ? 0.5 : 1), lossDb: E.loss(fMHz) };
+  return { noiseDb: E.noise * (fMHz > 30 ? 0.5 : 1), lossDb: E.loss(fMHz) + (E.scene === 'vehicle' ? vehicleLoss(fMHz) : 0) };
 }
 // The tallest height you can actually hang something at, here.
 export function siteMaxHeight() { return Math.max(maxHeight(), ...Y().sup.map((p) => top(p))); }
@@ -181,9 +205,13 @@ export function geometry(a = S.antenna) {
     const V = sup(y.ends.vert), rad = L; // quarter-wave radials ≈ radiator length
     out.agl = V ? top(V) : 0; out.height = Math.round(out.agl); out.footprint = Math.round(rad * 2);
     if (E.scene === 'vehicle') {
-      if (L > 9) warn(`A full λ/4 here is ${L.toFixed(0)} ft — on a car you use a ~7 ft loaded whip (a hamstick or screwdriver). The sim applies the loading loss: ${E.loss(targetHz() / 1e6)} dB at ${(targetHz() / 1e6).toFixed(1)} MHz.`);
-      else ok('Full-size on this band: a whip this short is efficient (VHF/10 m).');
-      ok('The car body is the counterpoise — bond it well.');
+      const m = vehicleMount(), f = targetHz() / 1e6;
+      if (L > m.maxWhip) warn(`A full quarter wave here is ${L.toFixed(0)} ft. On this mount the whip can be ${m.maxWhip.toFixed(1)} ft (road clearance ${ROAD_CLEARANCE} ft), so it is loaded with a coil: about ${siteEffects(f).lossDb} dB down at ${f.toFixed(1)} MHz.`);
+      else ok('Full size on this band: a whip this short is efficient.');
+      if (m.plane >= 0.75) ok(`${m.V.label}, ${(MOUNT_NAMES[m.v.mount] || '').toLowerCase()}: plenty of metal under the antenna.`);
+      else if (m.plane >= 0.45) warn(`${(MOUNT_NAMES[m.v.mount] || 'This mount')} uses only part of the body as a ground plane (${vehicleLoss(f)} dB extra loss). The roof centre is best.`);
+      else warn(`A ${m.V.label.toLowerCase()} has very little metal to work against (${vehicleLoss(f)} dB extra loss). Add a counterpoise wire, or stop and put up a pole.`);
+      ok('Bond doors, hood and exhaust to the body, and fuse the power lead at the battery.');
     } else if (E.ground === 'salt') ok(`Over salt water the sea is the ground plane: no radial field needed — superb low-angle radiation.`);
     else if (V) ok(`Elevated on the ${V.name.toLowerCase()} (${Math.round(out.agl)} ft up): use 2–4 elevated radials (or a counterpoise wire) cut to ~${rad.toFixed(0)} ft, sloping down at ~45°.`);
     else if (rad * 2 > y.lot) warn(`Full λ/4 radials need a ${Math.round(rad * 2)} ft circle; you have ${y.lot} ft. Shorter radials work — use more of them (they're on the ground, not resonant).`);
@@ -252,19 +280,23 @@ function drawYard(a, g) {
   const y = Y(), E = env(), W = 760, H = 250, G = 214;
   const tops = y.sup.map((p) => top(p) + 6);
   const maxFt = Math.max(40, ...tops, (g.height || 0) + 8);
-  const k = (G - 16) / maxFt;
-  const span = Math.max(y.lot, 30, ...y.sup.map((p) => p.x + 12));
-  const sx = (ft) => 40 + ft / span * (W - 80), sy = (ft) => G - ft * k;
+  const veh = E.scene === 'vehicle';
+  const span = veh ? y.lot : Math.max(y.lot, 30, ...y.sup.map((p) => p.x + 12));
+  // A vehicle is drawn to one scale both ways, so it keeps its shape.
+  const k = veh ? Math.min((W - 80) / span, (G - 16) / 15) : (G - 16) / maxFt;
+  const sx = veh ? (ft) => W / 2 + (ft - span / 2) * k : (ft) => 40 + ft / span * (W - 80), sy = (ft) => G - ft * k;
   const sea = E.scene === 'boat', beach = E.scene === 'beach';
   const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'yard-svg' },
     s('defs', {}, s('linearGradient', { id: 'ySky', x1: 0, y1: 0, x2: 0, y2: 1 }, s('stop', { offset: 0, 'stop-color': '#16324f' }), s('stop', { offset: 1, 'stop-color': '#3a6a8e' }))),
     s('rect', { x: 0, y: 0, width: W, height: G, fill: 'url(#ySky)' }));
+  if (E.scene === 'vehicle') svg.append(s('path', { d: `M0 ${G} L${W * 0.2} ${G - 34} L${W * 0.42} ${G - 12} L${W * 0.66} ${G - 46} L${W} ${G - 8} L${W} ${G} Z`, fill: '#1d3a4c', opacity: 0.8 }));
   // scenery
   if (E.scene === 'city' || E.scene === 'apartment') {
     for (let i = 0; i < 9; i++) { const bw = 50 + (i * 37) % 40, bh = 40 + (i * 53) % 90; svg.append(s('rect', { x: i * 90 - 10, y: sy(bh), width: bw, height: G - sy(bh), fill: '#22303d', opacity: 0.8 })); }
   }
   if (E.scene === 'summit') svg.append(s('path', { d: `M0 ${G} L${W * 0.15} ${G - 20} L${W * 0.5} ${G - 2} L${W * 0.85} ${G - 22} L${W} ${G} L${W} ${H} L0 ${H} Z`, fill: '#3b3f44' }), s('path', { d: `M0 ${H} L0 ${G + 30} L${W * 0.25} ${G + 10} L${W * 0.5} ${G} L${W * 0.75} ${G + 12} L${W} ${G + 34} L${W} ${H} Z`, fill: '#55606a' }));
-  svg.append(s('rect', { x: 0, y: G, width: W, height: H - G, fill: sea ? '#1b4f7a' : E.scene === 'city' || E.scene === 'apartment' ? '#3a3f45' : E.scene === 'summit' ? '#5b6168' : beach ? '#d9c38d' : '#2a4a2a' }));
+  svg.append(s('rect', { x: 0, y: G, width: W, height: H - G, fill: sea ? '#1b4f7a' : E.scene === 'vehicle' ? '#33383e' : E.scene === 'city' || E.scene === 'apartment' ? '#3a3f45' : E.scene === 'summit' ? '#5b6168' : beach ? '#d9c38d' : '#2a4a2a' }));
+  if (E.scene === 'vehicle') for (let rx = 10; rx < W; rx += 60) svg.append(s('rect', { x: rx, y: G + 16, width: 30, height: 3, fill: '#e8d98a', opacity: 0.7 }));
   if (beach) svg.append(s('rect', { x: W * 0.72, y: G, width: W * 0.28, height: H - G, fill: '#1b5f8a' }), s('text', { x: W - 8, y: H - 6, class: 'yard-t', 'text-anchor': 'end' }, 'sea →'));
   if (sea) svg.append(s('path', { d: `M${sx(0)} ${G - 4} L${sx(40)} ${G - 4} L${sx(36)} ${G + 10} L${sx(4)} ${G + 10} Z`, fill: '#e8e8e8' }));
   // building for floors
@@ -275,20 +307,20 @@ function drawYard(a, g) {
     svg.append(s('text', { x: sx(-2) + 6, y: sy(bh) - 4, class: 'yard-t' }, E.scene === 'apartment' ? `floor ${y.floor}` : `roof, ${bh} ft`));
   }
   if (E.scene === 'attic') { const hx = sx(23); svg.append(s('rect', { x: sx(0), y: sy(10), width: sx(46) - sx(0), height: G - sy(10), fill: '#7a6a58' }), s('path', { d: `M${sx(0) - 8} ${sy(10)} L${hx} ${sy(26)} L${sx(46) + 8} ${sy(10)} Z`, fill: '#4a3a2e', opacity: 0.55, stroke: '#2a1e14' }), s('text', { x: hx, y: sy(13), class: 'yard-t', 'text-anchor': 'middle' }, 'attic (seen through the roof)')); }
-  const step = maxFt > 90 ? 20 : 10;
-  for (let ft = step; ft < maxFt; ft += step) svg.append(s('line', { x1: 0, x2: W, y1: sy(ft), y2: sy(ft), stroke: '#ffffff12' }), s('text', { x: 4, y: sy(ft) - 2, class: 'yard-t' }, `${ft}′`));
+  const step = veh ? 5 : maxFt > 90 ? 20 : 10;
+  for (let ft = step; ft < (veh ? 15 : maxFt); ft += step) svg.append(s('line', { x1: 0, x2: W, y1: sy(ft), y2: sy(ft), stroke: '#ffffff12' }), s('text', { x: 4, y: sy(ft) - 2, class: 'yard-t' }, `${ft}′`));
   const placed = [];
   for (const p of y.sup) {
     const x = sx(p.x), b = baseOf(p), t = top(p);
     if (p.kind === 'tree' && /palm/i.test(p.name)) svg.append(s('path', { d: `M${x} ${G} Q ${x + 6} ${sy(t / 2)} ${x} ${sy(t)}`, stroke: '#7a5a34', 'stroke-width': 5, fill: 'none' }), ...[-1, 1, -0.5, 0.5].map((d) => s('path', { d: `M${x} ${sy(t)} q ${d * 26} -6 ${d * 34} 12`, stroke: '#2e7b3a', 'stroke-width': 4, fill: 'none' })));
-    else if (p.kind === 'tree') svg.append(s('rect', { x: x - 4, y: sy(p.h * 0.55), width: 8, height: G - sy(p.h * 0.55), fill: '#5b3d22' }), s('ellipse', { cx: x, cy: sy(p.h * 0.72), rx: 10 + p.h * 0.4, ry: p.h * k * 0.32, fill: E.scene === 'park' ? '#2b5f30' : '#2e6b34', opacity: 0.9 }));
-    if (p.kind === 'house') svg.append(s('rect', { x: x - 36, y: sy(t), width: 72, height: sy(b) - sy(t), fill: '#7a6a58' }), b ? null : s('path', { d: `M${x - 44} ${sy(t)} L${x} ${sy(t + 10)} L${x + 44} ${sy(t)} Z`, fill: '#4a3a2e' }));
-    if (p.kind === 'mast' || p.kind === 'pole' || p.kind === 'boatmast') svg.append(s('rect', { x: x - (p.kind === 'pole' ? 1.5 : 2.5), y: sy(t), width: p.kind === 'pole' ? 3 : 5, height: sy(b) - sy(t), fill: p.kind === 'pole' ? '#c9b98a' : '#b8c0c8' }), p.kind === 'mast' ? s('line', { x1: x, y1: sy(b + (t - b) * 0.6), x2: x + 26, y2: sy(b), stroke: '#ffffff40' }) : null);
+    else if (p.kind === 'tree') { const rx = 10 + p.h * 0.4, ry = p.h * k * 0.3, cy = sy(p.h * 0.72); svg.append(s('path', { d: `M${x - 5} ${G} L${x - 3} ${cy} L${x + 3} ${cy} L${x + 5} ${G} Z`, fill: '#5b3d22' }), s('ellipse', { cx: x, cy, rx, ry, fill: '#25592c' }), s('ellipse', { cx: x - rx * 0.35, cy: cy + ry * 0.2, rx: rx * 0.62, ry: ry * 0.7, fill: '#2e6b34' }), s('ellipse', { cx: x + rx * 0.3, cy: cy - ry * 0.25, rx: rx * 0.6, ry: ry * 0.65, fill: '#3a7d40' }), s('ellipse', { cx: x - rx * 0.1, cy: cy - ry * 0.5, rx: rx * 0.4, ry: ry * 0.4, fill: '#4c9150', opacity: 0.8 })); }
+    if (p.kind === 'house') { const hy = sy(t), hh = sy(b) - sy(t); svg.append(s('rect', { x: x - 36, y: hy, width: 72, height: hh, fill: '#8a7862', stroke: '#2a1e14', 'stroke-width': 0.8 }), ...(b ? [] : [s('path', { d: `M${x - 44} ${hy} L${x} ${sy(t + 10)} L${x + 44} ${hy} Z`, fill: '#4a3a2e', stroke: '#2a1e14', 'stroke-width': 0.8 }), s('rect', { x: x + 22, y: sy(t + 12), width: 8, height: sy(t + 4) - sy(t + 12), fill: '#6b4a3a' })]), s('rect', { x: x - 6, y: hy + hh * 0.42, width: 12, height: hh * 0.58, fill: '#3d2c1e' }), s('rect', { x: x - 28, y: hy + hh * 0.2, width: 14, height: hh * 0.3, fill: '#ffd27a', opacity: 0.85, stroke: '#2a1e14', 'stroke-width': 0.6 }), s('rect', { x: x + 14, y: hy + hh * 0.2, width: 14, height: hh * 0.3, fill: '#9cc7e6', opacity: 0.7, stroke: '#2a1e14', 'stroke-width': 0.6 })); }
+    if (p.kind === 'mast' || p.kind === 'pole' || p.kind === 'boatmast') svg.append(s('rect', { x: x - (p.kind === 'pole' ? 1.5 : 2.5), y: sy(t), width: p.kind === 'pole' ? 3 : 5, height: sy(b) - sy(t), fill: p.kind === 'pole' ? '#c9b98a' : '#b8c0c8' }), ...(p.kind === 'mast' ? [s('line', { x1: x, y1: sy(b + (t - b) * 0.6), x2: x + 26, y2: sy(b), stroke: '#ffffff40' }), s('line', { x1: x, y1: sy(b + (t - b) * 0.6), x2: x - 26, y2: sy(b), stroke: '#ffffff40' })] : []));
     if (p.kind === 'boatmast') svg.append(s('line', { x1: x, y1: sy(t), x2: sx(38), y2: sy(6), stroke: '#cfd6dd', 'stroke-width': 1.5 }));
     if (p.kind === 'rail') svg.append(s('rect', { x: x - 6, y: sy(t), width: 24, height: sy(b) - sy(t), fill: 'none', stroke: '#cfd6dd', 'stroke-width': 1.5 }));
     if (p.kind === 'table') svg.append(s('rect', { x: x - 14, y: sy(t), width: 28, height: 3, fill: '#8a6a43' }), s('rect', { x: x - 6, y: sy(t) + 3, width: 12, height: 6, fill: '#222' }));
     if (p.kind === 'rock') svg.append(s('ellipse', { cx: x, cy: sy(t / 2), rx: 14, ry: (t / 2) * k + 2, fill: '#6d737a' }));
-    if (p.kind === 'car') svg.append(s('rect', { x: x - 40, y: sy(4.5), width: 80, height: 4.5 * k - 6, rx: 8, fill: '#8a2b2b' }), s('rect', { x: x - 22, y: sy(6), width: 40, height: 1.6 * k, rx: 6, fill: '#6a2020' }), s('circle', { cx: x - 24, cy: G - 4, r: 7, fill: '#111' }), s('circle', { cx: x + 24, cy: G - 4, r: 7, fill: '#111' }));
+    if (p.kind === 'car') { const m = vehicleMount(), u = (sx(1) - sx(0)); const car = vehicleArt(m.v.type, m.v.paint); car.setAttribute('transform', `translate(${sx(4)},${G}) scale(${u},${k})`); svg.append(car); }
     if (p.kind !== 'attic') { const near = placed.some((px) => Math.abs(px - x) < 120); placed.push(x); svg.append(s('text', { x, y: G + (near ? 30 : 14), class: 'yard-t', 'text-anchor': 'middle' }, `${p.name.split(' (')[0]} ${Math.round(t)}′`)); }
     else svg.append(s('circle', { cx: x, cy: sy(t), r: 3, fill: '#c9b98a' }), s('text', { x, y: sy(t) - 6, class: 'yard-t', 'text-anchor': 'middle' }, p.name.replace('Attic ', '')));
   }
@@ -308,59 +340,116 @@ function drawYard(a, g) {
     const P = sup(y.ends.apex), foot = (g.footprint || 0) / 2, st = stakeH();
     wire([[P.x - foot, st], [P.x, top(P) - 1], [P.x + foot, st]]); dot(P.x, top(P) - 1);
   }
-  if (a.type === 'vertical') { const V = sup(y.ends.vert); const x = V ? V.x : (y.sup.find((p) => p.kind === 'mast' || p.kind === 'pole')?.x ?? y.lot / 2), b = V ? top(V) : 0, L = E.scene === 'vehicle' ? Math.min(a.length, 9) : a.length; wire([[x, b], [x, b + L]]); dot(x, b); if (!V) svg.append(s('line', { x1: sx(x - a.length), x2: sx(x + a.length), y1: G + 2, y2: G + 2, stroke: '#ffb347', 'stroke-dasharray': '2 3' })); else wire([[x - 6, b - 2], [x, b], [x + 6, b - 2]], '2 2'); }
+  if (a.type === 'vertical') { const V = sup(y.ends.vert); const x = V ? V.x : (y.sup.find((p) => p.kind === 'mast' || p.kind === 'pole')?.x ?? y.lot / 2), b = V ? top(V) : 0, L = E.scene === 'vehicle' ? Math.min(a.length, vehicleMount().maxWhip) : a.length; wire([[x, b], [x, b + L]]); dot(x, b); if (!V) svg.append(s('line', { x1: sx(x - a.length), x2: sx(x + a.length), y1: G + 2, y2: G + 2, stroke: '#ffb347', 'stroke-dasharray': '2 3' })); else wire([[x - 6, b - 2], [x, b], [x + 6, b - 2]], '2 2'); }
   if (a.type === 'yagi') { const T = sup(y.ends.yagi) || y.sup[0]; const x = sx(T.x), yy = sy(g.height); svg.append(s('rect', { x: x - 40, y: yy - 2, width: 80, height: 4, fill: '#ffb347' }), ...[-30, 0, 30].map((d) => s('line', { x1: x + d, x2: x + d, y1: yy - 12, y2: yy + 12, stroke: '#ffb347', 'stroke-width': 2 }))); }
   if (g.height != null) svg.append(s('text', { x: W - 8, y: 18, class: 'yard-t big', 'text-anchor': 'end' }, a.type === 'vertical' ? `base ${Math.round(g.agl ?? 0)} ft above ground` : `feed point ${g.height} ft${g.droop != null ? ` · droop ${g.droop}°` : ''}${g.slope != null ? ` · slope ${g.slope}°` : ''}`));
   return svg;
 }
 
+// Bill of materials and build steps (Antenna tools page).
+let bomRoot;
+export function mountBom(el) { bomRoot = el; renderBom(); }
+function renderBom() {
+  if (!bomRoot) return;
+  const a = S.antenna, ys = YS(), g = geometry(a), B = bom(a, g);
+  const st = (ys.steps[a.type] ||= {});
+  const done = STEPS.filter(([kk]) => st[kk]).length;
+  bomRoot.innerHTML = '';
+  bomRoot.append(h('div', { class: 'card' }, h('div', { class: 'yard-grid' },
+    h('div', {}, h('h3', {}, `Parts list ≈ $${Math.round(B.total)}`, info(`For the antenna you have built, at ${(targetHz() / 1e6).toFixed(3)} MHz. Prices are typical US retail, for planning.`, 'About this list')),
+      h('table', { class: 'tbl small' }, ...B.items.map(([q, w, usd]) => h('tr', {}, h('td', { class: 'mono' }, q), h('td', {}, w), h('td', { class: 'muted' }, `$${Math.round(usd)}`))))),
+    h('div', {}, h('h3', {}, `Build steps (${done}/${STEPS.length})`),
+      h('ol', { class: 'yard-steps' }, ...STEPS.map(([kk, t, d]) => { const c = h('input', { type: 'checkbox', checked: !!st[kk] }); c.onchange = () => { st[kk] = c.checked; save(); renderBom(); }; return h('li', { class: st[kk] ? 'done' : '' }, h('label', {}, c, ' ', h('b', {}, t)), info(d, t)); }))))));
+}
+
 function render() {
+  renderBom();
   if (!root) return;
-  const a = S.antenna, ys = YS(), y = Y(), E = env(), g = geometry(a), B = bom(a, g);
+  const a = S.antenna, ys = YS(), y = Y(), E = env(), g = geometry(a);
+  const free = S.mode !== 'training';
   root.innerHTML = '';
   const supSel = (key, label, filter = () => true) => { const sl = h('select', {}, ...y.sup.filter(filter).map((p) => h('option', { value: p.id, selected: y.ends[key] === p.id }, `${p.name} (${Math.round(top(p))} ft)`))); sl.onchange = () => { y.ends[key] = sl.value; save(); render(); }; return h('label', {}, `${label} `, sl); };
   const num = (obj, key, min, max, after) => { const i = h('input', { type: 'number', min, max, value: obj[key], style: { width: '64px' } }); i.onchange = () => { obj[key] = clamp(+i.value || min, min, max); save(); after ? after() : render(); }; return i; };
   const vertOpts = [h('option', { value: '', selected: !y.ends.vert }, 'Ground mounted'), ...y.sup.filter((p) => !['tree', 'attic', 'rock'].includes(p.kind)).map((p) => h('option', { value: p.id, selected: y.ends.vert === p.id }, `On the ${p.name.toLowerCase()} (${Math.round(top(p))} ft)`))];
   const vSel = h('select', {}, ...vertOpts); vSel.onchange = () => { y.ends.vert = vSel.value || null; save(); render(); };
-  const mounts = a.type === 'dipole' ? [supSel('a', 'End 1'), supSel('b', 'End 2')]
+  const mounts = E.scene === 'vehicle' ? []
+    : a.type === 'dipole' ? [supSel('a', 'End 1'), supSel('b', 'End 2')]
     : a.type === 'efhw' ? [supSel(y.ends.efA ? 'efA' : 'a', 'High end'), supSel('low', 'Feed end')]
     : a.type === 'invv' ? [supSel('apex', 'Centre support', (p) => !['rail', 'table', 'rock'].includes(p.kind)), h('label', {}, `Leg ends ${E.stakeOnFloor ? 'above the balcony floor' : E.stakeOnRoof ? 'above the roof' : 'on stakes at'} `, num(y, 'stake', 2, 30), ' ft')]
     : a.type === 'yagi' ? [supSel('yagi', 'Mounted on', (p) => ['mast', 'pole', 'boatmast'].includes(p.kind))]
     : [h('label', {}, 'Vertical ', vSel)];
+  const fits = E.types.includes(a.type);
   const hang = h('button', { class: 'btn primary', id: 'yard-hang', disabled: !g.ok || g.height == null, onclick: () => {
     if (a.type !== 'vertical') a.height = Math.max(3, g.height);
     if (g.droop != null) a.droop = g.droop;
     a.agl = g.agl ?? a.height; a.ground = E.ground;
     S.radio.atuTunedFreq = null; save(); bus.emit('antenna'); bus.emit('antenna-rebuild');
-    toast(`${E.icon} Installed${a.type !== 'vertical' ? ` at ${a.height} ft` : ` with its base ${Math.round(a.agl)} ft up`}${g.droop != null ? `, ${g.droop}° droop` : ''} — ground set to ${GROUNDS[E.ground].label.split(' (')[0].toLowerCase()}. Sweep it with the analyzer.`, 'good', 6000);
-  } }, `${E.icon} Install it here`);
-  const st = (ys.steps[a.type] ||= {});
-  const done = STEPS.filter(([kk]) => st[kk]).length;
+    toast(`Installed${a.type !== 'vertical' ? ` at ${a.height} ft` : ` with its base ${Math.round(a.agl)} ft up`}. Ground: ${GROUNDS[E.ground].label.split(' (')[0].toLowerCase()}.`, 'good', 5000);
+  } }, 'Install the antenna here');
+  const useType = (t) => { a.type = t; a.length = 0; save(); bus.emit('antenna'); bus.emit('antenna-rebuild'); render(); };
   const fx = siteEffects(7), fv = siteEffects(146);
-  const fxTxt = `Man-made noise ${fx.noiseDb > 0 ? '+' : ''}${fx.noiseDb} dB on HF vs. a typical suburb${fx.lossDb ? ` · ${fx.lossDb} dB extra loss on 40 m` : ''}${fv.lossDb ? ` · ${fv.lossDb} dB on 2 m` : ''} · ground: ${GROUNDS[E.ground].label.split(' (')[0].toLowerCase()}`;
-  root.append(h('div', { class: 'card yard' },
-    h('div', { class: 'row spread wrap' }, h('h3', {}, `${E.icon} Antenna builder — where are you putting it?`), h('span', { class: 'muted tiny' }, 'The place sets the supports, space, ground, noise and rules — and they all feed the simulation.')),
-    h('div', { class: 'env-pick' }, ...Object.entries(ENVS).map(([id, X]) => h('button', { class: `env-btn ${ys.env === id ? 'active' : ''}`, title: X.desc, onclick: () => { ys.env = id; save(); bus.emit('antenna'); render(); } }, h('span', { class: 'env-ic' }, X.icon), X.label))),
-    h('div', { class: 'env-info row wrap' }, h('span', { class: 'small' }, h('b', {}, E.label), ` — ${E.desc}`), h('span', { class: 'tiny env-fx' }, fxTxt)),
-    drawYard(a, g),
-    h('div', { class: 'yard-grid' },
-      h('div', {},
-        h('h4', {}, 'Supports & space'),
-        E.floors ? h('label', { class: 'small' }, E.scene === 'apartment' ? 'Your floor ' : 'Building floors ', num(y, 'floor', 1, 60), ` (≈ ${(y.floor || 1) * 10} ft up)`) : null,
-        h('table', { class: 'tbl small' }, h('tr', {}, h('th', {}, ''), h('th', {}, 'Height ft'), h('th', {}, 'Position ft')),
-          ...y.sup.map((p) => h('tr', {}, h('td', {}, `${{ tree: /palm/i.test(p.name) ? '' : '', house: '', mast: '', pole: '', rail: '', attic: '', table: '', rock: '', car: '', boatmast: '' }[p.kind] || '•'} ${p.name}${baseOf(p) ? ` (+${baseOf(p)} ft base)` : ''}`),
-            h('td', {}, p.kind === 'mast' ? h('span', {}, num(p, 'h', 10, mastH()), h('span', { class: 'tiny muted' }, ` max ${mastH()}`)) : num(p, 'h', 2, 120)), h('td', {}, num(p, 'x', 0, y.lot))))),
-        h('label', { class: 'small' }, `${E.scene === 'apartment' ? 'Balcony' : E.scene === 'boat' ? 'Boat' : E.scene === 'attic' ? 'Attic' : E.scene === 'city' ? 'Roof' : 'Usable'} width `, num(y, 'lot', 8, 600), ' ft  ', h('button', { class: 'link small', onclick: () => { ys.envs[ys.env] = envState(ys.env); save(); render(); } }, 'reset this place')),
-        h('h4', {}, `Mounting the ${ANT_TYPES[a.type].label.split(' (')[0].toLowerCase()}`),
-        h('div', { class: 'row wrap' }, ...mounts),
-        h('ul', { class: 'rb-checks' }, ...g.notes.map(([kk, t]) => h('li', { class: kk }, `${kk === 'ok' ? '✓' : kk === 'warn' ? '' : '✗'} ${t}`))),
-        hang,
-        h('h4', {}, `Rules & tips for ${E.label.toLowerCase()}`),
-        h('ul', { class: 'small env-rules' }, ...E.rules.map((r) => h('li', {}, r)))),
-      h('div', {},
-        h('h4', {}, `Bill of materials ≈ $${Math.round(B.total)}`),
-        h('table', { class: 'tbl small' }, ...B.items.map(([q, w, usd]) => h('tr', {}, h('td', { class: 'mono' }, q), h('td', {}, w), h('td', { class: 'muted' }, `$${Math.round(usd)}`)))),
-        h('h4', {}, `Build steps (${done}/${STEPS.length})`),
-        h('ol', { class: 'yard-steps' }, ...STEPS.map(([kk, t, d]) => { const c = h('input', { type: 'checkbox', checked: !!st[kk] }); c.onchange = () => { st[kk] = c.checked; save(); if (STEPS.every(([k2]) => st[k2]) && !st.xp) { st.xp = 1; toast('Antenna project complete.', 'good'); } render(); }; return h('li', { class: st[kk] ? 'done' : '' }, h('label', {}, c, ' ', h('b', {}, t)), h('div', { class: 'tiny muted' }, d)); })),
-        h('p', { class: 'tiny muted' }, `Design frequency ${(targetHz() / 1e6).toFixed(3)} MHz. Prices are typical US retail, for planning.`)))));
+  const chip = (k, v, cls = '') => h('span', { class: `site-stat ${cls}` }, h('span', {}, k), h('b', {}, v));
+
+  // --- where on Earth
+  const st = stateBy(S.op.state), precise = S.op.lat != null;
+  const stSel = h('select', { id: 'site-state' }, ...STATES.map((x) => h('option', { value: x.abbr, selected: x.abbr === S.op.state }, x.name)));
+  stSel.onchange = () => { S.op.state = stSel.value; delete S.op.lat; delete S.op.lon; save(); bus.emit('qth'); render(); };
+  const lat = h('input', { type: 'number', step: 0.01, min: -90, max: 90, placeholder: 'lat', value: precise ? S.op.lat : '', style: { width: '90px' } });
+  const lon = h('input', { type: 'number', step: 0.01, min: -180, max: 180, placeholder: 'lon', value: precise ? S.op.lon : '', style: { width: '96px' } });
+  const setLL = () => { const la = parseFloat(lat.value), lo = parseFloat(lon.value); if (!(Math.abs(la) <= 90 && Math.abs(lo) <= 180)) return toast('Enter a latitude from -90 to 90 and a longitude from -180 to 180.', 'warn'); S.op.lat = +la.toFixed(4); S.op.lon = +lo.toFixed(4); save(); bus.emit('qth'); render(); };
+  const here = precise ? { lat: S.op.lat, lon: S.op.lon } : st;
+  const locCard = h('div', { class: 'card site-loc' },
+    h('h3', {}, 'Where on the map', info('Your position sets propagation, daylight, terrain, weather and which real stations are nearby. A state is enough; a precise position makes the terrain and airport data local. It stays in this browser.', 'About location')),
+    h('div', { class: 'row wrap' }, h('label', {}, 'State ', stSel), h('label', {}, 'or exact position ', lat, ' ', lon), h('button', { class: 'btn small', onclick: setLL }, 'Set'),
+      h('button', { class: 'btn small', onclick: () => navigator.geolocation ? navigator.geolocation.getCurrentPosition((p) => { S.op.lat = +p.coords.latitude.toFixed(4); S.op.lon = +p.coords.longitude.toFixed(4); save(); bus.emit('qth'); render(); }, () => toast('Location was not shared.', 'warn')) : toast('Location is not available in this browser.', 'warn') }, 'Use my device location'),
+      precise ? h('button', { class: 'link small', onclick: () => { delete S.op.lat; delete S.op.lon; save(); bus.emit('qth'); render(); } }, 'back to state centre') : null),
+    h('div', { class: 'site-stats' }, chip('Grid square', here ? grid(here.lat, here.lon).slice(0, 6) : '—'), chip('Position', here ? `${here.lat.toFixed(2)}°, ${here.lon.toFixed(2)}°` : '—'), chip('Using', precise ? 'exact position' : 'state centre')));
+
+  // --- what kind of place
+  const placeCard = h('div', { class: 'card yard' },
+    h('h3', {}, 'What kind of place', info('The place sets the supports you can use, the space, the ground under the antenna, the electrical noise and the local rules. All of it changes what you hear and how far you get out.', 'About places')),
+    h('div', { class: 'env-pick' }, ...Object.entries(ENVS).map(([id, X]) => h('button', { class: `env-btn ${ys.env === id ? 'active' : ''}`, title: X.desc, onclick: () => { ys.env = id; if (!X.types.includes(S.antenna.type)) { S.antenna.type = X.types[0]; S.antenna.length = 0; S.antenna.built = false; toast(`Switched to a ${ANT_TYPES[X.types[0]].label.split(' (')[0].toLowerCase()}: the practical choice here.`, 'info', 4000); bus.emit('antenna-rebuild'); } save(); bus.emit('antenna'); render(); } }, X.label))));
+  if (E.scene === 'vehicle') {
+    const m = vehicleMount(), v = m.v;
+    const set = (k, val) => { v[k] = val; vehicleCfg(); save(); bus.emit('antenna'); render(); };
+    const thumb = (id) => { const V = VEHICLES[id], sc = Math.min(92 / V.len, 46 / V.ht); const svg = s('svg', { viewBox: '0 0 100 56', class: 'veh-thumb' }); const g = vehicleArt(id, v.paint); g.setAttribute('transform', `translate(${(100 - V.len * sc) / 2},52) scale(${sc})`); svg.append(g); return svg; };
+    placeCard.append(
+      h('div', { class: 'veh-pick' }, ...Object.entries(VEHICLES).map(([id, V]) => h('button', { class: `veh-btn ${v.type === id ? 'active' : ''}`, 'data-veh': id, onclick: () => set('type', id) }, thumb(id), h('span', {}, V.label)))),
+      h('div', { class: 'row wrap veh-opts' },
+        h('label', {}, 'Antenna mount ', (() => { const sl = h('select', { id: 'veh-mount' }, ...Object.keys(m.V.mounts).map((k) => h('option', { value: k, selected: k === v.mount }, MOUNT_NAMES[k] || k))); sl.onchange = () => set('mount', sl.value); return sl; })()),
+        h('span', { class: 'row' }, 'Paint ', ...Object.entries(PAINTS).map(([k, c]) => h('button', { class: `swatch ${v.paint === k ? 'active' : ''}`, title: k, 'aria-label': k, style: { background: c }, onclick: () => set('paint', k) })))));
+  }
+  placeCard.append(
+    h('div', { class: 'site-stats' },
+      chip('Noise', `${fx.noiseDb > 0 ? '+' : ''}${fx.noiseDb} dB`, fx.noiseDb > 3 ? 'warn' : fx.noiseDb < 0 ? 'ok' : ''),
+      chip('Loss on 40 m', `${fx.lossDb} dB`, fx.lossDb > 3 ? 'warn' : ''), chip('Loss on 2 m', `${fv.lossDb} dB`, fv.lossDb > 3 ? 'warn' : ''),
+      chip('Ground', GROUNDS[E.ground].label.split(' (')[0]),
+      E.scene === 'vehicle' ? chip('Longest whip', `${vehicleMount().maxWhip.toFixed(1)} ft`) : chip('Highest support', `${Math.round(siteMaxHeight())} ft`)),
+    drawYard(a, g));
+  if (!fits) placeCard.append(h('div', { class: 'callout warn' }, `A ${ANT_TYPES[a.type].label.split(' (')[0].toLowerCase()} is not practical here. Use: `, ...E.types.map((t) => h('button', { class: 'btn small', onclick: () => useType(t) }, ANT_TYPES[t].label.split(' (')[0]))));
+  else placeCard.append(
+    mounts.length ? h('div', { class: 'row wrap site-mount' }, ...mounts) : null,
+    h('ul', { class: 'rb-checks' }, ...g.notes.map(([kk, t]) => h('li', { class: kk }, `${kk === 'ok' ? '✓' : kk === 'warn' ? '!' : '✗'} ${t}`))),
+    h('div', { class: 'row wrap' }, hang, h('button', { class: 'btn', onclick: () => bus.emit('goto', 'antenna') }, 'Go to Antenna')));
+
+  // --- make it yours
+  const KINDS = [['tree', 'Tree', 40], ['mast', 'Mast / tower', 35], ['pole', 'Fibreglass pole', 31], ['house', 'Building', 18]];
+  const addSup = (kind, name, hgt) => { const id = `${kind}${Date.now() % 100000}`; y.sup.push({ id, kind, name: `${name} ${y.sup.filter((p) => p.kind === kind).length + 1}`, x: Math.round(y.lot / 2), h: hgt, custom: true }); save(); render(); };
+  const delSup = (p) => { y.sup = y.sup.filter((x) => x !== p); for (const k of Object.keys(y.ends)) if (y.ends[k] === p.id) y.ends[k] = y.sup[0]?.id || null; save(); bus.emit('antenna'); render(); };
+  const shackSel = h('select', {}, ...Object.entries(SHACKS).map(([k, l]) => h('option', { value: k, selected: (ys.shack || 'room') === k }, l)));
+  shackSel.onchange = () => { ys.shack = shackSel.value; save(); };
+  const custom = E.scene === 'vehicle' ? null : h('details', { class: 'card site-custom', open: !!ys.customOpen, ontoggle: (e) => { ys.customOpen = e.target.open; save(); } },
+    h('summary', {}, 'Customise this place'),
+    E.floors ? h('label', { class: 'small' }, E.scene === 'apartment' ? 'Your floor ' : 'Building floors ', num(y, 'floor', 1, 60), ` (about ${(y.floor || 1) * 10} ft up)`) : null,
+    h('table', { class: 'tbl small' }, h('tr', {}, h('th', {}, 'Support'), h('th', {}, 'Height ft'), h('th', {}, 'Position ft'), h('th', {}, '')),
+      ...y.sup.map((p) => h('tr', {}, h('td', {}, (() => { const i = h('input', { value: p.name, style: { width: '170px' } }); i.onchange = () => { p.name = i.value.trim() || p.name; save(); render(); }; return free ? i : p.name; })(), baseOf(p) ? ` (+${baseOf(p)} ft base)` : ''),
+        h('td', {}, p.kind === 'mast' ? h('span', {}, num(p, 'h', 10, mastH()), h('span', { class: 'tiny muted' }, ` max ${mastH()}`)) : num(p, 'h', 2, 150)), h('td', {}, num(p, 'x', 0, y.lot)),
+        h('td', {}, free && y.sup.length > 1 ? h('button', { class: 'link small', onclick: () => delSup(p) }, 'remove') : '')))),
+    free ? h('div', { class: 'row wrap' }, h('span', { class: 'small muted' }, 'Add'), ...KINDS.map(([k, l, hh]) => h('button', { class: 'btn small', onclick: () => addSup(k, l, hh) }, l))) : null,
+    h('div', { class: 'row wrap' },
+      h('label', { class: 'small' }, `${E.scene === 'apartment' ? 'Balcony' : E.scene === 'boat' ? 'Boat' : E.scene === 'attic' ? 'Attic' : E.scene === 'city' ? 'Roof' : 'Usable'} width `, num(y, 'lot', 8, 2000), ' ft'),
+      h('label', { class: 'small' }, 'Radio lives in the ', shackSel),
+      h('button', { class: 'link small', onclick: () => { ys.envs[ys.env] = envState(ys.env); save(); bus.emit('antenna'); render(); } }, 'reset this place')));
+  const rules = h('details', { class: 'card site-custom' }, h('summary', {}, `Rules and tips for ${E.label.toLowerCase()}`), h('ul', { class: 'small env-rules' }, ...E.rules.map((r) => h('li', {}, r))));
+  root.append(...[locCard, placeCard, custom, rules].filter(Boolean));
 }

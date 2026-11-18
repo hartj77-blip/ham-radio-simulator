@@ -2,10 +2,11 @@
 // Power budget (supply amps vs. radio draw), amplifier drive and mains, tuner and meter ratings,
 // band and receive coverage, cost and weight. "Use this station" puts it on the air.
 import { S, save } from './state.js';
-import { h, bus, toast } from './util.js';
+import { h, bus, toast, info } from './util.js';
 import { RIGS, GEAR_DEFAULT } from './rigs.js';
 import { GEAR, REAL_RIGS } from './data/gear.js';
 import { BANDS } from './data/bandplan.js';
+import { s, at, defs, radio, psu, tuner, swrMeter, amplifier, microphone, morseKey, connector } from './draw.js';
 
 const SLOTS = ['psu', 'tuner', 'meter', 'amp', 'mic', 'key', 'arrestor'];
 const GROUPS = [
@@ -69,17 +70,13 @@ export function analyze(d) {
   if (!r.scope) warn('No spectrum scope: you\'ll find stations by tuning and listening.');
   const cost = (r.usd || 0) + SLOTS.reduce((s, c) => s + (it(c).usd || 0), 0);
   const kg = (r.weight || 3) + (psu.kind === 'linear' ? 12 : psu.kind === 'battery' ? (psu.amps > 10 ? 2.5 : 2.7) : 1.5) + (amp.out ? (amp.tube ? 22 : 12) : 0) + (tuner.usd ? 2.5 : 0) + (meter.usd ? 1 : 0);
-  return { r, psu, tuner, meter, amp, checks, outW, rigW, ampNote, tx, rxTxt, cost, kg, ok: !checks.some((c) => c[0] === 'bad') };
+  return { d, r, psu, tuner, meter, amp, checks, outW, rigW, ampNote, tx, rxTxt, cost, kg, ok: !checks.some((c) => c[0] === 'bad') };
 }
 
 // ------------------------------------------------------------------ desk drawing (SVG)
-const NS = 'http://www.w3.org/2000/svg';
-const s = (tag, a = {}, ...kids) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); for (const c of kids) if (c != null) e.append(typeof c === 'string' ? document.createTextNode(c) : c); return e; };
-const label = (x, y, t, cls = 'rb-lbl') => s('text', { x, y, class: cls, 'text-anchor': 'middle' }, t);
-// Device name under the bench, below where the cables hang, wrapped to two lines when it is
-// wider than the device so neighbouring names never run into each other.
-function caption(cx, name, w) {
-  const fits = (t) => t.length * 6.9 <= w + 18;
+// Device name under the bench, wrapped to two lines when it is wider than the device.
+function caption(cx, y, name, w) {
+  const fits = (t) => t.length * 6.6 <= w + 24;
   let lines = [name];
   if (!fits(name) && name.includes(' ')) {
     const words = name.split(' ');
@@ -87,94 +84,52 @@ function caption(cx, name, w) {
     for (let i = 1; i < words.length; i++) { const d = Math.abs(words.slice(0, i).join(' ').length - words.slice(i).join(' ').length); if (d < diff) { diff = d; best = i; } }
     lines = [words.slice(0, best).join(' '), words.slice(best).join(' ')];
   }
-  const longest = Math.max(...lines.map((l) => l.length));
-  const t = s('text', { x: cx, y: 238, class: 'rb-lbl', 'text-anchor': 'middle' }, ...lines.map((l, i) => s('tspan', { x: cx, dy: i ? 15 : 0 }, l)));
-  if (longest * 6.9 > w + 18) t.setAttribute('font-size', Math.max(9, Math.floor(12 * (w + 18) / (longest * 6.9))));
-  return t;
+  return s('text', { x: cx, y, class: 'rb-lbl', 'text-anchor': 'middle' }, ...lines.map((l, i) => s('tspan', { x: cx, dy: i ? 14 : 0 }, l)));
 }
-const knob = (x, y, r, fill = 'url(#rbKnob)') => s('g', {}, s('circle', { cx: x, cy: y, r, fill, stroke: '#0a0b0d', 'stroke-width': 1.5 }), s('circle', { cx: x, cy: y - r * 0.6, r: r * 0.12, fill: '#cfd6dd' }));
-const keys = (x, y, n, w = 14, hgt = 7, gap = 4) => s('g', {}, ...Array.from({ length: n }, (_, i) => s('rect', { x: x + i * (w + gap), y, width: w, height: hgt, rx: 1.5, fill: '#2b3036', stroke: '#0c0e10' })));
+const RADIO_SIZE = { contest: [380, 140], touch: [310, 118], classic: [310, 118], portable: [220, 108], mobile: [220, 74], sdr: [150, 44], ht: [74, 170] };
 
-function drawRadio(r, x, y) {
-  const g = s('g', { transform: `translate(${x},${y})` });
-  if (r.look === 'ht') {
-    const c = r.ht || {};
-    g.append(s('rect', { x: 40, y: -40, width: 6, height: 50, rx: 3, fill: '#111' }), s('rect', { x: 20, y: 0, width: 70, height: 150, rx: 12, fill: c.body || '#16181b', stroke: '#000' }),
-      s('rect', { x: 30, y: 30, width: 50, height: 28, rx: 3, fill: c.lcd === 'amber' ? '#c98a2a' : c.lcd === 'white' ? '#d7dde1' : '#4c8a5a' }),
-      s('rect', { x: 30, y: 8, width: 50, height: 16, rx: 3, fill: '#0b0c0d' }), ...[0, 1, 2, 3].map((i) => keys(30, 66 + i * 12, 3, 13, 8, 5)),
-      s('rect', { x: 20, y: 40, width: 4, height: 30, fill: c.accent || '#f39a1e' }), caption(55, r.name, 110));
-    return g;
-  }
-  const W = r.look === 'contest' ? 330 : r.look === 'portable' ? 190 : r.look === 'mobile' ? 170 : r.look === 'sdr' ? 120 : 270, H = r.look === 'contest' ? 120 : r.look === 'mobile' ? 62 : r.look === 'sdr' ? 34 : 98;
-  g.append(s('rect', { x: 0, y: 150 - H, width: W, height: H, rx: 8, fill: 'url(#rbMetal)', stroke: '#0a0b0d', 'stroke-width': 1.5 }));
-  const top = 150 - H;
-  if (r.look === 'sdr') { g.append(s('rect', { x: 8, y: top + 10, width: W - 16, height: 12, rx: 2, fill: '#0d1013' }), s('circle', { cx: W - 14, cy: top + 16, r: 3, fill: '#3cff8a' })); }
-  else if (r.look === 'touch' || r.look === 'contest' || r.look === 'portable') {
-    const sw = r.look === 'contest' ? 170 : r.look === 'portable' ? 92 : 128, sx = r.look === 'contest' ? 80 : 62;
-    g.append(s('rect', { x: sx, y: top + 10, width: sw, height: H - 30, rx: 3, fill: '#05080b', stroke: '#22282e' }),
-      s('rect', { x: sx + 3, y: top + 13, width: sw - 6, height: (H - 36) * 0.45, fill: 'url(#rbScope)' }),
-      s('rect', { x: sx + 3, y: top + 13 + (H - 36) * 0.45, width: sw - 6, height: (H - 36) * 0.55, fill: 'url(#rbWf)' }),
-      s('text', { x: sx + 6, y: top + 24, class: 'rb-lcdtxt' }, '14.074.00'));
-    g.append(knob(sx + sw + (W - sx - sw) / 2, top + H / 2, Math.min(28, (W - sx - sw) / 2 - 8)));
-    if (r.look === 'contest') g.append(knob(40, top + 60, 18));
-    g.append(keys(8, top + 12, 2, 20, 9), keys(8, top + 28, 2, 20, 9), keys(sx, top + H - 16, Math.floor(sw / 18), 14, 7));
-  } else {
-    // classic / mobile: segment LCD + rows of keys + big knob
-    g.append(s('rect', { x: 14, y: top + 10, width: W * 0.5, height: H * 0.42, rx: 3, fill: '#2a1a05', stroke: '#111' }),
-      s('text', { x: 22, y: top + 10 + H * 0.3, class: 'rb-lcdtxt amber' }, '14.250.00'),
-      keys(14, top + H * 0.6, 6, 16, 8), keys(14, top + H * 0.78, 6, 16, 8), knob(W * 0.78, top + H / 2, Math.min(30, H / 2 - 6)));
-  }
-  g.append(s('circle', { cx: 12, cy: 150 - 10, r: 3, fill: '#ff4a3a', class: 'rb-led' }), caption(W / 2, r.name, W));
-  g.w = W;
-  return g;
-}
-function box(x, y, w, hh, name, inner) {
-  const g = s('g', { transform: `translate(${x},${y})` }, s('rect', { x: 0, y: 150 - hh, width: w, height: hh, rx: 6, fill: 'url(#rbMetal)', stroke: '#0a0b0d', 'stroke-width': 1.5 }));
-  inner && inner(g, 150 - hh, w, hh);
-  g.append(caption(w / 2, name, w));
-  return g;
-}
-const meterFace = (g, x, y, w, hh, n = 1) => { g.append(s('rect', { x, y, width: w, height: hh, rx: 3, fill: '#efe7cf', stroke: '#222' })); for (let i = 0; i < n; i++) g.append(s('line', { x1: x + w * (n === 2 ? (i ? 0.85 : 0.15) : 0.5), y1: y + hh - 2, x2: x + w * (n === 2 ? 0.5 : 0.65), y2: y + 5, stroke: i ? '#c22' : '#111', 'stroke-width': 1.2 })); };
-
-function drawDesk(A, d) {
-  const svg = s('svg', { viewBox: '0 0 1100 270', class: 'rb-desk' },
-    s('defs', {},
-      s('linearGradient', { id: 'rbMetal', x1: 0, y1: 0, x2: 0, y2: 1 }, s('stop', { offset: 0, 'stop-color': '#3a4048' }), s('stop', { offset: 1, 'stop-color': '#1b1f24' })),
-      s('radialGradient', { id: 'rbKnob', cx: 0.35, cy: 0.3 }, s('stop', { offset: 0, 'stop-color': '#5a616a' }), s('stop', { offset: 1, 'stop-color': '#111418' })),
-      s('linearGradient', { id: 'rbScope', x1: 0, y1: 0, x2: 0, y2: 1 }, s('stop', { offset: 0, 'stop-color': '#0b2340' }), s('stop', { offset: 1, 'stop-color': '#1e7fd0' })),
-      s('linearGradient', { id: 'rbWf', x1: 0, y1: 0, x2: 1, y2: 0 }, s('stop', { offset: 0, 'stop-color': '#061a3a' }), s('stop', { offset: 0.4, 'stop-color': '#0a3a6a' }), s('stop', { offset: 0.45, 'stop-color': '#f2d33a' }), s('stop', { offset: 0.5, 'stop-color': '#0a3a6a' }), s('stop', { offset: 1, 'stop-color': '#061a3a' })),
-      s('linearGradient', { id: 'rbWood', x1: 0, y1: 0, x2: 0, y2: 1 }, s('stop', { offset: 0, 'stop-color': '#7a5634' }), s('stop', { offset: 1, 'stop-color': '#4e3520' }))),
-    s('rect', { x: 0, y: 150, width: 1100, height: 30, fill: 'url(#rbWood)' }), s('rect', { x: 0, y: 180, width: 1100, height: 90, fill: '#11151a' }));
-  let x = 20;
-  const place = (g, w) => { svg.append(g); const cx = x; x += w + 26; return cx; };
-  const psuX = place(box(x, 0, 120, A.psu.kind === 'battery' ? 50 : 70, A.psu.name.replace(/^Generic /, ''), (g, t, w, hh) => {
-    if (A.psu.kind === 'battery') { g.append(s('rect', { x: 20, y: t - 6, width: 16, height: 6, fill: '#c22' }), s('rect', { x: 84, y: t - 6, width: 16, height: 6, fill: '#111' }), s('text', { x: 60, y: t + 30, class: 'rb-lbl', 'text-anchor': 'middle' }, `${A.psu.volts} V`)); return; }
-    meterFace(g, 10, t + 10, 44, 26); meterFace(g, 62, t + 10, 44, 26);
-    g.append(s('circle', { cx: 20, cy: t + hh - 14, r: 5, fill: '#c22' }), s('circle', { cx: 40, cy: t + hh - 14, r: 5, fill: '#111', stroke: '#555' }), s('rect', { x: 86, y: t + hh - 20, width: 22, height: 12, rx: 2, fill: '#222' }));
-  }), 120);
-  const rg = drawRadio(A.r, 0, 0); const rw = A.r.look === 'ht' ? 110 : rg.w || 270;
-  rg.setAttribute('transform', `translate(${x},0)`); const rigX = place(rg, rw);
-  let ampX = null;
-  if (A.amp.out) ampX = place(box(x, 0, 190, 110, A.amp.name, (g, t, w) => { meterFace(g, 14, t + 14, 60, 34); meterFace(g, 84, t + 14, 60, 34); g.append(knob(40, t + 80, 14), knob(90, t + 80, 14), knob(150, t + 80, 14), s('circle', { cx: 175, cy: t + 20, r: 4, fill: '#3cff8a' })); }), 190);
-  const meterX = place(box(x, 0, 100, 64, A.meter.name.replace(/^Generic /, ''), (g, t) => meterFace(g, 12, t + 8, 76, 40, 2)), 100);
-  let tunerX = null;
-  if (A.tuner.usd) tunerX = place(box(x, 0, 150, A.tuner.auto ? 40 : 80, A.tuner.name.replace(/^Generic /, ''), (g, t, w, hh) => { if (A.tuner.auto) { g.append(s('circle', { cx: 20, cy: t + 20, r: 4, fill: '#3cff8a' }), s('rect', { x: 90, y: t + 12, width: 40, height: 14, rx: 2, fill: '#222' })); return; } g.append(knob(30, t + hh / 2, 16), knob(75, t + hh / 2, 16), knob(120, t + hh / 2, 16)); }), 150);
-  // cables: DC (red/black) PSU→rig, coax rig→(amp)→meter→(tuner)→wall
-  // Each cable gets a light casing underneath so dark leads/coax stay visible on the dark bench.
-  const cable = (d, col, w) => svg.append(
-    s('path', { d, stroke: '#c9d3dd', 'stroke-width': w + 3, fill: 'none', 'stroke-linecap': 'round', opacity: 0.55 }),
-    s('path', { d, stroke: col, 'stroke-width': w, fill: 'none', 'stroke-linecap': 'round' }));
-  const cab = (x1, x2, col, dy) => cable(`M${x1} ${150 + dy} C ${x1} ${205 + dy}, ${x2} ${205 + dy}, ${x2} ${150 + dy}`, col, 4);
-  cab(psuX + 100, rigX + 20, '#e53935', 6); cab(psuX + 110, rigX + 30, '#3a3f45', 10);
-  const chain = [rigX + rw - 30, ampX && ampX + 20, ampX && ampX + 170, meterX + 20, meterX + 80, tunerX && tunerX + 20, tunerX && tunerX + 130].filter((v) => v != null);
-  for (let i = 0; i + 1 < chain.length; i += 2) cab(chain[i], chain[i + 1], '#33383e', 14);
+function drawDesk(A) {
+  const DESK = 210, t = (n) => n.replace(/^Generic /, '');
+  const parts = []; // [group, w, h, name, key]
+  const [rw, rh] = RADIO_SIZE[A.r.look] || RADIO_SIZE.classic;
+  const lin = A.psu.kind === 'linear', bat = A.psu.kind === 'battery';
+  parts.push([psu(A.psu, lin ? 170 : bat ? 120 : 150, lin ? 112 : bat ? 76 : 84), lin ? 170 : bat ? 120 : 150, lin ? 112 : bat ? 76 : 84, t(A.psu.name), 'psu']);
+  parts.push([radio(A.r, rw, rh, { freq: A.r.look === 'ht' ? '146.520' : '14.250.00' }), rw, rh, A.r.name, 'rig']);
+  if (A.amp.out) parts.push([amplifier(A.amp, 250, 136), 250, 136, A.amp.name, 'amp']);
+  parts.push([swrMeter(A.meter, 124, 92), 124, 92, t(A.meter.name), 'meter']);
+  if (A.tuner.usd) parts.push([tuner(A.tuner, A.tuner.auto ? 170 : 220, A.tuner.auto ? 46 : 104), A.tuner.auto ? 170 : 220, A.tuner.auto ? 46 : 104, t(A.tuner.name), 'tuner']);
+  let x = 36; const X = {};
+  for (const p of parts) { X[p[4]] = x; x += p[1] + 34; }
+  const micX = x, keyX = x + 64;
+  const wallX = Math.max(1010, keyX + 110), W = wallX + 70;
+  const svg = s('svg', { viewBox: `0 0 ${W} 310`, class: 'rb-desk', role: 'img', 'aria-label': 'Your station on the desk' }, defs(),
+    s('rect', { x: 0, y: 0, width: W, height: DESK, fill: 'url(#arWall)' }),
+    // shelf with a logbook, a clock and QSL cards on the wall
+    s('rect', { x: 40, y: 34, width: 300, height: 7, rx: 2, fill: 'url(#arWood)' }), s('rect', { x: 60, y: 6, width: 12, height: 28, fill: '#7a2e2e' }), s('rect', { x: 73, y: 10, width: 10, height: 24, fill: '#2e4f7a' }), s('rect', { x: 84, y: 4, width: 14, height: 30, fill: '#3d6b46' }), s('rect', { x: 99, y: 12, width: 9, height: 22, fill: '#b08a3a' }),
+    s('circle', { cx: 290, cy: 18, r: 14, fill: '#e9edf1', stroke: '#2a2f35', 'stroke-width': 2 }), s('path', { d: 'M290 18 V8 M290 18 H297', stroke: '#15171a', 'stroke-width': 1.4, 'stroke-linecap': 'round' }), s('text', { x: 290, y: 46 + 10, class: 'rb-tiny', 'text-anchor': 'middle' }, 'UTC'),
+    ...[[420, 14, '#e8dcc0', -4], [476, 20, '#cfe3f2', 3], [532, 12, '#f2d9cf', -2], [588, 22, '#d8eccb', 5]].map(([cx, cy, c, r]) => s('g', { transform: `rotate(${r} ${cx + 24} ${cy + 15})` }, s('rect', { x: cx, y: cy, width: 48, height: 30, rx: 1.5, fill: c, stroke: '#07080a', 'stroke-width': 0.6 }), s('rect', { x: cx + 4, y: cy + 5, width: 22, height: 5, fill: '#15171a', opacity: 0.7 }), s('rect', { x: cx + 4, y: cy + 14, width: 36, height: 2, fill: '#15171a', opacity: 0.35 }), s('rect', { x: cx + 4, y: cy + 19, width: 28, height: 2, fill: '#15171a', opacity: 0.35 }))),
+    // desk
+    s('rect', { x: 0, y: DESK, width: W, height: 16, fill: 'url(#arWood)' }), s('path', { d: `M0 ${DESK + 1} H${W}`, stroke: '#fff', 'stroke-opacity': 0.25 }),
+    ...Array.from({ length: 9 }, (_, i) => s('path', { d: `M${i * (W / 9) + 20} ${DESK + 5 + (i % 3) * 3} h${60 + (i % 4) * 30}`, stroke: '#3a2714', 'stroke-opacity': 0.5, 'stroke-width': 0.8 })),
+    s('rect', { x: 0, y: DESK + 16, width: W, height: 94, fill: '#0e1216' }));
+  // cables first, so they tuck behind the equipment
+  const cable = (d, col, w) => svg.append(s('path', { d, stroke: '#c9d3dd', 'stroke-width': w + 2.5, fill: 'none', 'stroke-linecap': 'round', opacity: 0.4 }), s('path', { d, stroke: col, 'stroke-width': w, fill: 'none', 'stroke-linecap': 'round' }));
+  const sag = (x1, x2, col, w, dy) => cable(`M${x1} ${DESK - 6} C ${x1} ${DESK + 40 + dy}, ${x2} ${DESK + 40 + dy}, ${x2} ${DESK - 6}`, col, w);
+  const pw = parts[0][1];
+  sag(X.psu + pw - 46, X.rig + 22, '#d32f2f', 3.5, 0); sag(X.psu + pw - 30, X.rig + 34, '#23272c', 3.5, 8);
+  const chain = [X.rig + rw - 26];
+  for (const k of ['amp', 'meter', 'tuner']) if (X[k] != null) { const w = parts.find((p) => p[4] === k)[1]; chain.push(X[k] + 22, X[k] + w - 22); }
+  for (let i = 0; i + 1 < chain.length; i += 2) sag(chain[i], chain[i + 1], '#2b3036', 5, 14);
   const last = chain[chain.length - 1];
-  const wallX = Math.max(1000, x + 40);
-  svg.setAttribute('viewBox', `0 0 ${wallX + 60} 270`);
-  svg.querySelectorAll('rect[width="1100"]').forEach((r) => r.setAttribute('width', wallX + 60));
-  svg.append(s('rect', { x: wallX, y: 20, width: 14, height: 160, fill: '#2a2f35' }), s('circle', { cx: wallX + 7, cy: 120, r: 6, fill: '#c9a227' }));
-  cable(`M${last} 164 C ${last} 235, ${wallX + 7} 235, ${wallX + 7} 126`, '#33383e', 5);
-  svg.append(s('text', { x: wallX + 52, y: 14, class: 'rb-lbl', 'text-anchor': 'end' }, 'wall feedthrough → antenna'));
+  svg.append(s('rect', { x: wallX, y: 0, width: 70, height: DESK, fill: '#232a33' }), s('rect', { x: wallX, y: 0, width: 4, height: DESK, fill: '#000', opacity: 0.35 }),
+    s('rect', { x: wallX + 16, y: 96, width: 38, height: 52, rx: 3, fill: 'url(#arSilver)', stroke: '#07080a' }), connector('coax', wallX + 35, 122), s('text', { x: wallX + 35, y: 164, class: 'rb-tiny', 'text-anchor': 'middle' }, 'TO ANTENNA'));
+  cable(`M${last} ${DESK - 6} C ${last} ${DESK + 62}, ${wallX + 35} ${DESK + 62}, ${wallX + 35} 130`, '#2b3036', 5);
+  for (const [g, w, hh, name, key] of parts) { svg.append(at(g, X[key], DESK - hh - 4), caption(X[key] + w / 2, DESK + 74, name, w)); }
+  // microphone and key in front, cords back to the radio
+  if (A.r.tx.length && A.r.look !== 'ht') {
+    const mic = GEAR.mic.items[A.d.mic] || {}, key = GEAR.key.items[A.d.key] || {};
+    svg.append(at(microphone(mic, 44, 86), micX, DESK - 90), caption(micX + 22, DESK + 74, 'Mic', 44), at(morseKey(key, 76, 46), keyX, DESK - 48), caption(keyX + 38, DESK + 74, key.iambic ? 'Paddle' : key.bug ? 'Bug' : 'Key', 76));
+  }
   return svg;
 }
 
@@ -190,16 +145,16 @@ function render() {
     const sel = h('select', { 'data-slot': cat }, ...Object.entries(G.items).map(([id, it]) => h('option', { value: id, selected: d[cat] === id }, `${it.name}${it.usd ? ` — $${it.usd}` : ''}`)));
     sel.onchange = () => { d[cat] = sel.value; save(); render(); };
     const it = G.items[d[cat]];
-    return h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, G.label), h('button', { class: 'link small', onclick: () => bus.emit('open-manual', d.rig, cat) }, 'Guide')), sel, h('div', { class: 'tiny muted' }, it.desc));
+    return h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, G.label), h('button', { class: 'link small', onclick: () => bus.emit('open-manual', d.rig, cat) }, 'Guide')), sel, h('div', { class: 'tiny muted rb-desc' }, it.desc));
   };
   const r = A.r;
   const m240 = h('input', { type: 'checkbox', checked: !!d.mains240 }); m240.onchange = () => { d.mains240 = m240.checked; save(); render(); };
   const inUse = S.rig === d.rig && SLOTS.every((c) => (S.gear || {})[c] === d[c]);
   root.append(
     h('div', { class: 'card' },
-      h('div', { class: 'row spread wrap' }, h('div', {}, h('h2', {}, 'Equipment'), h('p', { class: 'muted small' }, 'Assemble a station from real equipment. Every choice changes the simulation: supply current limits your output, amplifiers need drive (and sometimes 240 V), tuners and meters have power ratings, receivers have gaps, better mics add talk power.')),
+      h('div', { class: 'row spread wrap' }, h('h3', {}, 'Your station', info('Pick real equipment. Every choice changes the simulation: the supply limits your output, amplifiers need drive (and sometimes 240 V), tuners and meters have power ratings, receivers have gaps, better microphones add talk power.', 'About this page')),
         h('div', { class: 'row wrap rb-presets' }, ...PRESETS.map(([n, p]) => h('button', { class: 'btn small', onclick: () => { Object.assign(d, GEAR_DEFAULT, p); save(); render(); } }, n)))),
-      drawDesk(A, d)),
+      h('div', { class: 'rb-desk-wrap' }, drawDesk(A))),
     h('div', { class: 'rb-grid' },
       h('div', { class: 'card rb-slots' },
         h('div', { class: 'rb-slot' }, h('div', { class: 'row spread' }, h('b', {}, 'Radio'), h('button', { class: 'link small', onclick: () => bus.emit('open-manual', d.rig) }, 'Operating guide')), rigSel, h('div', { class: 'tiny muted' }, r.blurb)),
@@ -217,7 +172,7 @@ function render() {
         h('ul', { class: 'rb-checks' }, ...A.checks.map(([k, t]) => h('li', { class: k }, `${k === 'ok' ? '✓' : k === 'warn' ? '' : '✗'} ${t}`))),
         h('div', { class: 'row' },
           h('button', { class: 'btn primary big', id: 'rb-apply', disabled: inUse, onclick: () => apply(d) }, inUse ? '✓ This is your station' : 'Use this station')),
-        h('p', { class: 'muted tiny' }, 'Specs are approximate published figures; prices are typical US street prices, shown for reference. Product names identify equipment only — no affiliation with any manufacturer.'))));
+        info('Specs are approximate published figures; prices are typical US street prices, shown for reference. Product names identify equipment only — no affiliation with any manufacturer.', 'About these figures'))));
 }
 
 function apply(d) {
