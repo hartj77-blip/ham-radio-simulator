@@ -302,11 +302,13 @@ class AudioEngine {
       u.rate = clamp(rate, 0.5, 2); u.pitch = clamp(pitch, 0, 2); u.volume = clamp(volume, 0, 1);
       u.onend = () => res(token === this.ttsToken);
       u.onerror = () => res(false);
-      speechSynthesis.speak(u);
+      // Chrome can drop an utterance queued in the same instant as a cancel(), so leave a short gap.
+      const wait = Math.max(0, 70 - (performance.now() - (this.cancelAt || -1e9)));
+      if (wait) setTimeout(() => { if (token === this.ttsToken) speechSynthesis.speak(u); else res(false); }, wait); else speechSynthesis.speak(u);
       setTimeout(() => res(false), 30000);
     });
   }
-  cancelSpeech() { if ('speechSynthesis' in window) { this.ttsToken++; speechSynthesis.cancel(); } }
+  cancelSpeech() { if ('speechSynthesis' in window) { this.ttsToken++; this.cancelAt = performance.now(); speechSynthesis.cancel(); } }
   get speaking() { return 'speechSynthesis' in window && speechSynthesis.speaking; }
 }
 

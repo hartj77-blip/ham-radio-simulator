@@ -89,6 +89,10 @@ export const world = {
     if (b && b.mode && !bandOf(hz)) this.stations = stationsFor(b); // non-ham service region
     else if (c && c.slot === slot && c.contest === cid && (cid || now() - c.t < 1800)) this.stations = c.stations;
     else this.stations = name ? populateShared(b, this.contest) : [];
+    // A band that was just built starts with every station waiting out a random pause, which
+    // leaves several seconds of dead air after a band change. Shorten those first pauses so
+    // there is something to hear almost at once, as there is on a real band.
+    if (!(c && this.stations === c.stations)) for (const st of this.stations) if (st.timer > 0 && st.timer < 60) st.timer *= 0.15;
     this.slot = slot;
     for (const p of peers) if (p.band === name) this.stations.push(p);
     bus.emit('band', name);

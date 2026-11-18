@@ -59,6 +59,7 @@ export function setFreq(hz, opts = {}) {
   world.setFreq(r.freq);
   save();
   updateDisplay();
+  rxUpdate(); // do not wait for the next 100 ms tick: the receiver follows the dial at once
 }
 let prevFreq = R().freq;
 function hzOld(b) { return prevFreq >= b.lo && prevFreq <= b.hi ? prevFreq : b.def; }
@@ -69,6 +70,7 @@ export function setMode(m) {
   applyMode();
   if ((m === 'USB' || m === 'LSB') && m !== SIDEBAND_FOR(R().freq)) elmer('sideband');
   save(); updateDisplay();
+  rxUpdate();
 }
 export function reapplyMode() { applyMode(); }
 function applyMode() {
@@ -85,14 +87,27 @@ bus.on('station-tx', (st) => {
   const off = st.freq - dialHz();
   const span = R().mode === 'WFM' || st.mode === 'WFM' ? 150000 : R().mode === 'FM' || st.mode === 'FM' ? 15000 : 6000;
   if (Math.abs(off) > span) return;
-  const tx = st.tx;
-  if (tx.kind === 'peervoice' || tx.kind === 'stream') return;
-  const start = audio.t + Math.max(0, tx.start - now());
-  if (tx.steps) audio.fsk(st.id, start, tx.end - tx.start, Math.max(20, toneFor(st)), tx.steps, tx.wave);
-  else if (tx.kind === 'cw' || tx.kind === 'cwtone' || tx.kind === 'amtone' || tx.kind === 'fmtone') audio.cw(st.id, tx.sch.segs, start, Math.max(20, toneFor(st)));
-  else audio.babble(st.id, start, tx.end - tx.start, 700);
-  tx.heard = false;
+  startVoice(st);
+  st.tx.heard = false;
 });
+
+// Start the sound of a transmission. Also used when you tune onto a station that is already
+// talking: a real receiver produces audio the moment the dial lands, so the sound is joined
+// part-way through instead of waiting for that station's next transmission.
+function startVoice(st) {
+  const tx = st.tx;
+  if (!tx || tx.kind === 'peervoice' || tx.kind === 'stream') return;
+  const el = Math.max(0, now() - tx.start); // seconds of it already gone
+  const start = audio.t + Math.max(0, tx.start - now());
+  const dur = tx.end - tx.start - el;
+  const tone = Math.max(20, toneFor(st));
+  // Everything is shifted so the part still to come starts now; nothing is scheduled in the past.
+  if (tx.steps) audio.fsk(st.id, start, dur, tone, el ? tx.steps.filter(([t], i, a2) => t >= el || !(a2[i + 1] && a2[i + 1][0] <= el)).map(([t, hz]) => [Math.max(0, t - el), hz]) : tx.steps, tx.wave);
+  else if (tx.kind === 'cw' || tx.kind === 'cwtone' || tx.kind === 'amtone' || tx.kind === 'fmtone') {
+    const segs = el ? tx.sch.segs.filter((g) => g.t1 > el).map((g) => ({ ...g, t0: Math.max(0, g.t0 - el), t1: g.t1 - el })) : tx.sch.segs;
+    if (segs.length) audio.cw(st.id, segs, start, tone);
+  } else audio.babble(st.id, start, dur, 700);
+}
 
 function toneFor(st) {
   const r = R(), d = dialHz();
@@ -187,6 +202,7 @@ export function rxUpdate() {
       intelligible = sameSb && r.mode !== 'CW' && Math.abs(off) < 350;
       audio.setVoice(st.id, { tone: clamp(center * 0.6, 150, 3000) });
     }
+    if (audible && st.tx.kind !== 'stream' && t < st.tx.end - 0.15 && !audio.has(st.id)) startVoice(st); // tuned in mid-transmission
     const snr = dbm - nBW;
     sigs.push({ st, dbm, snr, audible, intelligible, off, tone });
     if (audible) {
@@ -209,6 +225,12 @@ export function rxUpdate() {
     const b = Math.max(best, peerBest);
     open = r.mode === 'WFM' || r.sql < 0.02 || b > thr;
     noiseRms = open ? 0.22 * clamp(db2amp(-Math.max(0, b) * 0.9), 0.01, 1) : 0;
+  }
+  // Tuned away from (or squelched) the station whose voice is playing: cut it at once, as a
+  // receiver would, so the next station is not left waiting behind it.
+  if (speaking) {
+    const cur = sigs.find((x) => x.st === speaking.st);
+    if (!(cur && cur.st.tx === speaking.tx && cur.intelligible && cur.snr > -1 && open)) stopSpeaking();
   }
   // AGC (fast attack, slow decay)
   const target = clamp(0.28 / maxRms, 0.02, 1);
@@ -257,20 +279,44 @@ export function rxUpdate() {
   updateDecoder(strongest);
 }
 
+let speaking = null; // { st, tx, utt } for the synthesized voice now playing
+function stopSpeaking() {
+  const sp = speaking;
+  if (!sp) return;
+  speaking = null;
+  sp.utt.cancelled = true;
+  sp.tx.speaking = false;
+  sp.tx.heard = false; // tune back while it is still transmitting and you pick it up again
+  audio.cancelSpeech();
+}
+
 function speakIfNeeded(s, vol) {
   const tx = s.st.tx;
   if (tx.heard || !tx.say) return;
-  if (now() - tx.start > 1.5) return;
+  if (speaking && speaking.tx !== tx) return; // another station on frequency is mid-sentence
+  // Joining part-way through: say only what is left of the sentence.
+  let say = tx.say;
+  const el = now() - tx.start;
+  if (el > 1) {
+    const words = say.split(/\s+/);
+    const skip = Math.ceil(words.length * el / Math.max(1, tx.end - tx.start));
+    if (words.length - skip < 2) return;
+    say = words.slice(skip).join(' ');
+  }
   tx.heard = true;
   tx.speaking = true;
   const st = s.st;
+  const utt = { cancelled: false };
+  speaking = { st, tx, utt };
   const pitch = clamp(st.pitch + s.off / 450 * (R().mode === 'LSB' ? -1 : 1), 0.2, 2);
-  (S.settings.tts === false ? new Promise((res) => setTimeout(res, Math.min(9000, 400 + (tx.say || '').length * 55))) : audio.speak(tx.say, { lang: st.op.lang, seed: st.seed, rate: (st.rate || 1) * (S.settings.ttsRate || 1), pitch, volume: vol })).then(() => {
+  (S.settings.tts === false ? new Promise((res) => setTimeout(res, Math.min(9000, 400 + say.length * 55))) : audio.speak(say, { lang: st.op.lang, seed: st.seed, rate: (st.rate || 1) * (S.settings.ttsRate || 1), pitch, volume: vol })).then(() => {
+    if (utt.cancelled) return; // cut off by tuning away: the station itself is still transmitting
+    if (speaking && speaking.utt === utt) speaking = null;
     tx.speaking = false; tx.end = Math.min(tx.end, now());
     if (tx.courtesy) courtesy();
   });
-  setTimeout(() => { tx.speaking = false; }, 25000);
-  if (S.settings.subtitles) opUi.transcript(st.call === 'beacon' ? '' : (st.speaker ? st.speaker.call : st.call), tx.show, 'rx');
+  setTimeout(() => { if (!utt.cancelled) tx.speaking = false; if (speaking && speaking.utt === utt) speaking = null; }, 25000);
+  if (S.settings.subtitles && !tx.subbed) { tx.subbed = true; opUi.transcript(st.call === 'beacon' ? '' : (st.speaker ? st.speaker.call : st.call), tx.show, 'rx'); }
 }
 
 function courtesy() { if (R().mode === 'FM') { audio.beep(880, 0.08, 0.12, 0.25); audio.beep(660, 0.1, 0.12, 0.36); } }
