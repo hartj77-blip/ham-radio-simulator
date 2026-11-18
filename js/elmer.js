@@ -70,7 +70,7 @@ export function elmer(id, force = false) {
 }
 function show(id) {
   const t = TIPS[id];
-  if (S.mode === 'free' || S.settings.notes === false) return;
+  if (S.mode !== 'training' || S.settings.notes === false) return;
   if (S.mode === 'training' && !S.training?.min && !document.body.classList.contains('ht-view')) {
     bus.emit('helper-say', `<b>${t[0]}.</b> ${t[1]} <span class="exam-ref">Exam topic ${t[2]}</span>`);
     bus.emit('tip', id);

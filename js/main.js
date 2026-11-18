@@ -8,7 +8,8 @@ import { world } from './world.js';
 import { SUN, bandConditions, simDate, grid, mufAt } from './propagation.js';
 import { startIono, IONO, blackout } from './iono.js';
 import { initShackUI, shackTick } from './shack.js';
-import { initAntennaUI } from './antenna.js';
+import { initAntennaUI, initAntennaTools } from './antenna.js';
+import { mountYard } from './yard.js';
 import { initRadioUI, rxUpdate, drawFrame, tuneBy, setFreq, setMode, updateDisplay } from './radio.js';
 import { initOperatingUI, txState } from './operating.js';
 import { initContestUI, contestTick } from './contest.js';
@@ -37,23 +38,24 @@ import { initFeeds } from './feeds.js';
 import { initHistory } from './history.js';
 import './manualui.js';
 
-// [id, label, icon, group]
+// [id, label, icon, group, family]. Pages in a family share one sidebar entry and a sub-tab strip.
 const TABS = [
-  ['course', 'Course', 'grad', 'Learn'], ['library', 'Reference library', 'book', 'Learn'], ['license', 'License study', 'badge', 'Learn'], ['history', 'Radio history', 'clock', 'Learn'],
-  ['shack', 'Station wiring', 'plug', 'Build'], ['antenna', 'Antenna', 'antenna', 'Build'], ['workbench', 'Antenna workbench', 'flask', 'Build'], ['rigbuilder', 'Equipment', 'layers', 'Build'], ['rftools', 'RF tools', 'waveform', 'Build'],
-  ['radio', 'Radio', 'radio', 'Operate'], ['logbook', 'Logbook', 'log', 'Operate'], ['contest', 'Contest practice', 'trophy', 'Operate'], ['feeds', 'Live feeds', 'ear', 'Operate'],
+  ['course', 'Course', 'grad', 'Learn'],
+  ['library', 'Library', 'book', 'Learn', 'reference'], ['license', 'License', 'badge', 'Learn', 'reference'], ['history', 'History', 'clock', 'Learn', 'reference'],
+  ['site', 'Location', 'pin', 'Build'], ['rigbuilder', 'Equipment', 'layers', 'Build'], ['shack', 'Wiring', 'plug', 'Build'], ['antenna', 'Antenna', 'antenna', 'Build'],
+  ['anttools', 'Antenna tools', 'tower', 'Build', 'tools'], ['workbench', 'Antenna modeling', 'flask', 'Build', 'tools'], ['rftools', 'RF tools', 'waveform', 'Build', 'tools'],
+  ['radio', 'Radio', 'radio', 'Operate'], ['logbook', 'Logbook', 'log', 'Operate'], ['contest', 'Contest', 'trophy', 'Operate'], ['feeds', 'Live feeds', 'ear', 'Operate'],
   ['help', 'Help', 'help', 'Support'],
 ];
+const FAMILIES = { reference: ['Reference', 'book'], tools: ['Tools', 'wrench'] };
+// Page ids from before the redesign, so old links and saved hashes still land somewhere sensible.
+const ALIAS = { reference: 'library', tools: 'anttools', yard: 'site', planner: 'anttools', store: 'rigbuilder' };
 
 function header() {
   const st = stateBy(S.op.state);
   $('#station-id').innerHTML = `<span class="sb-item"><span class="sb-k">Station</span>${S.call ? `<span class="callsign">${S.call}</span>` : '<span class="callsign muted">SWL</span>'}</span>`
     + `<span class="sb-item"><span class="sb-k">License</span><span class="lic lic-${S.license || 'none'}">${licName()}</span></span>`
     + `<span class="sb-item"><span class="sb-k">QTH</span><span>${st ? st.abbr : ''} ${st ? grid(st.lat, st.lon).slice(0, 4) : ''}</span></span>`;
-  const on = net.online ? net.roster.length : null;
-  $('#xp').innerHTML = on != null ? `<button class="net-badge" id="net-badge" title="Operators online">${icon('users')} ${on} online${net.roster.some((e) => e.tx) ? ' <span class="onair-dot"></span>' : ''}</button>` : '';
-  const nb = document.getElementById('net-badge');
-  if (nb) nb.onclick = () => { showTab('radio'); document.getElementById('net-card')?.scrollIntoView({ behavior: 'smooth' }); };
 }
 
 function solarBanner() {
@@ -81,16 +83,28 @@ function modeSwitch() {
   for (const [m, x] of Object.entries(MODES)) el.append(h('button', { class: S.mode === m ? 'active' : '', role: 'tab', 'aria-selected': String(S.mode === m), title: x.desc, onclick: () => bus.emit('set-mode', m) }, h('span', { html: icon(x.icon) }), h('span', { class: 'lbl' }, x.label)));
 }
 
+function subnav(t) {
+  const el = $('#subnav');
+  const fam = TABS.find(([id]) => id === t)[4];
+  el.hidden = !fam;
+  el.innerHTML = '';
+  if (!fam) return;
+  (S.lastSub ||= {})[fam] = t;
+  for (const [id, label, ic, , f] of TABS) if (f === fam) el.append(h('button', { class: id === t ? 'active' : '', onclick: () => showTab(id) }, h('span', { html: icon(ic) }), label));
+}
+
 function showTab(t) {
+  t = ALIAS[t] || t;
   if (!TABS.some(([id]) => id === t)) t = 'radio';
   if (document.body.classList.contains('ht-view')) showHT(false);
+  const def = TABS.find(([id]) => id === t);
   document.body.dataset.tab = t;
   document.body.classList.remove('nav-open');
-  $$('#tabs .nav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  $$('#tabs .nav-item, #side-foot .nav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === t || (!!def[4] && b.dataset.family === def[4])));
   $$('.tab').forEach((s) => { s.hidden = s.id !== `tab-${t}`; });
-  const def = TABS.find(([id]) => id === t);
-  $('#page-title').textContent = def[1];
+  $('#page-title').textContent = def[4] ? FAMILIES[def[4]][0] : def[1];
   $('#page-eyebrow').textContent = def[3];
+  subnav(t);
   if (t === 'radio') updateDisplay();
   bus.emit('tab', t);
   if (location.hash.slice(1) !== t) history.replaceState(null, '', `#${t}`);
@@ -101,7 +115,7 @@ function helpTab(el) {
     h('div', { class: 'help-grid' },
       h('div', { class: 'card' }, h('h3', {}, 'Modes'),
         ...Object.entries(MODES).map(([, x]) => h('div', { class: 'help-mode' }, h('span', { class: 'hm-icon', html: icon(x.icon) }), h('div', {}, h('b', {}, x.label), h('p', { class: 'small muted' }, x.desc)))),
-        h('p', { class: 'small' }, 'Switch at any time with the selector at the top of the screen. Your log, license and course progress are kept.')),
+        ),
       h('div', { class: 'card' }, h('h3', {}, 'Workflow'),
         h('ol', { class: 'small steps' },
           h('li', {}, h('b', {}, 'Station wiring: '), 'connect DC power with correct polarity, run coax from the radio\'s ANT jack through the meter and tuner to the arrestor at the wall, bond every chassis to the ground bus, connect microphone and key, then switch on supply and radio.'),
@@ -144,13 +158,17 @@ function helpTab(el) {
 function buildChrome() {
   const nav = $('#tabs');
   let group = null;
-  for (const [id, label, ic, g] of TABS) {
+  const seen = new Set();
+  for (const [id, label, ic, g, fam] of TABS) {
     if (g === 'Support') continue;
     if (g !== group) { group = g; nav.append(h('div', { class: 'nav-group' }, g)); }
-    nav.append(h('button', { class: 'nav-item', 'data-tab': id, onclick: () => showTab(id) }, h('span', { html: icon(ic) }), h('span', {}, label)));
+    if (fam) {
+      if (seen.has(fam)) continue;
+      seen.add(fam);
+      nav.append(h('button', { class: 'nav-item', 'data-family': fam, onclick: () => showTab(S.lastSub?.[fam] || ALIAS[fam]) }, h('span', { html: icon(FAMILIES[fam][1]) }), h('span', {}, FAMILIES[fam][0])));
+    } else nav.append(h('button', { class: 'nav-item', 'data-tab': id, onclick: () => showTab(id) }, h('span', { html: icon(ic) }), h('span', {}, label)));
   }
   $('#side-foot').append(
-    h('button', { class: 'nav-item', 'data-tab': 'help', onclick: () => showTab('help') }, h('span', { html: icon('help') }), h('span', {}, 'Help')),
     h('button', { class: 'nav-item', onclick: () => openSettings() }, h('span', { html: icon('settings') }), h('span', {}, 'Settings')));
   $('#menu-btn').innerHTML = icon('menu');
   $('#menu-btn').onclick = () => document.body.classList.toggle('nav-open');
@@ -158,6 +176,7 @@ function buildChrome() {
   $('#tb-tools').append(
     tool('station-btn', 'station', 'Station', 'Station presets, radio model, saved antennas, appearance', () => openStation()),
     tool('ht-btn', 'handheld', 'Handheld', 'Switch between the handheld radio and the full station', () => showHT(!document.body.classList.contains('ht-view'))),
+    tool('help-btn', 'help', 'Help', 'How it works, shortcuts, sources', () => showTab('help')),
     tool('explain-btn', 'info', 'Explain', 'Hover any control to learn what it does', (e) => { S.settings.explain = !S.settings.explain; save(); e.currentTarget.classList.toggle('active', S.settings.explain); toast(S.settings.explain ? 'Explain mode on — hover over any control.' : 'Explain mode off.', 'info', 2500); }));
   $('#explain-btn').classList.toggle('active', !!S.settings.explain);
   modeSwitch();
@@ -175,6 +194,8 @@ function init() {
   initHT($('#ht-panel'));
   initShackUI($('#tab-shack'));
   initAntennaUI($('#tab-antenna'));
+  mountYard($('#tab-site'));
+  initAntennaTools($('#tab-anttools'));
   initWorkbenchUI($('#tab-workbench'));
   initRigBuilder($('#tab-rigbuilder'));
   bus.on('rig', () => { if (S.rbDraft && S.rbDraft.rig !== S.rig) { S.rbDraft.rig = S.rig; } });
@@ -201,7 +222,7 @@ function init() {
   header(); solarBanner(); clock();
   world.setFreq(S.radio.freq);
   const start = (location.hash || '').slice(1);
-  showTab(start && start !== 'store' ? start : (S.mode === 'training' ? 'course' : 'radio'));
+  showTab(start || (S.mode === 'training' ? 'course' : 'radio'));
 
   bus.on('roster', header);
   bus.on('license', header);
@@ -239,7 +260,7 @@ function init() {
   const loop = (t) => { drawFrame(); if (t - lastMap > 250) { lastMap = t; drawMap(); shackTick(txState); } requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
 
-  if (!S.started) welcome((m) => { header(); solarBanner(); showTab(m === 'training' ? 'shack' : 'radio'); if (isPhone()) { phoneStart(); showHT(true); } });
+  if (!S.started) welcome((m) => { header(); solarBanner(); showTab(m === 'training' ? 'course' : 'radio'); if (isPhone()) { phoneStart(); showHT(true); } });
   if (S.started) setTimeout(autoOnline, 1500);
   bus.on('view', (v) => { const b = $('#ht-btn .lbl'); if (b) b.textContent = v === 'ht' ? 'Full station' : 'Handheld'; });
   const sv = S.settings.startView || 'auto';

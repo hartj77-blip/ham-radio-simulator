@@ -536,7 +536,7 @@ export function initCourse(el) {
       h('div', {}, h('div', { class: 'eyebrow' }, 'Training'), h('h1', {}, 'Course overview'),
         h('p', { class: 'lead' }, 'A structured path from an empty desk to your first contact. Each module combines hands-on steps in the simulator with checkpoint questions and reference reading.')),
       h('div', { class: 'stat-tile' }, h('span', { class: 'tiny muted' }, 'Progress'), h('b', {}, `${Math.round((p.done / p.total) * 100)}%`), h('span', { class: 'tiny muted' }, `${p.done} / ${p.total} steps`))),
-    S.mode !== 'training' ? h('div', { class: 'callout' }, 'You are in ', h('b', {}, S.mode === 'free' ? 'Free Play' : 'Simulation'), ' mode. Switch to Training to follow the guide alongside the simulator. ', h('button', { class: 'btn primary small', onclick: () => bus.emit('set-mode', 'training') }, 'Switch to Training')) : '');
+    S.mode !== 'training' ? h('div', { class: 'callout' }, 'The guide runs in Training. ', h('button', { class: 'btn primary small', onclick: () => bus.emit('set-mode', 'training') }, 'Switch to Training')) : '');
     const grid = h('div', { class: 'module-grid' });
     MODULES.forEach((m, mi) => {
       const mp = moduleProgress(m.id);

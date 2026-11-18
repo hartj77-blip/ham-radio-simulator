@@ -117,3 +117,25 @@ export function seeded(seed, fn) {
   Math.random = prng;
   try { return fn(); } finally { Math.random = orig; }
 }
+
+// A small "?" button that keeps explanatory text off the page until someone asks for it.
+export function info(content, label = 'About this') {
+  const b = h('button', { class: 'info-btn', type: 'button', title: label, 'aria-label': label }, '?');
+  b.onclick = (e) => {
+    e.stopPropagation();
+    const open = document.querySelector('.info-pop');
+    if (open) { const same = open._for === b; open.remove(); if (same) return; }
+    const pop = h('div', { class: 'info-pop', role: 'tooltip' });
+    if (typeof content === 'string') pop.innerHTML = content; else pop.append(content);
+    pop._for = b;
+    document.body.append(pop);
+    const r = b.getBoundingClientRect(), w = Math.min(360, innerWidth - 24);
+    pop.style.width = `${w}px`;
+    pop.style.left = `${Math.max(12, Math.min(innerWidth - w - 12, r.left - 20))}px`;
+    const below = r.bottom + 8 + pop.offsetHeight < innerHeight;
+    pop.style.top = `${below ? r.bottom + 8 : Math.max(12, r.top - 8 - pop.offsetHeight)}px`;
+    const close = (ev) => { if (ev.type === 'keydown' ? ev.key !== 'Escape' : pop.contains(ev.target)) return; pop.remove(); removeEventListener('pointerdown', close, true); removeEventListener('keydown', close, true); removeEventListener('scroll', close, true); };
+    setTimeout(() => { addEventListener('pointerdown', close, true); addEventListener('keydown', close, true); addEventListener('scroll', close, true); });
+  };
+  return b;
+}

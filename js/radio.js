@@ -592,7 +592,7 @@ export function effectiveSwr(f) {
   if (rs.hasTuner && !r.mtBypass) swr = manualTunerSwr(f, swr);
   if (r.atuOn && r.atuTunedFreq && Math.abs(f - r.atuTunedFreq) < Math.max(8000, f * 0.005) && swr <= 3.05) swr = 1.1 + (swr - 1) * 0.04;
   // Free Play: the antenna is re-cut for each band and a wide-range tuner matches it automatically.
-  if (S.mode === 'free' && r.atuOn) swr = Math.min(swr, 1.1 + Math.min(swr - 1, 4) * 0.02);
+  if (S.mode === 'simulation' && S.settings.autoSetup !== false && r.atuOn) swr = Math.min(swr, 1.1 + Math.min(swr - 1, 4) * 0.02);
   return swr;
 }
 

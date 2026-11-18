@@ -65,8 +65,9 @@ export function openSettings(tab = 'audio') {
     if (t === 'play') {
       pane.append(
         row('Mode', h('div', { class: 'seg' }, ...Object.entries(MODES).map(([m, x]) => h('button', { class: S.mode === m ? 'active' : '', onclick: () => { bus.emit('set-mode', m); draw('play'); } }, x.label))), 'Your log, license and course progress are kept when you switch.'),
+        row('Auto-setup in Simulation', check('autoSetup', () => bus.emit('set-mode', S.mode)), 'Wires the station and matches the antenna for you. Turn off to do it all by hand.'),
         row('Restart the training course', h('button', { class: 'btn small', onclick: () => { S.training = { step: 0, done: {}, answers: {}, marks: {}, min: false }; save(); bus.emit('training-goto', 0); toast('Training course restarted.', 'info', 2500); } }, 'Restart'), 'Clears course progress only.'),
-        row('Contextual notes', check('notes'), 'Short explanations of exam topics as situations come up (Training and Simulation).'),
+        row('Contextual notes', check('notes'), 'Short explanations of exam topics as situations come up (Training).'),
         row('Explain mode', chk0('explain', () => bus.emit('explain')), 'Hover or long-press any control to learn what it does.'),
         row('Lab readouts on the scope', chk0('lab'), 'Signal and noise dBm, SNR, path mode, distance.'),
         row('Simulated operator patience', select('patience', [[1, 'Realistic'], [1.6, 'Patient (more repeats)'], [0.7, 'Contest-fast']]), 'How long simulated stations wait and how often they repeat for you.'),

@@ -1198,3 +1198,23 @@ body.ht-view #guide-panel { display: none; }
 .dial-det { padding: 2px 12px 12px 28px; font-size: 0.87rem; color: var(--text-2); } .dial-det p { margin: 5px 0; } .dial-det b { color: var(--text); }
 .dial-legal { margin-top: 16px; color: var(--text-2); } .dial-legal b { color: var(--text); }
 @media (max-width: 640px) { .dial-f { width: auto; } .dial-v { margin-left: 0; } .dial-det { padding-left: 12px; } .wa-btns { width: 100%; } }
+
+
+/* ============================ redesign: navigation, sub-tabs, text diet ============================ */
+.subnav { display: flex; gap: 4px; padding: 8px 26px 0; border-bottom: 1px solid var(--line); background: var(--bg); overflow-x: auto; }
+.subnav button { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 8px 12px 10px; font: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.subnav button:hover { color: var(--text); }
+.subnav button.active { color: #fff; border-bottom-color: var(--accent); }
+.subnav .ic { width: 16px; height: 16px; }
+.subnav button.active .ic { color: var(--accent); }
+body.ht-view .subnav, .subnav[hidden] { display: none; }
+/* The top bar already names the page: page heads keep only their right-hand widgets. */
+.tab .page-head .eyebrow, .tab .page-head h1, .tab .page-head .lead { display: none; }
+.tab .page-head { margin: 0 0 14px; justify-content: flex-end; }
+.tab .page-head:not(:has(> :nth-child(2))) { display: none; }
+.info-btn { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--surface-2); color: var(--muted); font: 600 12px/1 Inter, sans-serif; cursor: pointer; padding: 0; vertical-align: middle; margin-left: 6px; flex: none; }
+.info-btn:hover { color: #fff; border-color: var(--accent-line); }
+.info-pop { position: fixed; z-index: 400; background: var(--raised); border: 1px solid var(--line-2); border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 12px 14px; font-size: 0.86rem; line-height: 1.5; color: var(--text-2); max-height: 60vh; overflow: auto; }
+.info-pop p { margin: 0 0 0.6em; } .info-pop p:last-child { margin: 0; } .info-pop ul { margin: 0; padding-left: 1.1em; }
+.mode-grid.two { grid-template-columns: 1fr 1fr; }
+@media (max-width: 640px) { .mode-grid.two { grid-template-columns: 1fr; } .subnav { padding: 6px 12px 0; } }

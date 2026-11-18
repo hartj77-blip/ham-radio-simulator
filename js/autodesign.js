@@ -186,7 +186,7 @@ export function openDesigner() {
         h('button', { class: 'btn primary', onclick: () => { close(); bus.emit('tune-to', d.goal === 'vhf' ? 146.52e6 : b.ph ? d.fHz : b.def, d.goal === 'vhf' ? 'FM' : b.ph ? SIDEBAND_FOR(d.fHz) : b.defMode); } }, h('span', { html: icon('radio') }), `Tune the radio to ${d.band}`),
         h('button', { class: 'btn', onclick: () => { close(); bus.emit('goto', 'antenna'); } }, 'See it on the Antenna page'),
         h('button', { class: 'btn ghost', onclick: choose }, 'Try another goal')));
-    if (S.mode === 'free') bus.emit('tune-to', d.goal === 'vhf' ? 146.52e6 : b.ph ? d.fHz : b.def, d.goal === 'vhf' ? 'FM' : b.ph ? SIDEBAND_FOR(d.fHz) : b.defMode);
+    if (S.mode === 'simulation') bus.emit('tune-to', d.goal === 'vhf' ? 146.52e6 : b.ph ? d.fHz : b.def, d.goal === 'vhf' ? 'FM' : b.ph ? SIDEBAND_FOR(d.fHz) : b.defMode);
     toast(`Antenna designed and raised: ${ANT_TYPES[d.type].label}, ${L.toFixed(2)} ft for ${d.band}.`, 'good', 5000);
   };
   choose();

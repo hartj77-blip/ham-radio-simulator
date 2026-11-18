@@ -13,7 +13,7 @@ import { RW } from './realworld.js';
 const STATE_POS = () => stateBy(S.op.state) || stateBy('KS');
 import { runSolver } from './em/client.js';
 import { antOwned, feedOwned, maxHeight, owns } from './limits.js';
-import { mountYard, siteMaxHeight } from './yard.js';
+import { siteMaxHeight } from './yard.js';
 import { mountReach, refreshReach } from './reach.js';
 import { mountPlanner, autoSize, targetHz, P as planP, antDefaults } from './planner.js';
 
@@ -309,10 +309,15 @@ function render() {
     h('div', { class: 'row spread' }, h('h3', {}, 'Antenna analyzer'),
       h('div', { class: 'row' }, h('label', { class: 'inline' }, 'Sweep ', bandSel), h('label', { class: 'inline' }, atRig, ' measure at shack end of coax'))),
     canvas, info);
-  const planBox = h('div', { id: 'planner' }), yardBox = h('div', { id: 'yard' }), reachBox = h('div', { id: 'reach' });
-  root.append(h('div', { class: 'ant-grid' }, controls, h('div', {}, svgBox, an)), reachBox, yardBox, planBox);
-  mountYard(yardBox); mountPlanner(planBox); mountReach(reachBox);
+  root.append(h('div', { class: 'ant-grid' }, controls, h('div', {}, svgBox, an)));
   renderInfo();
+}
+
+// Antenna tools page: range estimate and site planner (the engineering side of the antenna).
+export function initAntennaTools(el) {
+  const planBox = h('div', { id: 'planner' }), reachBox = h('div', { id: 'reach' });
+  el.append(reachBox, planBox);
+  mountReach(reachBox); mountPlanner(planBox);
 }
 
 const fmtDelta = (ft) => { ft = Math.abs(ft); return ft < 1 ? `${(ft * 12).toFixed(1)} in` : `${ft.toFixed(2)} ft`; };
