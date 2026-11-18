@@ -300,4 +300,5 @@ bus.on('check-version', () => checkVersion(true));
 // debug handle for automated tests
 import * as _radio from './radio.js';
 import * as _op from './operating.js';
-window.__sim = { S, world, radio: _radio, op: _op, SUN, net, audio, RW };
+import * as _training from './training.js';
+window.__sim = { S, world, radio: _radio, op: _op, SUN, net, audio, RW, training: _training };

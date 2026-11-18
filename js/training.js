@@ -15,7 +15,19 @@ import { isHT } from './rigs.js';
 import { PLAN_STEP, openStationPlan } from './advisor.js';
 import { audio } from './audio.js';
 
-const T = () => (S.training ||= { step: 0, done: {}, answers: {}, marks: {}, min: false });
+const N_INTRO = 4; // steps added ahead of the original course
+const T = () => {
+  const t = (S.training ||= { step: 0, done: {}, answers: {}, marks: {}, min: false, v: 2 });
+  if (t.v !== 2) {
+    const started = t.step > 0 || Object.keys(t.done).length > 0;
+    const shift = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [+k + N_INTRO, v]));
+    t.done = shift(t.done); t.answers = shift(t.answers); t.marks = shift(t.marks);
+    if (started) { t.step += N_INTRO; for (let i = 0; i < N_INTRO; i++) t.done[i] = 1; }
+    t.v = 2; save();
+  }
+  return t;
+};
+const flag = (k) => !!S.flags?.[k];
 const goTab = (t) => bus.emit('goto', t);
 const callField = () => (document.querySelector('.lf-call')?.value || '').trim();
 const f40 = 7.15e6;
@@ -45,6 +57,7 @@ const bestBandGroup = () => {
 // ------------------------------------------------------------------ the curriculum
 // kind: 'do' (detected automatically), 'quiz' (checkpoint question), 'read' (study, then continue)
 export const MODULES = [
+  { id: 'start', title: 'Getting started', blurb: 'What amateur radio is, what you need, and where you are.', refs: ['licensing'] },
   { id: 'wiring', title: 'Station wiring', blurb: 'DC power, the RF path from radio to antenna, grounding and accessories.', refs: ['station-wiring', 'rf-path', 'grounding'] },
   { id: 'antenna', title: 'Antenna construction', blurb: 'Choose an antenna, calculate its length, set its height and raise it.', refs: ['antenna-basics', 'dipole-build', 'height-ground'] },
   { id: 'tuning', title: 'Reading the analyzer & tuning', blurb: 'Interpret an SWR sweep, read R and X, trim to resonance and use the tuner correctly.', refs: ['swr', 'antenna-analyzer', 'antenna-tuner'] },
@@ -53,9 +66,47 @@ export const MODULES = [
   { id: 'license', title: 'Licensing', blurb: 'Study the question pool and take the Technician examination.', refs: ['licensing'] },
   { id: 'qso', title: 'Your first contact', blurb: 'Answer a CQ, exchange reports and log the contact correctly.', refs: ['qso', 'logging'] },
   { id: 'vhf', title: 'VHF & repeaters', blurb: 'Program offset and CTCSS tone and access the local 2 m repeater.', refs: ['repeaters', 'vhf-propagation'] },
+  { id: 'reallife', title: 'On the air for real', blurb: 'Buying a first radio, staying safe, finding an exam and a club, nets and emergencies.', refs: ['licensing', 'qso'] },
 ];
 
+// What each part of the course looks like outside the simulator. A step may carry its own
+// `real`; otherwise it shows its module's.
+const REAL = {
+  start: 'Everything in this course maps to a real purchase, a real cable or a real rule. Nothing here transmits, so you can make every mistake for free first.',
+  wiring: 'On a real desk: fuse both DC leads close to the supply, keep coax jumpers short, and run one heavy copper wire from every chassis to a single ground point. Do the wiring with the supply switched off.',
+  antenna: 'In a real yard: measure twice and cut long, since you can fold wire back but not add it. Use a throw line to get rope over a branch. Never put an antenna where it could fall on a power line, and never work on it in a storm.',
+  tuning: 'Real hams borrow or buy an antenna analyzer (about $60 to $300) and do exactly this: sweep, find the dip, trim a few inches, sweep again. A tuner is the fix for bands the antenna was not cut for.',
+  receiving: 'You can do all of this today with no licence: a web SDR in your browser (Live feeds page) or a $30 USB receiver. Listening first is how most operators learn the bands.',
+  propagation: 'Real operators check the same numbers before switching on: solar flux, the K index and the MUF, from NOAA or a propagation site. Then they listen to the beacons to confirm.',
+  license: 'In the US the Technician exam is 35 multiple-choice questions from a published pool, with no Morse code. Sessions are run by volunteer examiners, in person or online, for about $15 plus a $35 FCC fee. The licence lasts ten years.',
+  qso: 'A real first contact goes the same way: listen, give their callsign once and yours twice, exchange a signal report and names, say 73, and log it. Nobody minds a nervous first-timer; say it is your first contact.',
+  vhf: 'Most new hams start exactly here, with a handheld on the local repeater. Look up your repeater and its offset and tone in a directory, program them once, and listen for a net to check in to.',
+  reallife: 'This is the part the simulator cannot do for you. Each step here is something to go and do.',
+};
+
+
 export const STEPS = [
+  // ---------------- Getting started
+  { m: 'start', kind: 'read', tab: 'course', title: 'What you are about to learn', ref: 'licensing',
+    text: 'Amateur ("ham") radio lets licensed people talk across town or around the world with their own stations. A station is four things: a <b>radio</b>, a <b>power source</b>, a <b>feedline</b> and an <b>antenna</b>. You will build each one here, then use it.',
+    real: 'Anyone may listen. To transmit you need a licence, which in the US starts with the Technician exam. This course takes you to that exam and through your first contacts.' },
+  { m: 'start', tab: 'site', sel: '#site-state', title: 'Say where you are', ref: 'ionosphere',
+    text: 'Open <b>Build → Location</b> and check your state. Then look at the kinds of place below it: a yard, a balcony, a park, a vehicle.',
+    why: 'Where you are decides which bands are open, how much electrical noise you hear and what antenna you can put up.',
+    how: 'Click Location in the left menu. Pick your state from the list. You can leave the place as Suburban yard for the course.',
+    real: 'Before buying anything, real operators look at their own site: what can hold a wire up, how far the radio is from the antenna, and what the lease or homeowner rules allow.',
+    done: () => flag('siteSeen'), praise: 'Location set. The whole simulation now follows it.' },
+  { m: 'start', tab: 'rigbuilder', sel: '.rb-desk-wrap', title: 'Meet your equipment', ref: 'station-wiring',
+    text: 'Open <b>Build → Equipment</b>. This is the station on your desk: power supply, radio, SWR meter, tuner, microphone and key.',
+    why: 'Each box has one job. Knowing which is which makes the wiring in the next lessons obvious.',
+    how: 'Click Equipment in the left menu and look at the picture. You do not need to change anything.',
+    real: 'A realistic first HF station is a used 100 W radio, a 25 to 30 A power supply and a wire antenna: roughly $600 to $1,000. A first VHF station is a $30 to $150 handheld.',
+    done: () => flag('rigSeen'), praise: 'That is the whole station. Next you connect it.' },
+  { m: 'start', kind: 'quiz', tab: 'course', title: 'Checkpoint: who may transmit?',
+    text: 'Before the first cable: which of these is true on the amateur bands?',
+    options: [['Anyone may listen, but transmitting needs a licence', true], ['Anyone may transmit at low power', false], ['You need a licence even to listen', false]],
+    explain: 'Listening is open to everyone. Transmitting on amateur frequencies needs an amateur licence, at any power.',
+    real: 'This is why the simulator is useful before the exam: it lets you practise transmitting without being on the air.' },
   // ---------------- Module 1: wiring
   { m: 'wiring', tab: 'shack', sel: '[data-port="rig_red"]', title: 'Connect the positive DC lead', ref: 'station-wiring',
     text: 'Click the radio\'s <b>red DC lead</b> (DC red, below the radio), then the <b>red + terminal</b> on the power supply.',
@@ -199,7 +250,7 @@ export const STEPS = [
     why: 'Convention: voice SSB uses LSB below 10 MHz and USB above (60 m is the exception, USB). On the wrong sideband speech is inverted and unintelligible.',
     how: 'Use the MODE buttons.',
     done: () => S.radio.mode === 'LSB' && bandOf(S.radio.freq)?.name === '40m', praise: 'LSB selected.' },
-  { m: 'receiving', tab: 'radio', sel: '.rig-controls .ctl-group:nth-child(3)', title: 'Set the audio gain', ref: 'receiver-controls',
+  { m: 'receiving', tab: 'radio', sel: '.rig-more-grid .ctl-group:nth-child(2)', title: 'Set the audio gain', ref: 'receiver-controls',
     text: 'Set <b>AF GAIN</b> to about half. Use headphones.',
     why: 'AF gain is volume only. A steady hiss is band noise — atmospheric and man-made — and sets the weakest signal you can hear.',
     how: 'Drag the AF GAIN slider in the AUDIO group.',
@@ -269,7 +320,7 @@ export const STEPS = [
   { m: 'qso', tab: 'radio', sel: '#find-btn', title: 'Find a station calling CQ', ref: 'qso',
     text: 'Use <b>Find: Voice CQ</b> (or CW CQ), or search the band yourself.',
     why: 'CQ means "calling any station". Answering a CQ is the simplest way to make a contact.',
-    how: 'The Find bar is above the radio.',
+    how: 'The Find button is at the top right of the radio.',
     done: () => world.stations.some((x) => x.role === 'cq' && Math.abs(x.freq - S.radio.freq) < 300), praise: 'Station calling CQ located.' },
   { m: 'qso', tab: 'radio', sel: '.lf-call', title: 'Copy the callsign', ref: 'qso',
     text: 'Enter the station\'s <b>callsign</b> in the logger.',
@@ -313,6 +364,33 @@ export const STEPS = [
     why: 'Identify with your callsign at the start and at least every 10 minutes. Pause between transmissions so others can break in, and listen for the courtesy tone.',
     how: 'Hold Space or the PTT button, speak, then release to listen.',
     done: () => S.flags?.rpt, praise: 'Repeater accessed. Course complete.' },
+  // ---------------- On the air for real
+  { m: 'reallife', kind: 'read', tab: 'rigbuilder', sel: '.rb-presets', title: 'Choose a realistic first station', ref: 'station-wiring',
+    text: 'On the Equipment page, try the <b>Budget starter</b> and <b>Handheld only</b> presets and read the station cost on the right.',
+    action: ['Open Equipment', () => goTab('rigbuilder')],
+    real: 'Buy the antenna and feedline first in your head: they decide what you can hear. A used radio from a club member is the usual first purchase. Do not buy an amplifier in your first year.' },
+  { m: 'reallife', kind: 'quiz', tab: 'course', title: 'Checkpoint: antenna safety',
+    text: 'You are putting up a wire antenna. Which rule matters most?',
+    options: [['It must not be able to touch a power line, even if it falls', true], ['It must be exactly resonant before you raise it', false], ['It must be higher than the house', false]],
+    explain: 'Contact with power lines kills people every year. Keep any antenna and its supports at least their full height plus the wire length away from power lines.',
+    real: 'Also: disconnect antennas when storms are near, bond the entry point to a ground rod, and keep people away from antennas when you transmit (RF exposure).' },
+  { m: 'reallife', kind: 'read', tab: 'license', title: 'Find an exam session', ref: 'licensing',
+    text: 'Open <b>Learn → Reference → License</b>. When practice exams go well several times in a row, you are ready for the real one.',
+    action: ['Open License', () => goTab('license')],
+    real: 'In the US, search for an exam session through ARRL or a remote-testing group. Bring photo ID and your FCC registration number (FRN), which is free to get first. Your callsign appears in the FCC database within days.' },
+  { m: 'reallife', kind: 'read', tab: 'radio', sel: '#find-btn', title: 'Listen to a net',
+    text: 'Use <b>Find → Nets</b> on the Radio page and listen to how a net control station runs the check-ins.',
+    action: ['Show the nets', () => { goTab('radio'); bus.emit('open-nets'); }],
+    real: 'Local clubs run weekly nets on their repeater and welcome new callsigns. Emergency groups (ARES, RACES, SKYWARN) train on nets too. A club is the fastest way to find help, loan gear and an antenna party.' },
+  { m: 'reallife', kind: 'quiz', tab: 'course', title: 'Checkpoint: a distress call',
+    text: 'You hear someone calling "MAYDAY" on a frequency you are not licensed to transmit on. What do the rules say?',
+    options: [['Help: in a real emergency you may use any means to protect life', true], ['Stay silent: you have no privileges there', false], ['Change frequency so you do not interfere', false]],
+    explain: 'When life or property is in immediate danger and normal communication is not available, any station may use any frequency to get help. Then relay to the authorities.',
+    real: 'Write down who, where and what is wrong, stay on frequency, and call the emergency services by phone if you can.' },
+  { m: 'reallife', kind: 'read', tab: 'course', title: 'Your first real contact',
+    text: 'You have done every step a real first contact needs. In <b>Simulation</b> you can now build any station, anywhere, and practise until it is easy.',
+    action: ['Go to Simulation', () => bus.emit('set-mode', 'simulation')],
+    real: 'Checklist for the day: licence in the database, antenna up and SWR checked, power at 50 W or less, frequency inside your privileges, listen first, say your callsign clearly, and log it.' },
 ];
 
 const modOf = (s) => MODULES.find((m) => m.id === s.m);
@@ -364,11 +442,11 @@ export function ask(q) {
 }
 
 // ------------------------------------------------------------------ panel
-let panel, feedEl, lastStep = -1;
+let panel, feedEl, lastStep = -1, shown = { step: -1, kind: null };
 const feed = [];
 function say(html, kind = 'info') {
   feed.push({ html, kind });
-  while (feed.length > 5) feed.shift();
+  while (feed.length > 3) feed.shift();
   drawFeed();
 }
 function drawFeed() {
@@ -377,15 +455,37 @@ function drawFeed() {
   for (const m of feed) feedEl.append(h('div', { class: `cf cf-${m.kind}`, html: m.html }));
   feedEl.scrollTop = feedEl.scrollHeight;
 }
+// Make sure the thing a step points at is actually on screen: open the drawer, side tab or
+// collapsed section it lives in.
+const SIDE_OF = { 'map-panel': 'map', 'scanner-panel': 'air', 'net-panel': 'players', 'guide-panel': 'guide' };
+function reveal(el) {
+  for (let d = el.closest('details:not([open])'); d; d = d.parentElement?.closest('details:not([open])')) d.open = true;
+  const pane = el.closest('.side-pane');
+  if (pane?.hidden && SIDE_OF[pane.id]) bus.emit('radio-side', SIDE_OF[pane.id]);
+  const dr = el.closest('.radio-drawer:not(.open)');
+  if (dr) bus.emit('radio-drawer', dr.id === 'finder' ? 'find' : 'quick');
+}
+let spotEl, dimUntil = 0;
+// A ring that stays on the current step's target while you are on its page.
+function spot() {
+  spotEl ||= document.body.appendChild(h('div', { id: 'spot', hidden: true }));
+  const st = STEPS[T().step];
+  const on = trainingActive() && st?.sel && document.body.dataset.tab === st.tab && !document.body.classList.contains('ht-view') && !document.querySelector('#modal:not([hidden])');
+  const el = on ? document.querySelector(st.sel) : null;
+  const r = el && el.getClientRects().length ? el.getBoundingClientRect() : null;
+  if (!r || r.width < 2 || r.bottom < 0 || r.top > innerHeight) { spotEl.hidden = true; return; }
+  spotEl.hidden = false;
+  spotEl.classList.toggle('dim', performance.now() < dimUntil);
+  Object.assign(spotEl.style, { left: `${r.left - 6}px`, top: `${r.top - 6}px`, width: `${r.width + 12}px`, height: `${r.height + 12}px` });
+}
 export function highlight(tab, sel) {
   if (tab) goTab(tab);
   if (!sel) return;
   setTimeout(() => {
     const el = document.querySelector(sel);
     if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.add('pulse-hl');
-    setTimeout(() => el.classList.remove('pulse-hl'), 4500);
+    reveal(el);
+    setTimeout(() => { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); dimUntil = performance.now() + 2600; }, 60);
   }, 150);
 }
 const refLink = (id, label = 'Read in library') => (id ? h('button', { class: 'btn ghost small', onclick: () => bus.emit('library', id) }, h('span', { html: icon('book') }), label) : null);
@@ -420,45 +520,50 @@ function render() {
   if (!s) {
     body = h('div', { class: 'coach-step' }, h('div', { class: 'eyebrow' }, 'Course complete'),
       h('h3', {}, 'You have completed the training course.'),
-      h('p', { class: 'small' }, 'You wired a station, built and tuned an antenna, searched the bands, studied propagation, got licensed, made a contact and used a repeater. Switch to Simulation mode to design more advanced stations.'),
+      h('p', { class: 'small' }, 'You built a station, tuned an antenna, read the bands, got licensed and made contacts. Simulation lets you build anything, anywhere.'),
       h('div', { class: 'row' }, h('button', { class: 'btn small', onclick: () => goToStep(0) }, 'Restart course'), h('button', { class: 'btn primary small', onclick: () => bus.emit('set-mode', 'simulation') }, 'Go to Simulation')));
   } else {
     const mod = modOf(s), inMod = STEPS.filter((x) => x.m === s.m), mi = MODULES.indexOf(mod);
     if (s.mark && t.marks[t.step] == null) { t.marks[t.step] = s.mark(); save(); }
+    if (shown.step !== t.step) shown = { step: t.step, kind: null };
+    const real = s.real || REAL[s.m];
+    const more = { why: ['Why', s.why], how: ['How', s.how], real: ['In real life', real] };
+    const tabs = h('div', { class: 'coach-more' }, ...Object.entries(more).filter(([, [, txt]]) => txt).map(([k, [label]]) => h('button', { class: `chip ${shown.kind === k ? 'active' : ''}`, 'data-more': k, onclick: () => { shown.kind = shown.kind === k ? null : k; render(); } }, label)));
+    const revealBox = shown.kind && more[shown.kind][1] ? h('div', { class: `coach-reveal ${shown.kind}`, html: more[shown.kind][1] }) : null;
     body = h('div', { class: 'coach-step' },
-      h('div', { class: 'eyebrow' }, `Module ${mi + 1} · ${mod.title}`, h('span', { class: 'muted' }, ` — step ${inMod.indexOf(s) + 1} of ${inMod.length}`)),
+      h('div', { class: 'eyebrow' }, `${mi + 1}. ${mod.title}`, h('span', { class: 'muted' }, ` · ${inMod.indexOf(s) + 1} of ${inMod.length}`)),
       h('h3', {}, val(s.title)),
-      h('div', { class: 'small step-text', html: val(s.text) }));
+      h('div', { class: 'step-text', html: val(s.text) }));
     if (s.kind === 'quiz') {
       const answered = t.answers[t.step];
       const opts = val(s.options);
       const box = h('div', { class: 'quiz' });
       opts.forEach(([label, ok], i) => box.append(h('button', { class: `quiz-opt ${answered != null ? (ok ? 'right' : answered === i ? 'wrong' : 'dim') : ''}`, disabled: answered != null, onclick: () => {
         t.answers[t.step] = i; save();
-        if (ok) { say(`<b>Correct.</b> ${val(s.explain)}`, 'good'); audio.ready && audio.beep(1320, 0.05, 0.06); } else say(`<b>Not quite.</b> ${val(s.explain)}`, 'warn');
+        if (ok) { audio.ready && audio.beep(1320, 0.05, 0.06); }
         render();
       } }, h('span', { class: 'qk' }, String.fromCharCode(65 + i)), label)));
       body.append(box);
-      if (answered != null) body.append(h('div', { class: 'row' }, h('button', { class: 'btn primary small', onclick: () => complete(true) }, 'Continue', h('span', { html: icon('arrowRight') })), opts[answered]?.[1] ? null : h('button', { class: 'btn small', onclick: () => { delete t.answers[t.step]; save(); render(); } }, 'Try again')));
-      if (s.sel) body.append(h('div', { class: 'row' }, h('button', { class: 'btn ghost small', onclick: () => highlight(s.tab, s.sel) }, h('span', { html: icon('target') }), 'Show me')));
+      if (answered != null) body.append(h('div', { class: `coach-reveal ${opts[answered]?.[1] ? 'good' : 'warn'}`, html: `<b>${opts[answered]?.[1] ? 'Correct.' : 'Not quite.'}</b> ${val(s.explain)}` }),
+        h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => complete(true) }, 'Continue', h('span', { html: icon('arrowRight') })), opts[answered]?.[1] ? null : h('button', { class: 'btn small', onclick: () => { delete t.answers[t.step]; save(); render(); } }, 'Try again')));
+      else if (s.sel) body.append(h('div', { class: 'row' }, h('button', { class: 'btn ghost small', onclick: () => highlight(s.tab, s.sel) }, h('span', { html: icon('target') }), 'Show me')));
     } else if (s.kind === 'read') {
-      body.append(h('div', { class: 'row' }, s.action ? h('button', { class: 'btn small', onclick: s.action[1] }, s.action[0]) : '', refLink(s.ref, 'Open article'), s.sel ? h('button', { class: 'btn ghost small', onclick: () => highlight(s.tab, s.sel) }, h('span', { html: icon('target') }), 'Show me') : null,
-        h('button', { class: 'btn primary small', onclick: () => complete(true) }, 'Continue', h('span', { html: icon('arrowRight') }))));
+      body.append(h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => complete(true) }, 'Continue', h('span', { html: icon('arrowRight') })),
+        s.action ? h('button', { class: 'btn small', onclick: s.action[1] }, s.action[0]) : null, s.sel ? h('button', { class: 'btn ghost small', onclick: () => highlight(s.tab, s.sel) }, h('span', { html: icon('target') }), 'Show me') : null));
     } else {
-      body.append(
-        h('div', { class: 'row' },
-          h('button', { class: 'btn primary small', onclick: () => highlight(s.tab, s.sel) }, h('span', { html: icon('target') }), 'Show me'),
-          h('button', { class: 'btn small', onclick: () => say(`<b>Why it matters.</b> ${s.why}`, 'info') }, 'Why'),
-          h('button', { class: 'btn small', onclick: () => say(`<b>How.</b> ${s.how}`, 'info') }, 'How')),
-        h('div', { class: 'coach-detect tiny muted' }, h('span', { class: 'pulse-dot' }), 'Waiting for you to complete this step'));
+      body.append(h('div', { class: 'row' },
+        h('button', { class: 'btn primary', onclick: () => highlight(s.tab, s.sel) }, h('span', { html: icon('target') }), 'Show me'),
+        h('span', { class: 'coach-detect tiny muted' }, h('span', { class: 'pulse-dot' }), 'I will notice when it is done')));
     }
+    body.append(tabs);
+    if (revealBox) body.append(revealBox);
     body.append(h('div', { class: 'row coach-nav' },
       h('button', { class: 'link small', disabled: t.step === 0, onclick: () => goToStep(t.step - 1) }, 'Back'),
       s.ref ? refLink(s.ref) : null,
       h('span', { style: { flex: 1 } }),
       h('button', { class: 'link small', title: 'Skip this step', onclick: () => complete(false) }, 'Skip')));
   }
-  const askIn = h('input', { class: 'coach-ask', placeholder: 'Ask a question, e.g. "what is reactance?"' });
+  const askIn = h('input', { class: 'coach-ask', placeholder: 'Ask, e.g. "what is SWR?"' });
   const doAsk = (q) => {
     if (!q.trim()) return;
     const a = ask(q);
@@ -502,6 +607,7 @@ function check() {
     audio.ready && audio.beep(1320, 0.05, 0.06);
     render(); bus.emit('training-progress');
   } else if (lastStep !== t.step) render();
+  if (lastStep !== t.step) { const st = STEPS[t.step]; if (st?.sel && document.body.dataset.tab === st.tab) { const el = document.querySelector(st.sel); if (el) reveal(el); } }
   lastStep = t.step;
 }
 
@@ -524,7 +630,9 @@ export function initTraining(el) {
   bus.on('mode', render); bus.on('license', render);
   bus.on('training-goto', (i) => goToStep(i));
   panel.addEventListener('click', (e) => { const b = e.target.closest('.ref-link'); if (b) bus.emit('library', b.dataset.ref); });
-  if (trainingActive() && T().step === 0 && !feed.length) say('Work through each step at your own pace. Steps are detected automatically as you complete them. Use <b>Show me</b> to locate a control and <b>Why</b> for the reasoning behind it.', 'info');
+  setInterval(spot, 200);
+  addEventListener('scroll', spot, true);
+  bus.on('tab', (t) => { if (t === 'site') (S.flags ||= {}).siteSeen = 1; if (t === 'rigbuilder') (S.flags ||= {}).rigSeen = 1; });
 }
 
 // ------------------------------------------------------------------ course overview page
@@ -532,26 +640,26 @@ export function initCourse(el) {
   const draw = () => {
     el.innerHTML = '';
     const t = T(), p = progress();
-    el.append(h('div', { class: 'page-head' },
-      h('div', {}, h('div', { class: 'eyebrow' }, 'Training'), h('h1', {}, 'Course overview'),
-        h('p', { class: 'lead' }, 'A structured path from an empty desk to your first contact. Each module combines hands-on steps in the simulator with checkpoint questions and reference reading.')),
-      h('div', { class: 'stat-tile' }, h('span', { class: 'tiny muted' }, 'Progress'), h('b', {}, `${Math.round((p.done / p.total) * 100)}%`), h('span', { class: 'tiny muted' }, `${p.done} / ${p.total} steps`))),
+    el.append(
     S.mode !== 'training' ? h('div', { class: 'callout' }, 'The guide runs in Training. ', h('button', { class: 'btn primary small', onclick: () => bus.emit('set-mode', 'training') }, 'Switch to Training')) : '');
-    const grid = h('div', { class: 'module-grid' });
+    const cur = STEPS[t.step];
+    const resume = (i) => { if (S.mode !== 'training') bus.emit('set-mode', 'training'); goToStep(i); const st = STEPS[T().step]; if (st && st.tab !== 'course') highlight(st.tab, st.sel); };
+    el.append(h('div', { class: 'card course-now' },
+      h('div', {}, h('div', { class: 'eyebrow' }, cur ? (p.done ? 'Next step' : 'Start here') : 'Course complete'), h('h2', {}, cur ? val(cur.title) : 'You finished the course'),
+        h('div', { class: 'bar' }, h('span', { style: { width: `${(p.done / p.total) * 100}%` } }))),
+      h('button', { class: 'btn primary big', id: 'course-go', onclick: () => resume(cur ? t.step : 0) }, cur ? (p.done ? 'Continue' : 'Start') : 'Start again', h('span', { html: icon('arrowRight') }))));
+    const grid = h('div', { class: 'course-path' });
     MODULES.forEach((m, mi) => {
       const mp = moduleProgress(m.id);
-      const first = STEPS.findIndex((s) => s.m === m.id);
-      const current = STEPS[t.step]?.m === m.id;
-      grid.append(h('div', { class: `module-card ${mp.done === mp.total ? 'complete' : ''} ${current ? 'current' : ''}` },
-        h('div', { class: 'row spread' }, h('span', { class: 'mod-num' }, String(mi + 1).padStart(2, '0')), h('span', { class: 'tiny muted' }, `${mp.done}/${mp.total}`)),
-        h('h3', {}, m.title), h('p', { class: 'small muted' }, m.blurb),
-        h('div', { class: 'bar' }, h('span', { style: { width: `${(mp.done / mp.total) * 100}%` } })),
-        h('ol', { class: 'mod-steps' }, ...STEPS.map((s, i) => [s, i]).filter(([s]) => s.m === m.id).map(([s, i]) => h('li', { class: `${t.done[i] ? 'done' : ''} ${i === t.step ? 'now' : ''}` },
-          h('button', { class: 'link', onclick: () => { if (S.mode !== 'training') bus.emit('set-mode', 'training'); goToStep(i); highlight(s.tab, s.sel); } },
-            h('span', { html: icon(t.done[i] ? 'checkCircle' : 'circle') }), val(s.title), s.kind ? h('span', { class: 'kind' }, s.kind === 'quiz' ? 'checkpoint' : 'reading') : null)))),
-        h('div', { class: 'row' },
-          h('button', { class: `btn ${current ? 'primary' : ''} small`, onclick: () => { if (S.mode !== 'training') bus.emit('set-mode', 'training'); goToStep(first + Math.max(0, STEPS.slice(first).findIndex((s, k) => s.m === m.id && !t.done[first + k]))); const s = STEPS[T().step]; if (s) highlight(s.tab, s.sel); } }, current ? 'Continue' : mp.done ? 'Resume' : 'Start'),
-          ...m.refs.slice(0, 2).map((r) => h('button', { class: 'btn ghost small', onclick: () => bus.emit('library', r) }, h('span', { html: icon('book') }), 'Read')))));
+      const first = STEPS.findIndex((x) => x.m === m.id);
+      const current = cur?.m === m.id;
+      grid.append(h('div', { class: `path-row ${mp.done === mp.total ? 'complete' : ''} ${current ? 'current' : ''}`, title: m.blurb },
+        h('span', { class: 'mod-num' }, mp.done === mp.total ? h('span', { html: icon('check') }) : String(mi + 1)),
+        h('div', { class: 'path-main' }, h('b', {}, m.title),
+          h('div', { class: 'path-dots' }, ...STEPS.map((x, i) => [x, i]).filter(([x]) => x.m === m.id).map(([x, i]) => h('button', { class: `dot ${t.done[i] ? 'done' : ''} ${i === t.step ? 'now' : ''} ${x.kind ? `k-${x.kind}` : ''}`, title: val(x.title), 'aria-label': val(x.title), onclick: () => resume(i) })))),
+        h('span', { class: 'tiny muted' }, `${mp.done}/${mp.total}`),
+        h('button', { class: `btn small ${current ? 'primary' : 'ghost'}`, onclick: () => resume(first + Math.max(0, STEPS.slice(first).findIndex((x, k) => x.m === m.id && !t.done[first + k]))) }, current ? 'Continue' : mp.done === mp.total ? 'Review' : mp.done ? 'Resume' : 'Start'),
+        m.refs[0] ? h('button', { class: 'icon-btn', title: 'Read about this', onclick: () => bus.emit('library', m.refs[0]), html: icon('book') }) : null));
     });
     el.append(grid);
   };
