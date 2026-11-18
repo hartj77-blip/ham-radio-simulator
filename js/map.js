@@ -1,7 +1,7 @@
 // Live propagation map: coastlines, day/night terminator (greyline), stations on the band,
 // and the great-circle path to whoever you're hearing. Click a station to tune to it.
 import { S } from './state.js';
-import { h, bus, now } from './util.js';
+import { h, bus, now, info } from './util.js';
 import { world, player } from './world.js';
 import { dayFactor, interp, simDate, distanceKm } from './propagation.js';
 import { stateBy } from './data/world.js';
@@ -52,8 +52,8 @@ function ionoLayer(kind, W, H) {
 }
 const mapLayer = () => (S.settings.mapLayer ?? 'muf');
 
-// Minimal TopoJSON decoder for the land object.
-function decodeTopo(topo) {
+// Minimal TopoJSON decoder: one named object → polygons of [lon, lat] rings.
+export function decodeTopo(topo, name = 'land') {
   const { scale, translate } = topo.transform;
   const arcs = topo.arcs.map((arc) => { let x = 0, y = 0; return arc.map(([dx, dy]) => { x += dx; y += dy; return [x * scale[0] + translate[0], y * scale[1] + translate[1]]; }); });
   const ring = (ids) => ids.flatMap((i, k) => { const a = i >= 0 ? arcs[i] : arcs[~i].slice().reverse(); return k ? a.slice(1) : a; });
@@ -63,7 +63,7 @@ function decodeTopo(topo) {
     else if (g.type === 'Polygon') polys.push(g.arcs.map(ring));
     else if (g.type === 'MultiPolygon') g.arcs.forEach((p) => polys.push(p.map(ring)));
   };
-  geom(topo.objects.land);
+  geom(topo.objects[name]);
   return polys;
 }
 
@@ -81,10 +81,9 @@ export function initMapUI(el) {
   cv = h('canvas', { class: 'pmap', title: 'Click a station to tune to it, or any location for a path analysis' });
   const tbox = h('div', { class: 'map-target' });
   const layerSeg = h('div', { class: 'seg layer-seg' }), layerInfo = h('div', { class: 'layer-info' });
-  root.append(h('div', { class: 'card map-card' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h3', {}, 'Propagation map'), h('div', { class: 'muted tiny' }, 'Greyline, active stations and path analysis. Click any location to analyse the path; in Free Play this also tunes the radio.')), h('span', { class: 'muted tiny', id: 'map-legend' }, '')),
-    h('div', { class: 'map-layers' }, h('span', { class: 'ctl-title' }, 'LIVE IONOSPHERE'), layerSeg, layerInfo),
-    cv, tbox));
+  root.append(h('div', { class: 'map-card' },
+    h('div', { class: 'map-layers' }, layerSeg, info('Day and night, stations on your band, and the live ionosphere from NOAA. Click a station to tune to it. Click anywhere else to see which band reaches that place.', 'About this map'), layerInfo),
+    cv, h('div', { class: 'muted tiny', id: 'map-legend' }), tbox));
   const drawLayerSeg = () => {
     layerSeg.innerHTML = '';
     for (const [k, L] of Object.entries(LAYERS)) layerSeg.append(h('button', { class: mapLayer() === k ? 'active' : '', onclick: () => { S.settings.mapLayer = k; save(); drawLayerSeg(); } }, L.label));
@@ -95,7 +94,7 @@ export function initMapUI(el) {
     const grad = `linear-gradient(90deg, ${[0, 1, 2, 3, 4, 5, 6].map((i) => `rgb(${rampColor(i / 6).join(',')})`).join(', ')})`;
     layerInfo.append(h('div', { class: 'ramp' }, h('div', { class: 'ramp-bar', style: { background: grad } }),
       h('div', { class: 'ramp-ticks' }, ...L.ticks.map((t) => h('span', { style: { left: `${((t - L.lo) / (L.hi - L.lo)) * 100}%` } }, t)), h('span', { class: 'unit' }, L.unit))),
-      h('span', { class: 'tiny muted' }, `${L.note} NOAA SWPC ${mapLayer() === 'drap' ? `D-RAP, ${IONO.drapTime || ''}` : `GloTEC, ${IONO.time ? IONO.time.slice(11, 16) + ' UTC' : ''}`}.`));
+      info(`${L.note} Source: NOAA SWPC ${mapLayer() === 'drap' ? `D-RAP, ${IONO.drapTime || ''}` : `GloTEC, ${IONO.time ? IONO.time.slice(11, 16) + ' UTC' : ''}`}.`, 'What this layer shows'));
   };
   drawLayerSeg();
   bus.on('iono', drawLayerSeg);

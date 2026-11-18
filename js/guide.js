@@ -31,7 +31,7 @@ const HELP = [
   ['.pmap', 'Propagation map', 'Day/night, the greyline, every station on your band, and the path to who you\'re hearing. Click to tune.'],
   ['.scanner', 'What\'s on the air', 'Real stations and services near you, with estimated signal strength. Tune to any of them.'],
   ['.whereami', 'Where you are', 'Follows the dial: who uses this frequency and why, when it works, what to do here, and whether you could listen or transmit in real life.'],
-  ['#finder', 'Find bar', 'Shortcuts that tune you straight to something worth hearing right now.'],
+  ['#find-btn', 'Find', 'Shortcuts that tune you straight to something worth hearing right now.'],
   ['.shack-svg', 'Shack wiring', 'Click a connector, then where the cable goes. Coax: radio ANT → meter → tuner → wall. Bond every GND to the ground bus.'],
   ['.analyzer', 'Antenna analyzer', 'SWR across the band. A dip below the band = antenna too long (trim it). Above = too short.'],
 ];

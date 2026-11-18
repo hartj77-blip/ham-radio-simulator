@@ -3,7 +3,7 @@
 // ambulance channel, WWV/WWVH, the land-mobile, marine and HF utility channels in activity.js,
 // and a handful of the strongest local AM/FM broadcast stations (real stations, live audio).
 import { S } from './state.js';
-import { h, bus, rand, randi, pick, chance, hashStr, now, clamp } from './util.js';
+import { h, bus, rand, randi, pick, chance, hashStr, now, clamp, info } from './util.js';
 import { RW, TIME_STATIONS, WX_CHANNELS, HEAR, AIRLINES, wantBroadcast, wantAirports } from './realworld.js';
 import { Station, phone, player } from './world.js';
 import { stateBy } from './data/world.js';
@@ -334,9 +334,11 @@ function render() {
   if (!(S.scanTab < tabs.length)) S.scanTab = 0;
   S.scanTab ??= 0;
   const body = h('table', { class: 'tbl small scan-tbl' }, h('tr', {}, ...['Station', 'Freq', 'Mode', 'Info', 'Est.', ''].map((x) => h('th', {}, x))), ...tabs[S.scanTab][1]());
-  root.append(h('div', { class: 'card scanner' },
-    h('div', { class: 'row spread' }, h('h3', {}, 'What\'s on the air near you'),
-      h('div', { class: 'row' }, ...tabs.map(([n], i) => h('button', { class: `rbtn ${S.scanTab === i ? 'active' : ''}`, onclick: () => { S.scanTab = i; if (n === 'Broadcast') wantBroadcast(); if (n === 'Airband') wantAirports(); render(); } }, n)))),
-    h('div', { class: 'small muted' }, `Real data: space weather ${RW.sun ? `✓ NOAA SWPC (SFI ${RW.sun.sfi}, Kp ${RW.sun.k})` : st.sun || '…'} · weather ${wx ? `✓ ${wx.source}${wx.station ? ' ' + wx.station : ''}: ${wx.desc}, ${wx.tempF}°F` : st.wx || '…'} · broadcast ${st.broadcast || 'not loaded'} · airports ${st.airports || 'not loaded'}`),
-    body));
+  const pick = h('select', { class: 'scan-pick' }, ...tabs.map(([n], i) => h('option', { value: i, selected: S.scanTab === i }, n)));
+  pick.onchange = () => { S.scanTab = +pick.value; const n = tabs[S.scanTab][0]; if (n === 'Broadcast') wantBroadcast(); if (n === 'Airband') wantAirports(); render(); };
+  root.append(h('div', { class: 'card side-card scanner' },
+    h('div', { class: 'row spread' }, pick,
+      info(`Real data in use — space weather: ${RW.sun ? `NOAA SWPC (SFI ${RW.sun.sfi}, Kp ${RW.sun.k})` : st.sun || 'loading'}; weather: ${wx ? `${wx.source}${wx.station ? ' ' + wx.station : ''}, ${wx.desc}, ${wx.tempF}°F` : st.wx || 'loading'}; broadcast: ${st.broadcast || 'not loaded'}; airports: ${st.airports || 'not loaded'}. Radio traffic on these channels is simulated.`, 'Where this comes from')),
+    h('div', { class: 'tbl-wrap' }, body)));
+
 }

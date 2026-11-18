@@ -1,7 +1,8 @@
-// The three ways to use the simulator, and the automation behind Free Play.
+// The two ways to use the simulator.
 //  - Training:   a guided course with step detection, checkpoints and reference reading.
-//  - Simulation: every control and every piece of equipment; you build and tune it yourself.
-//  - Free Play:  the station is wired and matched for you; change anything and click the map to tune.
+//  - Simulation: free play. Every radio, antenna, place and vehicle is unlocked. With auto-setup on
+//                (the default) the station is wired and matched for you; turn it off in Settings to
+//                wire and tune everything yourself.
 import { S, save } from './state.js';
 import { h, bus, toast, modal } from './util.js';
 import { icon } from './icons.js';
@@ -18,13 +19,15 @@ import { openDesigner } from './autodesign.js';
 import { openStationPlan } from './advisor.js';
 
 export const MODES = {
-  training: { label: 'Training', icon: 'grad', desc: 'A step-by-step course: wire a station, build and tune an antenna, search the bands, learn propagation and make your first contact. Every step explains why it matters.' },
-  simulation: { label: 'Simulation', icon: 'cpu', desc: 'The full technical simulator. Every radio, antenna and accessory is available; you wire, design, measure and tune everything yourself, with engineering readouts.' },
-  free: { label: 'Free Play', icon: 'sparkles', desc: 'Automated and relaxed. The station is wired and matched for you. Change any equipment on a whim, and click anywhere on the map to tune to the best band for that location.' },
+  training: { label: 'Training', icon: 'grad', desc: 'Guided, hands-on lessons. One small step at a time, with the real-life reason for each.' },
+  simulation: { label: 'Simulation', icon: 'sparkles', desc: 'Free play. Everything is unlocked: build any station, anywhere, and operate it.' },
 };
+// Simulation wires and matches the station for you unless the operator turned that off.
+export const autoSetup = () => S.mode === 'simulation' && S.settings.autoSetup !== false;
 
 export function migrateMode() {
-  if (!S.mode && S.started) S.mode = { career: 'training', free: 'free', listener: 'free' }[S.gameMode] || 'training';
+  if (!S.mode && S.started) S.mode = { career: 'training', free: 'simulation', listener: 'simulation' }[S.gameMode] || 'training';
+  if (S.mode === 'free') S.mode = 'simulation'; // Free Play merged into Simulation
   delete S.gameMode; delete S.money; delete S.owned; delete S.xp;
   if (S.helper && !S.training) S.training = { step: 0, done: {}, answers: {}, marks: {}, min: false };
   document.body.dataset.mode = S.mode || 'training';
@@ -40,23 +43,24 @@ export function setAppMode(m, { quiet } = {}) {
   if (!MODES[m]) return;
   S.mode = m;
   document.body.dataset.mode = m;
-  if (m === 'simulation') { ensureLicense(); S.settings.lab = true; }
-  if (m === 'free') {
-    ensureLicense();
-    if (!S.shack.rigOn || !S.antenna.built) applySetup(S.setup && SETUPS.some((x) => x.id === S.setup) ? S.setup : 'home', { quiet: true });
-    S.radio.atuOn = true;
-    autoMatch();
+  if (m === 'simulation') {
+    ensureLicense(); S.settings.lab = true;
+    if (autoSetup()) {
+      if (!S.shack.rigOn || !S.antenna.built) applySetup(S.setup && SETUPS.some((x) => x.id === S.setup) ? S.setup : 'home', { quiet: true });
+      S.radio.atuOn = true;
+      autoMatch();
+    }
   }
   save();
   bus.emit('mode', m); bus.emit('license'); bus.emit('rig'); bus.emit('antenna-rebuild');
-  if (!quiet) toast(`<b>${MODES[m].label} mode.</b> ${m === 'training' ? 'Follow the guide on the right.' : m === 'free' ? 'Click the map to tune anywhere in the world.' : 'Everything is unlocked; build and tune it yourself.'}`, 'info', 4500);
+  if (!quiet) toast(`<b>${MODES[m].label}.</b> ${m === 'training' ? 'Follow the guide.' : 'Everything is unlocked.'}`, 'info', 3500);
 }
 
-// ------------------------------------------------------------------ Free Play automation
+// ------------------------------------------------------------------ auto-setup
 // Re-cut the antenna for the band you are on and let the tuner match it — like an
 // automatic screwdriver antenna plus a wide-range tuner.
-function autoMatch() {
-  if (S.mode !== 'free') return;
+export function autoMatch() {
+  if (!autoSetup()) return;
   const b = bandOf(S.radio.freq);
   const a = S.antenna;
   if (b) {
@@ -96,8 +100,8 @@ function onMapTarget({ lat, lon }) {
   const an = analyzeTarget(lat, lon);
   mapTarget.t = an;
   bus.emit('target', an);
-  if (S.mode !== 'free') return;
-  if (!an.best) return toast(`No band is open to that location right now (${Math.round(an.dist).toLocaleString()} km). Try another time of day in the console.`, 'warn', 5000);
+  if (!autoSetup()) return;
+  if (!an.best) return toast(`No band is open to there right now (${Math.round(an.dist).toLocaleString()} km).`, 'warn', 5000);
   tuneToTarget(an);
 }
 
@@ -126,8 +130,7 @@ export function tuneToTarget(an, bandName = an.best?.band) {
 export function initFreeConsole(el) {
   const draw = () => {
     el.innerHTML = '';
-    if (S.mode !== 'free') { el.hidden = true; return; }
-    el.hidden = false;
+    if (S.mode !== 'simulation') { el.classList.remove('open'); return; }
     const sel = (opts, cur, on, id) => { const s = h('select', { id }, ...opts.map(([v, l]) => h('option', { value: v, selected: String(v) === String(cur) }, l))); s.onchange = () => on(s.value); return s; };
     const field = (label, ctl) => h('label', { class: 'fc-field' }, h('span', {}, label), ctl);
     const hour = h('input', { type: 'range', min: 0, max: 23.5, step: 0.5, value: S.settings.hour ?? new Date().getUTCHours() });
@@ -135,8 +138,8 @@ export function initFreeConsole(el) {
     hour.oninput = () => { S.settings.hour = +hour.value; hourLbl.textContent = `${String(Math.floor(hour.value)).padStart(2, '0')}:${hour.value % 1 ? '30' : '00'}Z`; save(); };
     hour.onchange = () => { world.repopulate(); bus.emit('solar'); };
     el.append(h('div', { class: 'card free-console' },
-      h('div', { class: 'fc-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Free Play'), h('h3', {}, 'Station console')),
-        h('div', { class: 'row' }, h('div', { class: 'fc-hint' }, h('span', { html: icon('pin') }), 'Click anywhere on the map below to tune to the best band for that location.'), h('button', { class: 'btn primary small', onclick: () => openDesigner() }, h('span', { html: icon('wand') }), 'Design the best antenna for my location'), h('button', { class: 'btn small', onclick: () => openStationPlan() }, h('span', { html: icon('compass') }), 'Station plan'))),
+      h('div', { class: 'fc-head' }, h('h3', {}, 'Quick setup'),
+        h('div', { class: 'row' }, h('button', { class: 'btn primary small', onclick: () => openDesigner() }, h('span', { html: icon('wand') }), 'Design my antenna'), h('button', { class: 'btn small', onclick: () => openStationPlan() }, h('span', { html: icon('compass') }), 'Station plan'))),
       h('div', { class: 'fc-grid' },
         field('Station preset', sel(SETUPS.map((p) => [p.id, p.name]), S.setup || 'home', (v) => { applySetup(v, { quiet: true }); autoMatch(); draw(); toast(`Station changed: ${SETUPS.find((p) => p.id === v).name}.`, 'good', 3000); })),
         field('Radio', sel(Object.entries(RIGS).map(([id, r]) => [id, r.name]), S.rig || 'allmode', (v) => { S.rig = v; save(); bus.emit('rig'); autoMatch(); })),
@@ -169,8 +172,9 @@ export function welcome(onDone) {
   const name = h('input', { value: S.op.name, placeholder: 'First name (optional)' });
   const sel = h('select', {}, ...STATES.map((s) => h('option', { value: s.abbr, selected: s.abbr === S.op.state }, s.name)));
   let close;
+  const pres = h('input', { type: 'checkbox', checked: true });
   const finish = (mode) => {
-    S.op.name = name.value.trim(); S.op.state = sel.value; S.started = true;
+    S.op.name = name.value.trim(); S.op.state = sel.value; S.started = true; S.settings.presence = pres.checked;
     audio.init();
     if (mode === 'training') { S.training = { step: 0, done: {}, answers: {}, marks: {}, min: false }; }
     save(); close();
@@ -182,20 +186,19 @@ export function welcome(onDone) {
     h('span', { class: 'mc-icon', html: icon(MODES[m].icon) }), h('b', {}, MODES[m].label), h('span', { class: 'small muted' }, MODES[m].desc),
     h('span', { class: 'mc-go' }, 'Start', h('span', { html: icon('arrowRight') })));
   close = modal(h('div', { class: 'welcome' },
-    h('div', { class: 'eyebrow' }, 'Amateur radio training & station simulation'),
     h('h1', {}, 'Ham Radio Simulator'),
-    h('p', { class: 'lead' }, 'Build a complete amateur radio station in your browser — wiring, antenna design and measurement, receiving and operating — using a propagation model driven by live NOAA ionosphere data and a Method-of-Moments antenna solver.'),
+    h('p', { class: 'lead' }, 'Learn amateur radio by doing it. Nothing here transmits a real signal.'),
     h('div', { class: 'row welcome-fields' }, h('label', { class: 'fc-field' }, h('span', {}, 'Name'), name), h('label', { class: 'fc-field' }, h('span', {}, 'Location (state)'), sel)),
-    h('div', { class: 'mode-grid' }, card('training'), card('simulation'), card('free')),
-    h('div', { class: 'callout welcome-safe' }, 'Nothing here transmits a real radio signal. Practise and experiment freely without interfering with licensed operators. Live data (space weather, ionosphere, weather, broadcast stations) is real; the radio traffic and stations are simulated.'),
-    h('p', { class: 'tiny muted' }, 'Headphones recommended. Voice recognition works best in Chrome or Edge. You can change mode at any time from the mode selector at the top of the screen. Progress is saved in this browser.')),
+    h('label', { class: 'inline small welcome-pres' }, pres, ' Show me as online and tell me when others come on. They see only a callsign and your state.'),
+    h('div', { class: 'mode-grid two' }, card('training'), card('simulation')),
+    h('p', { class: 'tiny muted' }, 'Headphones recommended. You can switch between Training and Simulation at any time.')),
   { wide: true, onClose: () => { if (!S.started) { S.started = true; S.mode ||= 'training'; save(); setAppMode(S.mode, { quiet: true }); } audio.init(); } });
 }
 
 export function initModes() {
   bus.on('map-target', onMapTarget);
   bus.on('set-mode', (m) => setAppMode(m));
-  bus.on('band', () => { if (S.mode === 'free') autoMatch(); });
-  setInterval(() => { if (S.mode === 'free' && S.radio.atuTunedFreq !== S.radio.freq && bandOf(S.radio.freq)) autoMatch(); }, 1500);
+  bus.on('band', () => autoMatch());
+  setInterval(() => { if (autoSetup() && S.radio.atuTunedFreq !== S.radio.freq && bandOf(S.radio.freq)) autoMatch(); }, 1500);
 }
 export { stateBy };

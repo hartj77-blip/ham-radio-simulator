@@ -1,5 +1,6 @@
 // Transceiver front panel, panadapter/waterfall and the receive audio chain.
 import { S, save } from './state.js';
+import { icon } from './icons.js';
 import { h, $, $$, clamp, fmtFreq, bus, now, toast, rand, chance, db2amp } from './util.js';
 import { BANDS, bandOf, bandByName, privilegeMap, txAdvice, CTCSS, SIDEBAND_FOR } from './data/bandplan.js';
 import { audio } from './audio.js';
@@ -445,7 +446,10 @@ export function initRadioUI(el) {
   const rg0 = rig();
   el.append(h('div', { class: 'rig-bar row spread' },
     h('div', { class: 'rig-badge' }, h('span', { class: 'rig-maker' }, rg0.code || ''), h('span', { class: 'rig-model' }, rg0.name), h('span', { class: 'tiny muted' }, ` ${rg0.cls}`)),
-    h('div', { class: 'row' }, manualButton(S.rig || 'allmode'), h('button', { class: 'btn small', onclick: () => bus.emit('goto', 'rigbuilder') }, 'Equipment'), mvBtn)));
+    h('div', { class: 'row' },
+      h('button', { class: 'btn small primary', 'data-drawer': 'find', id: 'find-btn', title: 'Jump to something worth hearing', onclick: () => bus.emit('radio-drawer', 'find') }, h('span', { html: icon('search') }), 'Find'),
+      S.mode === 'simulation' ? h('button', { class: 'btn small', 'data-drawer': 'quick', id: 'quick-btn', title: 'Change station, radio, antenna, place and time', onclick: () => bus.emit('radio-drawer', 'quick') }, h('span', { html: icon('sliders') }), 'Quick setup') : null,
+      manualButton(S.rig || 'allmode'), mvBtn)));
   const rigEl = h('div', { class: `rig look-${rg0.look || 'classic'}` },
     h('div', { class: 'rig-top' },
       h('div', { class: 'rig-left' }, meterCv, h('div', { class: 'muted tiny center' }, 'click meter: S / PO / SWR')),
@@ -454,9 +458,11 @@ export function initRadioUI(el) {
     ),
     h('div', { class: 'rig-mid' }, h('div', { class: 'wf-wrap' }, wf, wfToolbar(), h('div', { class: 'no-scope-msg' }, `The ${rig().name} has no spectrum scope — tune by ear, like the old days. (Watch the S-meter!)`))),
     h('div', { class: 'rig-controls' },
-      h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'HAM BANDS'), bandBtns,
-        h('div', { class: 'ctl-title', style: { marginTop: '8px' } }, 'GENERAL COVERAGE (RX)'), serviceButtons()),
-      h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'MODE'), modeBtns, h('label', { class: 'knobrow' }, h('span', {}, 'FILTER'), filterSel)),
+      h('div', { class: 'rig-quick' },
+        h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'BAND'), bandBtns),
+        h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'MODE'), modeBtns, h('label', { class: 'knobrow' }, h('span', {}, 'FILTER'), filterSel))),
+      h('details', { class: 'rig-more', id: 'rig-more', open: !!S.settings.rigMore, ontoggle: (e) => { S.settings.rigMore = e.target.open; save(); } }, h('summary', {}, 'More controls'), h('div', { class: 'rig-more-grid' },
+      h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'OTHER SERVICES (LISTEN)'), serviceButtons()),
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'AUDIO'),
         slider('AF GAIN', 0, 1, 0.01, r.af, (v) => { r.af = v; }, (v) => Math.round(v * 100)),
         slider('SQL', 0, 1, 0.01, r.sql, (v) => { r.sql = v; }, (v) => Math.round(v * 100)),
@@ -465,7 +471,7 @@ export function initRadioUI(el) {
         slider('POWER', 5, maxPower(), 5, Math.min(r.power, maxPower()), (v) => { r.power = v; if (v <= 25) elmer('power_min'); }, (v) => `${v} W`),
         h('div', { class: 'row' }, atuBtn, tuneBtn),
         h('div', { class: 'fm-only' }, h('label', { class: 'knobrow' }, h('span', {}, 'OFFSET'), rptSel), h('label', { class: 'knobrow' }, h('span', {}, 'CTCSS'), toneSel)),
-        rotator, mtuner, h('div', { id: 'antswitch' })),
+        rotator, mtuner, h('div', { id: 'antswitch' })))),
     ),
   );
   el.append(rigEl);
@@ -480,6 +486,7 @@ export function initRadioUI(el) {
   bus.on('antenna', updateDisplay);
   bus.on('shack', updateDisplay);
   bus.on('license', updateDisplay);
+  bus.on('mode', () => initRadioUI(panel));
 }
 // One-touch presets for the non-ham services (receive only).
 function serviceButtons() {
@@ -592,7 +599,7 @@ export function effectiveSwr(f) {
   if (rs.hasTuner && !r.mtBypass) swr = manualTunerSwr(f, swr);
   if (r.atuOn && r.atuTunedFreq && Math.abs(f - r.atuTunedFreq) < Math.max(8000, f * 0.005) && swr <= 3.05) swr = 1.1 + (swr - 1) * 0.04;
   // Free Play: the antenna is re-cut for each band and a wide-range tuner matches it automatically.
-  if (S.mode === 'free' && r.atuOn) swr = Math.min(swr, 1.1 + Math.min(swr - 1, 4) * 0.02);
+  if (S.mode === 'simulation' && S.settings.autoSetup !== false && r.atuOn) swr = Math.min(swr, 1.1 + Math.min(swr - 1, 4) * 0.02);
   return swr;
 }
 

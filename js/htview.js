@@ -361,7 +361,7 @@ export function initHT(el) {
         key('*', toggleScan, 'scan', 'SCAN', () => { toggleScan(); fnDone(scanning ? 'Scanning: stops on activity. Press * or PTT to stop.' : 'Scan stopped.', scanning ? 'SCAN' : 'SCAN OFF'); }), key('0', () => digit('0')), lockK)),
     h('div', { class: 'ht-extra' },
       h('div', { class: 'row' }, h('label', { class: 'ht-sl' }, 'SQL ', (() => { const s = h('input', { type: 'range', min: 0, max: 1, step: 0.02, value: S.radio.sql }); s.oninput = () => { S.radio.sql = +s.value; save(); }; return s; })()),
-        h('button', { class: 'ht-chip', onclick: () => { if (!net.online) { S.settings.autoOnline = true; save(); document.querySelector('#net-card button.primary')?.click(); } else toast(`On the air with ${net.roster.length} other player(s).`, 'info', 2500); } }, net.online ? `${net.roster.length} online` : 'Go online')),
+        h('button', { class: 'ht-chip', onclick: () => { if (!net.online) { S.settings.autoOnline = true; save(); bus.emit('radio-side', 'players'); document.querySelector('#net-card button.primary')?.click(); } else toast(`On the air with ${net.roster.length} other player(s).`, 'info', 2500); } }, net.online ? `${net.roster.length} online` : 'Go online')),
       quick,
       h('div', { class: 'ht-sub', id: 'ht-sub' }, ''))));
   if (htListeners) return;

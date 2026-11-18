@@ -34,9 +34,12 @@
       <div id="clock"></div>
       <div id="xp"></div>
     </div>
+    <nav id="subnav" class="subnav" hidden></nav>
     <main>
       <section id="tab-course" class="tab" hidden></section>
       <section id="tab-library" class="tab" hidden></section>
+      <section id="tab-site" class="tab" hidden></section>
+      <section id="tab-anttools" class="tab" hidden></section>
       <section id="tab-shack" class="tab" hidden></section>
       <section id="tab-antenna" class="tab" hidden></section>
       <section id="tab-workbench" class="tab" hidden></section>
@@ -44,15 +47,19 @@
       <section id="tab-rftools" class="tab" hidden></section>
       <section id="tab-feeds" class="tab" hidden></section>
       <section id="tab-radio" class="tab" hidden>
-        <div id="free-console" hidden></div>
-        <div id="finder"></div>
-        <div id="guide-panel"></div>
         <div id="radio-panel"></div>
-        <div id="map-panel"></div>
-        <div id="net-panel"></div>
-        <div id="scanner-panel"></div>
-        <div id="operating"></div>
-        <div id="world-panel"></div>
+        <div id="finder" class="radio-drawer"></div>
+        <div id="free-console" class="radio-drawer"></div>
+        <div class="radio-lower">
+          <div id="operating"></div>
+          <div id="radio-side">
+            <div id="side-tabs" class="side-tabs" role="tablist"></div>
+            <div id="map-panel" class="side-pane"></div>
+            <div id="scanner-panel" class="side-pane" hidden></div>
+            <div id="net-panel" class="side-pane" hidden></div>
+            <div id="guide-panel" class="side-pane" hidden></div>
+          </div>
+        </div>
       </section>
       <section id="tab-contest" class="tab" hidden></section>
       <section id="tab-license" class="tab" hidden></section>

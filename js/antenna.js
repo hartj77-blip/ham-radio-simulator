@@ -13,7 +13,7 @@ import { RW } from './realworld.js';
 const STATE_POS = () => stateBy(S.op.state) || stateBy('KS');
 import { runSolver } from './em/client.js';
 import { antOwned, feedOwned, maxHeight, owns } from './limits.js';
-import { mountYard, siteMaxHeight } from './yard.js';
+import { siteMaxHeight, mountBom, env as siteEnv } from './yard.js';
 import { mountReach, refreshReach } from './reach.js';
 import { mountPlanner, autoSize, targetHz, P as planP, antDefaults } from './planner.js';
 
@@ -197,7 +197,7 @@ export function netGain(fHz, brg, distKm, mode) {
 }
 
 // ---------------------------------------------------------------- UI
-let root, svgBox, canvas, info, controls;
+let root, svgBox, canvas, info, controls, verdictBox;
 export const analyzer = { band: '20m', atRig: true };
 
 export function initAntennaUI(el) {
@@ -219,6 +219,7 @@ function render() {
   typeSel.onchange = () => { a.type = typeSel.value; a.length = 0; save(); render(); bus.emit('antenna'); };
 
   antDefaults(a);
+  if (!analyzer.user) analyzer.band = planP().band; // the verdict is about the band you built it for
   // A new antenna starts ~10% long, like a real wire kit — you size it (and it isn't counted as sized until you do).
   if (!a.length) { a.length = Math.round(T.k / (targetHz() / 1e6) * (S.mode === 'training' ? 1.1 : 1) * 100) / 100; a.sizedBy = null; }
   // Wire length: adjust freely (in real life: let out / reel in wire at the end insulators).
@@ -232,7 +233,7 @@ function render() {
   const step = (ft, lbl) => h('button', { class: 'btn small', onclick: () => { a.sizedBy = 'hand'; setLen(a.length + ft); } }, lbl);
   const designBand = h('select', { id: 'ant-band' }, ...BANDS.map((b) => h('option', { value: b.name, selected: b.name === planP().band }, b.name)));
   designBand.onchange = () => { planP().band = designBand.value; analyzer.band = designBand.value; save(); render(); };
-  const sizeMsg = h('span', { class: 'muted tiny' }, `≈ ${(T.k / (targetHz() / 1e6)).toFixed(1)} ft by the formula`);
+  const sizeMsg = h('div', { class: 'muted tiny' }, `About ${(T.k / (targetHz() / 1e6)).toFixed(1)} ft by the formula`);
   let sizing = false;
   const sizeBtn = h('button', { class: 'btn primary', id: 'ant-autosize', onclick: async () => {
     if (sizing) return; sizing = true; sizeBtn.disabled = true; sizeMsg.textContent = 'solving with the MoM engine…';
@@ -269,50 +270,76 @@ function render() {
   const raise = h('button', { class: 'btn primary big', onclick: () => {
     if (!a.length) return toast('Set a wire length first.', 'warn');
     a.built = !a.built; S.radio.atuTunedFreq = null; S.radio.atuExtTunedFreq = null; save(); render(); bus.emit('antenna');
-    if (a.built) { toast('Antenna is up! Connect the feedline through the wall entry on the Station wiring page, then check SWR.', 'good'); elmer('antenna_up'); }
+    if (a.built) { toast('Antenna is up.', 'good'); elmer('antenna_up'); }
   } }, a.built ? 'Take antenna down' : 'Raise antenna');
 
 
+  // Small pictures of each antenna type for the picker.
+  const glyph = (k) => {
+    const P = {
+      dipole: '<path d="M4 14 H30 M34 14 H60" stroke="#ffb347" stroke-width="2.5"/><circle cx="32" cy="14" r="3" fill="#fff"/><path d="M32 17 V36" stroke="#8b96a2" stroke-width="2"/>',
+      invv: '<path d="M6 32 L32 8 L58 32" stroke="#ffb347" stroke-width="2.5" fill="none"/><circle cx="32" cy="8" r="3" fill="#fff"/><path d="M32 8 V38" stroke="#8b96a2" stroke-width="2"/>',
+      vertical: '<path d="M32 4 V32" stroke="#ffb347" stroke-width="2.5"/><path d="M32 32 L8 38 M32 32 L56 38 M32 32 L20 38 M32 32 L44 38" stroke="#ffb347" stroke-width="1.5" stroke-dasharray="3 2"/><circle cx="32" cy="32" r="3" fill="#fff"/>',
+      efhw: '<path d="M8 32 L58 8" stroke="#ffb347" stroke-width="2.5"/><rect x="4" y="29" width="8" height="7" rx="1" fill="#fff"/><path d="M8 36 V40" stroke="#8b96a2" stroke-width="2"/>',
+      yagi: '<path d="M8 18 H56" stroke="#8b96a2" stroke-width="2.5"/><path d="M14 6 V30 M32 8 V28 M50 10 V26" stroke="#ffb347" stroke-width="2.5"/><path d="M32 18 V40" stroke="#8b96a2" stroke-width="2"/>',
+    }[k] || '';
+    return h('span', { class: 'at-glyph', html: `<svg viewBox="0 0 64 42" fill="none" stroke-linecap="round">${P}</svg>` });
+  };
+  const short = (t) => t.label.split(' (')[0].replace('Quarter-wave ', '').replace('Half-wave ', '').replace(' + radials', '').replace('End-fed half-wave', 'End-fed wire').replace('3-element ', '');
+  const here = siteEnv().types;
+  const typeCards = h('div', { class: 'at-pick', id: 'ant-type' }, ...Object.entries(ANT_TYPES).map(([k, t]) => h('button', { class: `at-card ${k === a.type ? 'active' : ''} ${here.includes(k) ? '' : 'off'}`, 'data-type': k, title: here.includes(k) ? t.desc : `${t.desc} Not practical at your current place.`,
+    onclick: () => { a.type = k; a.length = 0; save(); render(); bus.emit('antenna'); } }, glyph(k), h('span', {}, short(t).replace(/^./, (c) => c.toUpperCase())))));
+  const stepHead = (n, t) => h('div', { class: 'ant-step' }, h('span', {}, String(n)), h('b', {}, t));
+
   controls = h('div', { class: 'ant-controls card' },
     h('button', { class: 'design-cta', id: 'ant-designer', onclick: () => openDesigner() },
-      h('span', { class: 'dc-icon', html: icon('pin') }),
-      h('span', { class: 'dc-text' }, h('b', {}, 'Find my location & design the best antenna'), h('span', {}, 'Band, type, height, orientation and exact length for your site — in one click.')),
+      h('span', { class: 'dc-icon', html: icon('wand') }),
+      h('span', { class: 'dc-text' }, h('b', {}, 'Design it for me'), h('span', {}, 'The best antenna for where you are, in one click.')),
       h('span', { class: 'dc-go', html: icon('arrowRight') })),
-    h('button', { class: 'btn ghost small plan-link', id: 'station-plan-btn', onclick: () => openStationPlan() }, h('span', { html: icon('compass') }), 'Station plan for my location: what to build here and why'),
-    h('h3', {}, 'Build your antenna'),
-    h('label', {}, 'Antenna type', typeSel),
-    h('p', { class: 'muted small' }, T.desc),
-    h('div', { class: 'formula' }, h('details', {}, h('summary', {}, 'Design formula (exam material)'), h('code', {}, T.formula),
-      h('p', { class: 'small' }, 'Lower frequency → longer wire. If the SWR dip is BELOW the band, the antenna is too LONG: shorten it. Dip above the band: too short — lengthen it.'))),
-    h('fieldset', {}, h('legend', {}, a.type === 'vertical' ? 'Radiator length' : a.type === 'yagi' ? 'Driven element length' : 'Wire length'),
-      h('div', { class: 'row' }, h('label', { class: 'inline' }, 'Design for ', designBand), sizeBtn), sizeMsg,
-      h('div', { class: 'row len-row' }, step(-1, '−1 ft'), step(-1 / 12, '−1 in'), lenIn, h('span', { class: 'small' }, 'ft'), step(1 / 12, '+1 in'), step(1, '+1 ft')),
-      h('div', { class: 'small muted' }, h('b', { id: 'ant-len-now' }, fmtLen(a.length)), a.type === 'dipole' || a.type === 'invv' ? ` · each leg ${(a.length / 2).toFixed(2)} ft` : '')),
-    a.type !== 'vertical' ? h('fieldset', {}, h('legend', {}, 'Height above ground'),
-      h('div', { class: 'row len-row' }, hStep(-5, '−5'), hStep(-1, '−1'), hLbl, hStep(1, '+1'), hStep(5, '+5'), h('span', { class: 'muted tiny' }, `supports reach ${siteMaxHeight()} ft`)), height)
-      : h('label', {}, 'Ground radials', radials),
-    a.type === 'yagi' ? h('label', {}, 'Rotator heading ', headLbl, heading) : a.type !== 'vertical' ? h('label', {}, 'Wire orientation', axis) : null,
-    h('fieldset', {}, h('legend', {}, 'Feedline'), h('label', {}, 'Coax', feed), h('label', {}, 'Length (ft)', feedLen)),
+    stepHead(1, 'Pick a type'), typeCards,
+    h('p', { class: 'muted small at-desc' }, T.desc),
+    stepHead(2, 'Size it for a band'),
+    h('div', { class: 'row' }, h('label', { class: 'inline' }, designBand), sizeBtn),
+    h('div', { class: 'small' }, h('b', { id: 'ant-len-now' }, fmtLen(a.length)), a.type === 'dipole' || a.type === 'invv' ? ` · each leg ${(a.length / 2).toFixed(2)} ft` : ''), sizeMsg,
+    stepHead(3, a.built ? 'It is up' : 'Put it up'),
     raise,
+    h('details', { class: 'ant-fine', open: S.mode === 'training' || !!S.settings.antFine, ontoggle: (e) => { S.settings.antFine = e.target.open; save(); } }, h('summary', {}, 'Fine-tune'),
+      h('fieldset', {}, h('legend', {}, a.type === 'vertical' ? 'Radiator length' : a.type === 'yagi' ? 'Driven element length' : 'Wire length'),
+        h('div', { class: 'row len-row' }, step(-1, '−1 ft'), step(-1 / 12, '−1 in'), lenIn, h('span', { class: 'small' }, 'ft'), step(1 / 12, '+1 in'), step(1, '+1 ft'))),
+      a.type !== 'vertical' ? h('fieldset', {}, h('legend', {}, 'Height above ground'),
+        h('div', { class: 'row len-row' }, hStep(-5, '−5'), hStep(-1, '−1'), hLbl, hStep(1, '+1'), hStep(5, '+5'), h('span', { class: 'muted tiny' }, `supports reach ${siteMaxHeight()} ft`)), height)
+        : h('label', {}, 'Ground radials', radials),
+      a.type === 'yagi' ? h('label', {}, 'Rotator heading ', headLbl, heading) : a.type !== 'vertical' ? h('label', {}, 'Wire orientation', axis) : null,
+      h('fieldset', {}, h('legend', {}, 'Feedline'), h('label', {}, 'Coax', feed), h('label', {}, 'Length (ft)', feedLen)),
+      h('div', { class: 'formula' }, h('b', { class: 'small' }, 'Design formula (exam material)'), h('code', {}, T.formula),
+        h('p', { class: 'small muted' }, 'Lower frequency, longer wire. SWR dip below the band: too long, shorten it. Dip above the band: too short, lengthen it.')),
+      h('div', { class: 'row wrap' }, h('button', { class: 'btn small', id: 'station-plan-btn', onclick: () => openStationPlan() }, 'Station plan'), h('button', { class: 'btn small', onclick: () => bus.emit('goto', 'site') }, 'Change place'), h('button', { class: 'btn small', onclick: () => bus.emit('goto', 'anttools') }, 'Antenna tools'))),
   );
 
   svgBox = h('div', { class: 'ant-svg card' });
   const bandSel = h('select', {}, ...BANDS.map((b) => h('option', { value: b.name, selected: b.name === analyzer.band }, b.name)));
-  bandSel.onchange = () => { analyzer.band = bandSel.value; renderInfo(); };
+  bandSel.onchange = () => { analyzer.band = bandSel.value; analyzer.user = true; renderInfo(); };
   const atRig = h('input', { type: 'checkbox', checked: analyzer.atRig });
   atRig.onchange = () => { analyzer.atRig = atRig.checked; renderInfo(); };
   canvas = h('canvas', { width: 640, height: 220, class: 'analyzer' });
   canvas.onmousemove = (e) => { analyzer.mx = e.offsetX / canvas.clientWidth; drawAnalyzer(); };
   canvas.onmouseleave = () => { analyzer.mx = null; drawAnalyzer(); };
   info = h('div', { class: 'ant-info' });
+  verdictBox = h('div', { class: 'ant-verdict' });
   const an = h('div', { class: 'card analyzer-card' },
-    h('div', { class: 'row spread' }, h('h3', {}, 'Antenna analyzer'),
-      h('div', { class: 'row' }, h('label', { class: 'inline' }, 'Sweep ', bandSel), h('label', { class: 'inline' }, atRig, ' measure at shack end of coax'))),
-    canvas, info);
-  const planBox = h('div', { id: 'planner' }), yardBox = h('div', { id: 'yard' }), reachBox = h('div', { id: 'reach' });
-  root.append(h('div', { class: 'ant-grid' }, controls, h('div', {}, svgBox, an)), reachBox, yardBox, planBox);
-  mountYard(yardBox); mountPlanner(planBox); mountReach(reachBox);
+    verdictBox,
+    h('details', { class: 'ant-fine', open: S.mode === 'training' || !!S.settings.antSweep, ontoggle: (e) => { S.settings.antSweep = e.target.open; save(); if (e.target.open) drawAnalyzer(); } }, h('summary', {}, 'SWR sweep (antenna analyzer)'),
+      h('div', { class: 'row wrap' }, h('label', { class: 'inline' }, 'Sweep ', bandSel), h('label', { class: 'inline' }, atRig, ' measure at the shack end of the coax')),
+      canvas, info));
+  root.append(h('div', { class: 'ant-grid' }, controls, h('div', {}, svgBox, an)));
   renderInfo();
+}
+
+// Antenna tools page: range estimate and site planner (the engineering side of the antenna).
+export function initAntennaTools(el) {
+  const planBox = h('div', { id: 'planner' }), reachBox = h('div', { id: 'reach' }), bomBox = h('div', { id: 'bom' });
+  el.append(reachBox, planBox, bomBox);
+  mountReach(reachBox); mountPlanner(planBox); mountBom(bomBox);
 }
 
 const fmtDelta = (ft) => { ft = Math.abs(ft); return ft < 1 ? `${(ft * 12).toFixed(1)} in` : `${ft.toFixed(2)} ft`; };
@@ -357,7 +384,7 @@ function drawAnalyzer() {
   for (const s of [1, 1.5, 2, 3, 5, 10]) { ctx.beginPath(); ctx.moveTo(0, y(s)); ctx.lineTo(W, y(s)); ctx.stroke(); ctx.fillText(`${s}:1`, 3, y(s) - 2); }
   ctx.fillText(`${(lo / 1e6).toFixed(3)}`, 2, H - 4); ctx.fillText(`${(hi / 1e6).toFixed(3)} MHz`, W - 90, H - 4);
   ctx.fillText(`${band.name} band`, x(band.lo) + 4, 12);
-  if (!pts.length) { ctx.fillStyle = '#ffd166'; ctx.font = '14px sans-serif'; ctx.fillText('Cut a wire to see its SWR curve', W / 2 - 110, H / 2); info.innerHTML = ''; return; }
+  if (!pts.length) { ctx.fillStyle = '#ffd166'; ctx.font = '14px sans-serif'; ctx.fillText('Size the antenna to see its SWR curve', W / 2 - 130, H / 2); info.innerHTML = ''; if (verdictBox) verdictBox.innerHTML = '<div class="av-main"><b>No antenna yet</b><span>Pick a type and press Auto-size.</span></div>'; return; }
   ctx.strokeStyle = '#5dffa0'; ctx.lineWidth = 2; ctx.beginPath();
   pts.forEach((p, i) => (i ? ctx.lineTo(x(p.f), y(p.swr)) : ctx.moveTo(x(p.f), y(p.swr))));
   ctx.stroke(); ctx.lineWidth = 1;
@@ -375,6 +402,12 @@ function drawAnalyzer() {
   else if (inBand) advice = `Resonant in-band at <b>${(fRes / 1e6).toFixed(3)} MHz</b> (SWR ${min.swr.toFixed(2)}:1).`;
   else if (fRes < band.lo) advice = `SWR dip at ${(fRes / 1e6).toFixed(3)} MHz is <b>below</b> the band → the antenna is <b>too long</b>. Shorten it about <b>${fmtDelta(ant.length * (1 - fRes / ((band.lo + band.hi) / 2)))}</b> (or press Auto-size).`;
   else advice = `SWR dip at ${(fRes / 1e6).toFixed(3)} MHz is <b>above</b> the band → the antenna is <b>too short</b>. Lengthen it about <b>${fmtDelta(ant.length * (fRes / ((band.lo + band.hi) / 2) - 1))}</b> (or press Auto-size).`;
+  if (verdictBox) {
+    const cls = min.swr > 3 ? 'bad' : inBand && min.swr < 2 ? 'ok' : 'warn';
+    const head = !ant.built ? 'Not up yet' : cls === 'ok' ? `Good match on ${band.name}` : cls === 'bad' ? `Does not match ${band.name}` : fRes < band.lo ? 'A little too long' : fRes > band.hi ? 'A little too short' : `Usable on ${band.name}`;
+    verdictBox.className = `ant-verdict ${ant.built ? cls : ''}`;
+    verdictBox.innerHTML = `<div class="av-main"><b>${head}</b><span>${advice}</span></div><div class="av-num"><span>Best SWR</span><b>${min.swr > 50 ? '>50' : min.swr.toFixed(1)}:1</b><span>${(fRes / 1e6).toFixed(3)} MHz</span></div>`;
+  }
   const s = mk.sys;
   info.innerHTML = `
     <div class="readouts">

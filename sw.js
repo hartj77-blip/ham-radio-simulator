@@ -4,7 +4,7 @@
 // old and new code. This worker goes to the network first (revalidating with the server, so an
 // unchanged file is just a quick 304) and only falls back to its saved copy when offline.
 // Only our own files are handled; live data, streams and APIs on other sites are left alone.
-const CACHE = 'hamradio-v6';
+const CACHE = 'hamradio-v9';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
