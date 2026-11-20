@@ -109,3 +109,7 @@ Progress is saved only in your browser. If you allow location access or type in 
 ## Updates
 
 A small service worker loads the newest version when you are online and falls back to the last saved copy when you are offline. Settings, Data shows the version and has Check for update and Reload buttons.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
