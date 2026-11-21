@@ -133,7 +133,8 @@ export const world = {
     const q = st.qsb, t = now();
     const fade = q.depth * (0.5 + 0.5 * Math.sin(t * 2 * Math.PI / q.per + q.ph)) * (0.6 + 0.4 * Math.sin(t * 0.37 + q.ph * 2));
     if (st.fixedDbm != null) return st.fixedDbm; // helper channels are always clearly audible
-    return st.powerDbm + st.antGain + g - st.path.loss - fade + (st.elevBoost || 0);
+    const dbm = st.powerDbm + st.antGain + g - st.path.loss - fade + (st.elevBoost || 0);
+    return st.minDbm != null ? Math.max(st.minDbm, dbm) : dbm; // other players: always workable unless realistic propagation is chosen
   },
 
   // Player's signal-to-noise at a station (dB, in that station's filter BW).

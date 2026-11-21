@@ -33,7 +33,7 @@ const KEYS = {
   contest: [['POWER', 'power'], ['ATU', 'atu'], ['TUNE', 'tune'], ['PRE', 'pre'], ['ATT', 'att'], ['NB', 'nb'], ['NR', 'nr'], ['SPLIT', 'split'], ['RIT', 'rit'], ['METER', 'meter']],
   mobile: [['POWER', 'power'], ['PRE', 'pre'], ['ATT', 'att'], ['NB', 'nb'], ['DNR', 'nr'], ['CLAR', 'rit'], ['METER', 'meter']],
   portable: [['POWER', 'power'], ['TUNER', 'atu'], ['TUNE', 'tune'], ['P.AMP', 'pre'], ['ATT', 'att'], ['NR', 'nr'], ['METER', 'meter']],
-  sdr: [['START', 'power'], ['AGC', 'nb'], ['NR', 'nr'], ['ATT', 'att'], ['RIT', 'rit']],
+  sdr: [['START', 'power'], ['AGC', 'agc'], ['NB', 'nb'], ['NR', 'nr'], ['ATT', 'att'], ['RIT', 'rit']],
 };
 // Rotary controls per class: [label, setting id]
 const KNOBS = {
@@ -74,12 +74,13 @@ export function decorate(rigEl, api) {
     nr: () => { R().nr = !R().nr; save(); },
     rit: () => { R().ritOn = !R().ritOn; save(); },
     split: () => { R().split = !R().split; if (R().split && !R().vfoB) R().vfoB = R().freq + 5000; save(); },
+    agc: () => { R().agcSpd = { fast: 'mid', mid: 'slow', slow: 'off', off: 'fast' }[R().agcSpd || 'mid']; save(); },
     meter: () => { R().meter = { S: 'PO', PO: 'SWR', SWR: 'S' }[R().meter] || 'S'; save(); },
   };
-  const avail = (id) => (id === 'atu' || id === 'tune' ? rg.atu : id === 'nr' ? rg.dsp : id === 'pre' ? (rg.preamps ?? 1) > 0 : true);
+  const avail = (id) => (id === 'atu' || id === 'tune' ? rg.atu : id === 'nr' ? rg.dsp : id === 'pre' ? (rg.preamps ?? 1) > 0 : id === 'agc' ? rg.agc !== false : true);
   const keys = h('div', { class: 'fp-keys' }, ...KEYS[look].filter(([, id]) => avail(id)).map(([label, id]) => h('button', {
-    class: 'fp-key', 'data-act': id, title: label, onclick: () => { act[id](); api.update(); },
-  }, h('span', { class: 'led' }), label)));
+    class: 'fp-key', 'data-act': id, title: label, onclick: () => { act[id](); api.update(); bus.emit('radio-ctl'); },
+  }, h('span', { class: 'led' }), h('span', { class: 'fp-lbl' }, label))));
   const knobs = h('div', { class: 'fp-knobs' }, ...KNOBS[look].map(([label, id]) => knob(label, id, api)));
   const badge = h('div', { class: 'fp-badge' }, h('b', {}, rg.code || ''), h('span', {}, rg.cls || ''));
   const bezel = h('div', { class: 'fp-bezel' });
@@ -94,13 +95,13 @@ function knob(label, id, api) {
   const def = SET[id];
   const el = h('div', { class: 'fp-knob', 'data-set': id, title: `${label}: drag up/down or scroll` }, h('div', { class: 'cap' }, h('i')), h('span', { class: 'lbl' }, label), h('span', { class: 'val' }));
   const range = () => [def.min, typeof def.max === 'function' ? def.max() : def.max];
-  const bump = (frac) => { const [a, b] = range(); def.set(clamp(def.get() + frac * (b - a), a, b)); save(); api.update(); };
+  const bump = (frac) => { const [a, b] = range(); def.set(clamp(def.get() + frac * (b - a), a, b)); save(); api.update(); bus.emit('radio-ctl'); };
   let drag = null;
   el.addEventListener('pointerdown', (e) => { drag = e.clientY; el.setPointerCapture(e.pointerId); });
   el.addEventListener('pointermove', (e) => { if (drag == null) return; const d = drag - e.clientY; if (Math.abs(d) >= 3) { bump(d / 300); drag = e.clientY; } });
   el.addEventListener('pointerup', () => { drag = null; });
   el.addEventListener('wheel', (e) => { e.preventDefault(); bump(-Math.sign(e.deltaY) * 0.03); }, { passive: false });
-  el.addEventListener('dblclick', () => { if (id === 'rit') { R().rit = 0; save(); api.update(); } });
+  el.addEventListener('dblclick', () => { if (id === 'rit') { R().rit = 0; save(); api.update(); bus.emit('radio-ctl'); } });
   return el;
 }
 
@@ -108,8 +109,14 @@ function knob(label, id, api) {
 export function sync(rigEl) {
   if (!rigEl) return;
   const r = R();
-  const on = { power: S.shack.rigOn, atu: r.atuOn, pre: !!r.preamp, att: !!r.rfAtt, nb: !!r.nb, nr: !!r.nr, rit: !!r.ritOn, split: !!r.split, meter: false, tune: !!r.atuTunedFreq && r.atuOn };
-  rigEl.querySelectorAll('.fp-key').forEach((k) => k.classList.toggle('on', !!on[k.dataset.act]));
+  const on = { power: S.shack.rigOn, atu: r.atuOn, pre: !!r.preamp, agc: (r.agcSpd || 'mid') !== 'off', att: !!r.rfAtt, nb: !!r.nb, nr: !!r.nr, rit: !!r.ritOn, split: !!r.split, meter: false, tune: !!r.atuTunedFreq && r.atuOn && Math.abs(r.freq - r.atuTunedFreq) < Math.max(8000, r.freq * 0.005) };
+  // Keys whose setting has several states show that state on the key itself.
+  const txt = { pre: r.preamp ? `P.AMP${r.preamp}` : null, att: r.rfAtt ? `ATT ${r.rfAtt}` : null, agc: `AGC ${({ fast: 'F', mid: 'M', slow: 'S', off: 'OFF' })[r.agcSpd || 'mid']}`, meter: `METER ${r.meter || 'S'}` };
+  rigEl.querySelectorAll('.fp-key').forEach((k) => {
+    k.classList.toggle('on', !!on[k.dataset.act]);
+    const l = k.querySelector('.fp-lbl');
+    if (l) { l.dataset.base ??= l.textContent; l.textContent = txt[k.dataset.act] || l.dataset.base; }
+  });
   rigEl.querySelectorAll('.fp-knob').forEach((k) => {
     const def = SET[k.dataset.set];
     const a = def.min, b = typeof def.max === 'function' ? def.max() : def.max;

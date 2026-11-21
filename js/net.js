@@ -5,10 +5,13 @@
 // Two levels. "Online" is presence only: you are in the lobby, others see your callsign and
 // state, and you see who is around. "On the air" adds the direct links that carry voice and CW.
 //
-// Discovery without a server of our own: the first player online claims a well-known
-// "lobby" peer ID on the public PeerJS broker and keeps the roster; everyone else sends it
-// a heartbeat every 2 s and gets the roster back. If the lobby host leaves, the next player
-// to notice claims the ID and takes over.
+// Two paths, so everyone can always reach everyone:
+// - The relay (relay.js, a public message broker over a websocket) carries the player list,
+//   station state, CW and voice. It works from any network.
+// - Direct WebRTC links (PeerJS) carry voice with better quality where the networks allow it;
+//   a player's voice is taken from the direct link when there is one, else from the relay.
+// The old discovery also still runs: the first player claims a well-known "lobby" peer ID and
+// keeps a roster for the others. Both lists are merged.
 import { S, save } from './state.js';
 import { h, toast, bus, now, randi, rand, info } from './util.js';
 import { audio } from './audio.js';
@@ -17,10 +20,23 @@ import { world, Station, player } from './world.js';
 import { stateBy } from './data/world.js';
 import { bandOf, checkTx } from './data/bandplan.js';
 import { path as propPath, bandNoiseDbm, sUnits, distanceKm } from './propagation.js';
+import { relay, relayStart, relayStop, relayHb, relayAir, relayVoice, relayListen, toVoiceBytes, ULAW, VOICE_RATE } from './relay.js';
 
 const PEERJS = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
 const LOBBY = 'hamshack-sim-lobby-v1';
 const HB_MS = 2000, STALE_MS = 9000;
+// STUN finds each browser's public address; TURN relays the traffic when a direct link is
+// impossible (mobile data, strict home routers, school/work networks). Without a relay, two
+// players behind such networks see each other but never connect.
+const ICE = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] },
+  { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp', 'turns:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
+];
+const PEER_OPTS = { config: { iceServers: ICE } };
+// Signal level other players always reach you with (about S8), unless "realistic propagation"
+// is chosen: friends next door would otherwise be in each other's HF skip zone and hear nothing.
+const PLAYER_FLOOR_DBM = -79;
+const realProp = () => !!S.settings.realPlayerProp;
 
 export const net = {
   online: false, air: false, peer: null, id: null, peers: new Map(), status: 'offline', roster: [], hosting: false,
@@ -44,24 +60,34 @@ async function goOnline({ air = true } = {}) {
   net.air = air;
   if (air) startAir();
   setStatus('connecting…');
-  try { await loadLib(); } catch (e) { setStatus('offline'); return toast('Could not load the networking library (are you offline?).', 'bad'); }
-  const id = `hamshack-${(S.call || 'swl').toLowerCase()}-${randi(1000, 9999)}`;
-  const peer = new window.Peer(id);
+  const id = `hamshack-${(S.call || 'swl').toLowerCase().replace(/[^a-z0-9]/g, '')}-${randi(1000, 9999)}`;
+  net.id = id;
+  clearInterval(net.timer); clearInterval(net.hbTimer);
+  net.timer = setInterval(tick, 400);
+  net.hbTimer = setInterval(heartbeat, HB_MS);
+  relayStart(id, {
+    status: (ok) => { if (ok) { markOnline(); heartbeat(); } render(); },
+    hb: onRelayHb, air: onRelayAir, voice: onRelayVoice, bye: onRelayBye,
+  });
+  try { await loadLib(); } catch (e) { if (!net.online) toast('Direct links are unavailable (could not load PeerJS). Using the relay only.', 'warn'); return; }
+  if (net.id !== id) return; // went offline while loading
+  const peer = new window.Peer(id, PEER_OPTS);
   net.peer = peer;
-  peer.on('open', (pid) => { net.id = pid; net.online = true; setStatus(net.air ? 'on the air' : 'online'); tryHost(); render(); bus.emit('roster'); });
+  peer.on('open', () => { markOnline(); tryHost(); render(); });
   // Direct links and calls are only accepted while on the air.
-  peer.on('connection', (conn) => { if (conn.peer === LOBBY) return; if (net.air) setupConn(conn); else { try { conn.close(); } catch (e) { } } });
+  peer.on('connection', (conn) => { if (conn.peer === LOBBY) return; if (net.air) setupConn(conn, true); else { try { conn.close(); } catch (e) { } } });
   peer.on('call', (c) => { if (net.air) onIncomingCall(c); else { try { c.close(); } catch (e) { } } });
   peer.on('error', (e) => {
     if (e.type === 'peer-unavailable' && String(e.message || '').includes(LOBBY)) return relobby();
     if (e.type === 'peer-unavailable') return toast('That station is no longer online.', 'warn');
-    toast(`Network: ${e.type || e.message}`, 'warn');
-    if (!net.online) setStatus('offline');
+    if (!relay.ok) toast(`Network: ${e.type || e.message}`, 'warn');
   });
-  peer.on('disconnected', () => { setStatus('reconnecting…'); try { peer.reconnect(); } catch (e) { } });
-  clearInterval(net.timer); clearInterval(net.hbTimer);
-  net.timer = setInterval(tick, 400);
-  net.hbTimer = setInterval(heartbeat, HB_MS);
+  peer.on('disconnected', () => { if (!relay.ok) setStatus('reconnecting…'); try { peer.reconnect(); } catch (e) { } });
+}
+function markOnline() {
+  if (!net.online) { net.online = true; net.onlineAt = Date.now(); }
+  setStatus(net.air ? 'on the air' : 'online');
+  bus.emit('roster');
 }
 
 function startAir() {
@@ -77,7 +103,9 @@ function goOffAir() {
 }
 
 function goOffline() {
-  seen = null; airSeen.clear();
+  seen = null; airSeen.clear(); relayPeers.clear(); lobbyList = [];
+  stopVoiceOut();
+  relayStop(net.id);
   clearInterval(net.timer); clearInterval(net.hbTimer); clearInterval(lobby.hostTimer); clearTimeout(lobby.retry);
   for (const p of [...net.peers.values()]) removePeer(p.id);
   try { lobby.conn && lobby.conn.close(); } catch (e) { }
@@ -90,9 +118,9 @@ function goOffline() {
 
 // ------------------------------------------------------------------ lobby (discovery)
 function tryHost() {
-  if (!net.online) return;
+  if (!net.online || !net.peer || !window.Peer) return; // no direct links: the relay keeps the list
   clearTimeout(lobby.retry);
-  const lp = new window.Peer(LOBBY);
+  const lp = new window.Peer(LOBBY, PEER_OPTS);
   lp.on('open', () => {
     lobby.host = lp; lobby.registry = new Map(); net.hosting = true;
     render();
@@ -122,7 +150,7 @@ function hostTick() {
 }
 
 function joinLobby() {
-  if (!net.online || lobby.conn) return;
+  if (!net.online || lobby.conn || !net.peer) return;
   const c = net.peer.connect(LOBBY, { reliable: true });
   lobby.conn = c; lobby.lastRoster = Date.now();
   c.on('open', heartbeat);
@@ -134,7 +162,7 @@ function joinLobby() {
 function relobby() {
   try { lobby.conn && lobby.conn.close(); } catch (e) { }
   lobby.conn = null;
-  if (!net.online || net.hosting) return;
+  if (!net.online || net.hosting || !net.peer) return;
   clearTimeout(lobby.retry);
   lobby.retry = setTimeout(() => { lobby.retry = null; tryHost(); }, rand(400, 2500)); // random back-off so one player wins
 }
@@ -153,6 +181,7 @@ function heartbeat() {
   const info = myInfo();
   if (net.hosting && lobby.registry) lobby.registry.set(net.id, { ...info, last: Date.now(), conn: null });
   else if (lobby.conn && lobby.conn.open) { try { lobby.conn.send(info); } catch (e) { } }
+  relayHb(info);
 }
 
 // Tell the operator when someone arrives or goes on the air. The first roster after connecting
@@ -173,7 +202,7 @@ function note(e, text) {
 }
 function announce(list) {
   const ids = new Set(list.map((e) => e.id));
-  if (seen) for (const e of list) {
+  if (seen && Date.now() - (net.onlineAt || 0) > 6000) for (const e of list) {
     if (!seen.has(e.id)) note(e, e.air === false ? 'is online' : `is on the air on ${(e.freq / 1e6).toFixed(3)} MHz`);
     else if (e.air !== false && !airSeen.has(e.id)) note(e, `went on the air on ${(e.freq / 1e6).toFixed(3)} MHz`);
   }
@@ -182,11 +211,89 @@ function announce(list) {
   seen = ids;
 }
 
-function setRoster(list) {
+// The player list is the union of the lobby's roster and the heartbeats heard on the relay.
+let lobbyList = [];
+const relayPeers = new Map(); // id -> last heartbeat
+function setRoster(list) { lobbyList = list; mergeRoster(); }
+function mergeRoster() {
+  const t = Date.now();
+  for (const [k, v] of relayPeers) if (t - v.seenAt > STALE_MS) relayPeers.delete(k);
+  const by = new Map();
+  for (const e of lobbyList) by.set(e.id, e);
+  for (const e of relayPeers.values()) { const o = by.get(e.id); if (!o || (e.ts || 0) >= (o.ts || 0)) by.set(e.id, e); }
+  const list = [...by.values()];
   net.roster = list.filter((x) => x.id && x.id !== net.id).sort((a, b) => (b.tx - a.tx) || ((b.air !== false) - (a.air !== false)) || a.freq - b.freq);
   announce(net.roster);
   bus.emit('roster');
   renderRoster();
+}
+
+function onRelayHb(m) {
+  if (!m.id || !m.call) return;
+  const first = !relayPeers.has(m.id);
+  relayPeers.set(m.id, { ...m, seenAt: Date.now() });
+  if (first) mergeRoster(); else throttledMerge();
+}
+let mergeT = null;
+function throttledMerge() { if (!mergeT) mergeT = setTimeout(() => { mergeT = null; mergeRoster(); }, 1000); }
+function onRelayBye(id) {
+  relayPeers.delete(id);
+  const p = net.peers.get(id);
+  if (p && !p.conn) removePeer(id);
+  mergeRoster();
+}
+// Get (or make) the record for a player heard on the relay.
+function peerFor(id, m) {
+  let p = net.peers.get(id);
+  if (!p) {
+    p = { id, conn: null, call: m.call || '?', qth: m.state, name: m.name, st: null, station: null, media: null, mcall: null, sentMine: false, hasMic: false, last: now() };
+    net.peers.set(id, p);
+  }
+  if (m.call) { p.call = m.call; p.qth = m.state || p.qth; p.name = m.name ?? p.name; }
+  return p;
+}
+function onRelayAir(m) {
+  if (!net.air || !m.id || (m.t !== 'st' && m.t !== 'cw')) return;
+  onData(peerFor(m.id, m), m);
+}
+// Voice from the relay, for players with no direct audio link.
+function onRelayVoice(id, bytes) {
+  if (!net.air || !audio.ready || !bytes.length) return;
+  const p = net.peers.get(id) || (relayPeers.has(id) ? peerFor(id, relayPeers.get(id)) : null);
+  if (!p) return;
+  p.last = now();
+  if (p.media && !p.media.relay) return; // the direct link already carries this voice
+  if (!p.media) { p.media = audio.nodeIn(); p.media.relay = true; renderRoster(); }
+  const ctx = audio.ctx;
+  const buf = ctx.createBuffer(1, bytes.length, VOICE_RATE);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < bytes.length; i++) d[i] = ULAW[bytes[i]];
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.connect(p.media.input);
+  const t = audio.t;
+  if (!p.playAt || p.playAt < t + 0.03 || p.playAt > t + 1.2) p.playAt = t + 0.25; // small jitter buffer
+  src.start(p.playAt);
+  p.playAt += buf.duration;
+}
+// Voice to the relay while transmitting.
+const vout = { src: null, proc: null, sink: null };
+function startVoiceOut() {
+  if (vout.proc || !relay.ok || !voice.micStream || !audio.ready) return;
+  const ctx = audio.ctx;
+  vout.src = ctx.createMediaStreamSource(voice.micStream);
+  vout.proc = ctx.createScriptProcessor(2048, 1, 1);
+  vout.sink = ctx.createGain(); vout.sink.gain.value = 0; // a processor only runs while connected
+  vout.proc.onaudioprocess = (e) => {
+    if (!myTx.tx) return;
+    relayVoice(bandOf(myTx.freq)?.name, net.id, toVoiceBytes(e.inputBuffer.getChannelData(0), ctx.sampleRate));
+  };
+  vout.src.connect(vout.proc); vout.proc.connect(vout.sink); vout.sink.connect(ctx.destination);
+}
+function stopVoiceOut() {
+  if (!vout.proc) return;
+  try { vout.src.disconnect(); vout.proc.disconnect(); vout.sink.disconnect(); } catch (e) { }
+  vout.proc.onaudioprocess = null;
+  Object.assign(vout, { src: null, proc: null, sink: null });
 }
 
 // Rough "can I hear them?" estimate from the propagation model (100 W, dipoles).
@@ -197,8 +304,10 @@ export function pathEstimate(e) {
   const f = e.freq / 1e6;
   const p = propPath(st, me, f);
   const dbm = 50 + 2 + 2 - p.loss;
-  const snr = dbm - bandNoiseDbm(f, me);
-  return { snr, s: sUnits(Math.max(dbm, bandNoiseDbm(f, me))).text, km: distanceKm(me, st), open: snr > 3 };
+  const nf = bandNoiseDbm(f, me);
+  const best = realProp() ? dbm : Math.max(dbm, PLAYER_FLOOR_DBM);
+  const snr = best - nf;
+  return { snr, s: sUnits(Math.max(best, nf)).text, km: distanceKm(me, st), open: snr > 3 };
 }
 
 // Join: tune to them, open a direct link (audio + CW), and get ready to talk.
@@ -207,7 +316,7 @@ async function join(e, talk = true) {
   if (e.air === false) return toast(`${e.call} is online but not on the air yet.`, 'info');
   if (!net.air) await goOnline({ air: true });
   bus.emit('tune-to', e.freq, e.mode);
-  if (!net.peers.has(e.id)) connect(e.id);
+  if (!net.peers.get(e.id)?.conn) connect(e.id);
   const lp = net.peers.get(e.id); if (lp) lp.pinned = true;
   const est = pathEstimate(e);
   const canTalk = S.license && checkTx(S.license, e.freq, e.mode).ok;
@@ -218,27 +327,48 @@ async function join(e, talk = true) {
 // ------------------------------------------------------------------ direct links (audio/CW)
 function connect(id) {
   id = String(id).trim().toLowerCase();
-  if (!net.peer || !id || id === net.id || net.peers.has(id) || id === LOBBY) return;
+  if (!net.peer || !id || id === net.id || net.peers.get(id)?.conn || id === LOBBY) return;
   setupConn(net.peer.connect(id, { reliable: true }));
 }
 
-function setupConn(conn) {
-  if (net.peers.has(conn.peer)) { try { conn.close(); } catch (e) { } return; }
+function setupConn(conn, incoming = false) {
+  const old = net.peers.get(conn.peer);
+  if (old && !old.conn) { old.conn = conn; wireConn(old, conn); return; } // known from the relay: add the direct link
+  if (old) {
+    // Both players opened a link at the same moment (e.g. both pressed Join). Each side must keep
+    // the same one, or each closes the other's and both links die: keep the one the lower ID opened.
+    const keepNew = incoming ? conn.peer < net.id : net.id < conn.peer;
+    if (!keepNew || old.conn === conn) { if (old.conn !== conn) try { conn.close(); } catch (e) { } return; }
+    const prev = old.conn; old.conn = conn; wireConn(old, conn);
+    try { prev.close(); } catch (e) { }
+    return;
+  }
   const p = { id: conn.peer, conn, call: '?', st: null, station: null, media: null, mcall: null, sentMine: false, hasMic: false, last: now() };
   net.peers.set(conn.peer, p);
-  conn.on('open', () => { send(p, hello()); render(); });
+  wireConn(p, conn);
+}
+function wireConn(p, conn) {
+  const up = () => { send(p, hello()); render(); };
+  if (conn.open) up(); else conn.on('open', up);
   conn.on('data', (d) => onData(p, d));
-  conn.on('close', () => { removePeer(conn.peer); render(); });
-  conn.on('error', () => { removePeer(conn.peer); render(); });
+  // A dropped direct link leaves the player reachable through the relay.
+  const gone = () => { if (net.peers.get(p.id) === p && p.conn === conn) { if (relay.ok && relayPeers.has(p.id)) { p.conn = null; if (p.media && !p.media.relay) { dropMedia(p); } } else removePeer(p.id); render(); } };
+  conn.on('close', gone);
+  conn.on('error', gone);
 }
 
+function dropMedia(p) {
+  if (!p.media) return;
+  try { p.media.gain.disconnect(); p.media.osc.stop(); } catch (e) { }
+  p.media = null;
+}
 function removePeer(id) {
   const p = net.peers.get(id);
   if (!p) return;
-  try { p.conn.close(); } catch (e) { }
+  try { p.conn && p.conn.close(); } catch (e) { }
   try { p.mcall && p.mcall.close(); } catch (e) { }
   if (p.station) world.stations = world.stations.filter((s) => s !== p.station);
-  if (p.media) try { p.media.gain.disconnect(); } catch (e) { }
+  dropMedia(p);
   net.peers.delete(id);
   renderRoster();
 }
@@ -249,21 +379,26 @@ function maybeCall(p) {
   if (p.hasMic && !p.mcall && net.id > p.id) return; // let them call; we'll answer with our mic
   try { p.mcall && p.mcall.close(); } catch (e) { }
   const c = net.peer.call(p.id, voice.micStream);
+  if (!c) return;
   p.mcall = c; p.sentMine = true;
   c.on('stream', (st) => attachStream(p.id, st));
+  c.on('close', () => { if (p.mcall === c) { p.mcall = null; p.sentMine = false; } });
+  c.on('error', () => { if (p.mcall === c) { p.mcall = null; p.sentMine = false; } });
 }
 function onIncomingCall(call) {
+  if (!net.peers.has(call.peer)) connect(call.peer); // the voice call arrived before the data link
   const p = net.peers.get(call.peer);
   if (p) { if (p.mcall && p.mcall !== call) { try { p.mcall.close(); } catch (e) { } } p.mcall = call; p.sentMine = !!voice.micStream; }
   call.answer(voice.micStream || undefined);
   call.on('stream', (st) => attachStream(call.peer, st));
+  call.on('close', () => { const q = net.peers.get(call.peer); if (q && q.mcall === call) { q.mcall = null; q.sentMine = false; } });
 }
 function attachStream(id, stream) {
   const p = net.peers.get(id);
-  if (!p) return;
+  if (!p) { setTimeout(() => net.peers.get(id) && attachStream(id, stream), 500); return; }
   if (!audio.ready) { p.pendingStream = stream; return; }
   p.pendingStream = null;
-  if (p.media) { try { p.media.gain.disconnect(); } catch (e) { } }
+  dropMedia(p);
   p.media = audio.streamIn(stream);
   renderRoster();
 }
@@ -272,18 +407,19 @@ async function ensureMic() {
   if (voice.micStream) return true;
   const mic = await voice.getMic();
   if (!mic) { toast(`Microphone unavailable (${voice.micError || 'permission denied'}). You can still listen and send CW.`, 'warn'); return false; }
-  mic.getAudioTracks().forEach((t) => { t.enabled = false; });
+  mic.getAudioTracks().forEach((t) => { t.enabled = !!myTx.tx; }); // still holding PTT: go straight out
+  if (myTx.tx) startVoiceOut();
   for (const p of net.peers.values()) { send(p, hello()); maybeCall(p); }
   heartbeat();
   return true;
 }
 
-const send = (p, m) => { try { p.conn.open && p.conn.send(m); } catch (e) { } };
+const send = (p, m) => { try { p.conn && p.conn.open && p.conn.send(m); } catch (e) { } };
 const broadcast = (m) => { for (const p of net.peers.values()) send(p, m); };
 const hello = () => ({ t: 'hello', call: S.call || 'SWL', state: S.op.state, name: S.op.name, mic: !!voice.micStream });
 
 let myTx = { tx: false, freq: 0, mode: 'USB', dbm: 0 };
-function myState() { return { t: 'st', freq: myTx.tx ? myTx.freq : S.radio.freq, mode: S.radio.mode, tx: myTx.tx, dbm: myTx.dbm }; }
+function myState() { return { t: 'st', id: net.id, call: S.call || 'SWL', state: S.op.state, name: S.op.name || '', freq: myTx.tx ? myTx.freq : S.radio.freq, mode: S.radio.mode, tx: myTx.tx, dbm: myTx.dbm }; }
 
 function onData(p, d) {
   p.last = now();
@@ -299,6 +435,8 @@ function onData(p, d) {
     if (d.tx && s.mode !== 'CW') { if (!s.tx || s.tx.kind !== 'peervoice' || s.tx.end < now()) s.tx = { kind: 'peervoice', start: now(), end: now() + 600, show: '' }; }
     else if (!d.tx && s.tx && s.tx.kind === 'peervoice') s.tx.end = now();
   } else if (d.t === 'cw') {
+    if (d.k && p.lastCw === d.k) return; // the same message by both paths
+    p.lastCw = d.k;
     ensureStation(p);
     const s = p.station;
     s.freq = d.freq; s.mode = 'CW'; s.wpm = d.wpm; s.powerDbm = d.dbm || 50;
@@ -311,14 +449,25 @@ function ensureStation(p) {
   const st = stateBy(p.qth) || stateBy('KS');
   p.station = new Station({ op: { call: p.call, lat: st.lat, lon: st.lon, cont: 'NA', zone: st.zone, qth: st.name, name: p.name || '', lang: 'en-US', country: 'United States', state: st.abbr, dxcc: 'United States' }, mode: 'SSB', sb: 'USB', freq: 0, band: null, role: 'peer', antGain: 2, powerDbm: 50 });
   p.station.qsb.depth = 3;
+  p.station.minDbm = realProp() ? null : PLAYER_FLOOR_DBM;
 }
 
+let tickN = 0;
 function tick() {
-  broadcast(myState());
+  const ms = myState();
+  broadcast(ms);
+  if (net.air) {
+    if (++tickN % 3 === 0 || myTx.tx) relayAir(ms); // ~1/s, faster while transmitting
+    relayListen(world.band);
+  } else relayListen(null);
+  if (tickN % 5 === 0) mergeRoster();
   // drop linked players that went silent (closed tab, lost network)
   for (const p of [...net.peers.values()]) {
     if (p.call !== '?' && now() - p.last > 8) { if (p.pinned) toast(`${p.call} went off the air.`, 'info'); removePeer(p.id); continue; }
     if (p.pendingStream && audio.ready) attachStream(p.id, p.pendingStream);
+    if (p.station) p.station.minDbm = realProp() ? null : PLAYER_FLOOR_DBM;
+    // a voice call that dropped (network blip) is placed again
+    if (voice.micStream && p.conn && p.conn.open && p.call !== '?' && !p.mcall && !p.sentMine && (!p.hasMic || net.id < p.id)) maybeCall(p);
   }
   autoLink();
   // keep linked players present on the band the player is listening to
@@ -333,21 +482,23 @@ function tick() {
   }
 }
 
-// Like a real receiver: you're linked to every player on the band you're tuned to, so you
-// hear anyone who transmits on your frequency (subject to propagation). Links to players on
-// other bands are dropped after a while to keep the mesh small. The lower ID initiates.
+// Like a real receiver: you're linked to every player on the air, so you hear anyone who
+// transmits where you are tuned, the moment you tune there. Players on your band come first;
+// beyond MAX_LINKS, links to players on other bands are dropped. The lower ID initiates.
 const MAX_LINKS = 24;
 let lastAuto = 0;
 function autoLink() {
   if (!net.online || !net.air || now() - lastAuto < 1.5) return;
   lastAuto = now();
   const myBand = world.band;
-  const same = net.roster.filter((e) => e.air !== false && bandOf(e.freq)?.name === myBand && myBand);
-  same.sort((a, b) => Math.abs(a.freq - S.radio.freq) - Math.abs(b.freq - S.radio.freq));
-  for (const e of same) {
+  const onAir = net.roster.filter((e) => e.air !== false);
+  const bandOfE = (e) => bandOf(e.freq)?.name;
+  onAir.sort((a, b) => ((bandOfE(b) === myBand) - (bandOfE(a) === myBand)) || Math.abs(a.freq - S.radio.freq) - Math.abs(b.freq - S.radio.freq));
+  for (const e of onAir) {
     if (net.peers.size >= MAX_LINKS) break;
-    if (!net.peers.has(e.id) && net.id < e.id) connect(e.id);
+    if (!net.peers.get(e.id)?.conn && net.id < e.id) connect(e.id);
   }
+  if (net.peers.size <= MAX_LINKS) return;
   for (const p of [...net.peers.values()]) {
     const e = net.roster.find((x) => x.id === p.id);
     const band = e ? bandOf(e.freq)?.name : null;
@@ -361,9 +512,14 @@ net.setPtt = (on, p) => {
   if (on && !voice.micStream && net.online) ensureMic();
   if (voice.micStream) voice.micStream.getAudioTracks().forEach((t) => { t.enabled = on && p?.via === 'rf'; });
   myTx = on && p && p.via === 'rf' ? { tx: true, freq: p.txf, mode: S.radio.mode, dbm: p.dbm } : { tx: false };
-  if (net.online) { broadcast(myState()); heartbeat(); }
+  if (myTx.tx) startVoiceOut();
+  if (net.online) { const m = myState(); broadcast(m); relayAir(m); heartbeat(); }
 };
-net.sendCW = (text, wpm, freq) => { if (net.online) broadcast({ t: 'cw', text, wpm, freq, dbm: 50 }); };
+net.sendCW = (text, wpm, freq) => {
+  if (!net.online) return;
+  const m = { t: 'cw', id: net.id, call: S.call || 'SWL', state: S.op.state, text, wpm, freq, dbm: 50, k: `${Date.now()}-${randi(0, 1e6)}` };
+  broadcast(m); relayAir(m);
+};
 
 // Receiver hook: levels for each peer's voice stream.
 net.signals = (dial, mode, att, nBW) => {
@@ -392,7 +548,7 @@ net.signals = (dial, mode, att, nBW) => {
       p.media.dry.gain.setTargetAtTime(1 - garble, audio.t, 0.05);
       p.media.osc.frequency.setTargetAtTime(Math.max(30, Math.abs(shiftHz)), audio.t, 0.05);
     }
-    const dbm = s.freq ? world.rxDbm(s) - att : -200;
+    const dbm = s.freq ? world.rxDbm(s) - att : -200; // rxDbm applies the player floor
     out.push({ node: p.media.gain, gain: p.media.gain, audible, snr: dbm - nBW, dbm });
   }
   return out;
@@ -412,7 +568,7 @@ function render() {
   statusEl = h('span', { class: `badge ${net.online ? 'ok' : ''}` }, net.status);
   rosterBox = h('div', { class: 'roster' });
   root.append(h('div', { class: 'card side-card net', id: 'net-card' },
-    h('div', { class: 'row spread' }, h('h3', {}, 'Players', info('<b>Online</b> shows who else has the app open; others see your callsign and state. <b>On the air</b> adds a shared, simulated band with other people using the app. You hear anyone who transmits where you are tuned, if the band is open between you. Tune to their frequency (or press Join) and hold SPACE to talk. Voices go directly between browsers; nothing is recorded. Others see your callsign, state and frequency.', 'About players')), h('div', { class: 'row' }, net.hosting ? h('span', { class: 'badge', title: 'Your browser is currently keeping the player list' }, 'lobby host') : null, statusEl)),
+    h('div', { class: 'row spread' }, h('h3', {}, 'Players', info('<b>Online</b> shows who else has the app open; others see your callsign and state. <b>On the air</b> adds a shared, simulated band with other people using the app. You hear anyone who transmits where you are tuned (press Join to tune to them), and hold SPACE to talk. Every player can reach every other: voice goes directly between browsers where the networks allow it, otherwise through a public relay server. Nothing is recorded, but like real radio it is not private. Others see your callsign, state and frequency.', 'About players')), h('div', { class: 'row' }, net.hosting ? h('span', { class: 'badge', title: 'Your browser is currently keeping the player list' }, 'lobby host') : null, statusEl)),
     net.online
       ? h('div', {},
         rosterBox,
@@ -422,7 +578,7 @@ function render() {
         h('div', { class: 'row wrap' },
           net.air ? h('button', { class: 'btn small', onclick: goOffAir }, 'Leave the air') : h('button', { class: 'btn primary', id: 'go-air', onclick: () => { S.settings.autoOnline = true; save(); goOnline({ air: true }); } }, 'Go on the air'),
           h('button', { class: 'btn small ghost', onclick: () => { S.settings.presence = false; S.settings.autoOnline = false; save(); goOffline(); } }, 'Go offline'),
-          net.air ? autoChk() : null))
+          net.air ? autoChk() : null, net.air ? propChk() : null))
       : h('div', { class: 'row wrap' },
         h('button', { class: 'btn primary', id: 'go-online', onclick: () => { S.settings.presence = true; save(); goOnline({ air: false }); } }, 'See who is online'),
         h('button', { class: 'btn', onclick: () => { S.settings.presence = true; S.settings.autoOnline = true; save(); goOnline({ air: true }); } }, 'Go on the air')),
@@ -430,6 +586,11 @@ function render() {
   renderRoster();
 }
 
+function propChk() {
+  const c = h('input', { type: 'checkbox', checked: realProp() });
+  c.onchange = () => { S.settings.realPlayerProp = c.checked; save(); renderRoster(); };
+  return h('label', { class: 'inline small', title: 'Off: every player can always hear every other player, wherever they are. On: the band has to be open between you, as in real life.' }, c, ' realistic propagation between players');
+}
 function autoChk() {
   const c = h('input', { type: 'checkbox', checked: !!S.settings.autoOnline });
   c.onchange = () => { S.settings.autoOnline = c.checked; save(); };
@@ -444,7 +605,7 @@ function renderRoster() {
   const list = net.roster;
   rosterBox.innerHTML = '';
   if (!list.length) {
-    rosterBox.append(h('p', { class: 'muted small' }, net.hosting || (lobby.conn && lobby.conn.open) ? 'Nobody else is online right now. You will be told when someone arrives.' : 'Finding the lobby…'));
+    rosterBox.append(h('p', { class: 'muted small' }, net.hosting || relay.ok || (lobby.conn && lobby.conn.open) ? 'Nobody else is online right now. You will be told when someone arrives.' : 'Finding the lobby…'));
     return;
   }
   const dial = S.radio.freq;
@@ -462,7 +623,7 @@ function renderRoster() {
         h('td', { class: 'mono' }, e.air === false ? '—' : `${(e.freq / 1e6).toFixed(3)}${band ? ` (${band.name})` : ''}`),
         h('td', {}, e.mode),
         h('td', { class: est ? (est.open ? 'ok' : 'bad') : 'muted' }, est ? (est.open ? `≈ ${est.s}` : 'band closed') : '—'),
-        h('td', { class: 'small' }, linked ? (linked.media ? 'audio' : '') : bandOf(e.freq)?.name === world.band ? '…' : h('span', { class: 'muted' }, 'other band')),
+        h('td', { class: 'small', title: 'direct: browser-to-browser audio. relay: through the relay server (works on any network).' }, linked?.media ? (linked.media.relay ? 'relay' : 'direct') : linked?.conn?.open ? 'direct' : relay.ok ? 'relay' : '…'),
         h('td', {}, e.air === false ? h('span', { class: 'badge' }, 'online') : here && linked ? h('span', { class: 'badge ok' }, 'joined') : h('button', { class: 'btn primary small', onclick: () => join(e) }, e.tx ? 'Join (talking)' : 'Join')));
     })));
 }

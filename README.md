@@ -20,7 +20,7 @@ python3 -m http.server 8000
 - **Learn:** Course, and Reference (Library, License, History).
 - **Build:** set your place on the map (state, exact position or grid square) and the kind of place: yard, acreage, rooftop, balcony, attic, park, summit, beach, sailboat or a vehicle. Vehicles come in nine types (sedan, SUV, pickup, van, RV, semi, motorcycle, side-by-side, bicycle) with their own mount points; the mount and the size of the body set the longest whip and the ground-plane loss. Add, move and remove trees, masts and buildings to match your own site. Assemble equipment from real-world specifications, wire it connector by connector (polarity, RF path, grounding), and build the antenna in three steps: pick a type, size it for a band, raise it.
 - **Operate:** a transceiver with VFO, filters, AGC, RIT, tuner, meters and waterfall; a dial populated the way real spectrum is used (amateur voice, CW, FT8 and APRS, plus public safety, rail, marine, aviation, business and personal radio, with only a handful of broadcast stations); a map of your area with state outlines, cities, range rings and a marker for everything on the air, with zoom, pan and click to tune; a world propagation map with live ionosphere layers and click-to-analyse paths; a logger with contest practice; and a handheld view for phones.
-- **Other people:** see who else has the app open and get a notice when someone comes online or goes on the air, in the app and, if you allow it, as a browser notification while the app is open in a tab. Going on the air adds a shared band where others can hear you over the internet.
+- **Other people:** see who else has the app open and get a notice when someone comes online or goes on the air, in the app and, if you allow it, as a browser notification while the app is open in a tab. Going on the air adds a shared band where others can hear you over the internet. Every player can always reach every other: by default other players always come in at a workable signal wherever they are (tick "realistic propagation between players" to need an open band, as in real life).
 
 ## What you can do
 
@@ -47,7 +47,7 @@ python3 -m http.server 8000
 - Airport locations and published radio frequencies (OurAirports).
 - UTC time, and your device location only if you allow it.
 - Everything on the Live feeds page (web SDRs, scanner/air-band/weather audio, broadcast streams, spot networks), and any real audio you choose to analyse.
-- Other users shown online are real people; their voices travel over the internet (WebRTC), never by radio.
+- Other users shown online are real people; their voices travel over the internet (WebRTC directly between browsers where possible, otherwise through a public relay), never by radio.
 - Band edges and license privileges (FCC Part 97), beacon schedules, repeater conventions and typical equipment specifications from published sources.
 
 **Simulated**
@@ -77,6 +77,7 @@ Services and libraries used while the app runs:
 | [OurAirports](https://ourairports.com/data/) | Airport locations and frequencies | Public domain |
 | [world-atlas](https://github.com/topojson/world-atlas) / Natural Earth | Map coastlines | ISC licence; Natural Earth is public domain |
 | [PeerJS](https://peerjs.com) and PeerJS Cloud | Connecting online users (WebRTC signalling) | MIT licence |
+| [MQTT.js](https://github.com/mqttjs/MQTT.js) with the public HiveMQ / EMQX brokers | Relay for the player list, CW and voice when a direct link can't be made | MIT licence |
 | [jsDelivr](https://www.jsdelivr.com), [unpkg](https://unpkg.com) | Delivering the two libraries above | Free public CDNs |
 | [Inter](https://rsms.me/inter/), [JetBrains Mono](https://www.jetbrains.com/lp/mono/) via Google Fonts | Typefaces | SIL Open Font License 1.1 |
 | [Web Speech API](https://developer.mozilla.org/docs/Web/API/Web_Speech_API) | Synthesized voices, push-to-talk recognition | Built into the browser; some browsers send recognised speech to the vendor's servers |
@@ -104,7 +105,7 @@ Published references the simulation is based on:
 
 Progress is saved only in your browser. If you allow location access or type in a position, your coordinates stay in the browser; only an approximate position is sent to the weather, terrain and broadcast services listed above. Your name is never sent anywhere.
 
-"Show me as online" is a choice in the welcome dialog and in Settings. While it is on, other users see your simulated callsign and your state, and whether you are on the air. When you go on the air they also see your frequency and mode, and voice goes directly between browsers. There are no accounts and no server of the app's own; presence uses the public PeerJS broker and works only while the app is open.
+"Show me as online" is a choice in the welcome dialog and in Settings. While it is on, other users see your simulated callsign and your state, and whether you are on the air. When you go on the air they also see your frequency and mode. Voice goes directly between browsers where the networks allow it, and otherwise through a public relay broker (8 kHz, like a phone line). There are no accounts and no server of the app's own; presence uses the public PeerJS and MQTT brokers and works only while the app is open. Nothing is recorded, but as on real radio, transmissions are not private: anyone connected to the relay could listen.
 
 ## Updates
 
