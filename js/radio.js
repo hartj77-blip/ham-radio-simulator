@@ -30,6 +30,8 @@ let lastSmeter = -127;
 export const rx = { strongest: null, decoder: '', smeterDbm: -127, noiseDbm: -130 };
 
 export const dialHz = () => R().freq + (R().ritOn ? R().rit : 0);
+// Front-end preamp gain in dB (P.AMP1 ~10 dB, P.AMP2 ~18 dB). Limited to what the radio has.
+export const preampGainDb = (r = R()) => [0, 10, 18][Math.min(r.preamp || 0, rig().preamps ?? 1)] || 0;
 
 export function setFreq(hz, opts = {}) {
   const r = R();
@@ -74,6 +76,7 @@ export function setMode(m) {
   rxUpdate();
 }
 export function reapplyMode() { applyMode(); }
+const hasDsp = () => !!(rig().dsp || owns('dsp'));
 function applyMode() {
   const r = R();
   audio.setMode(r.mode, r.filter[r.mode], r.pitch, rig().ifs ? r.ifShift || 0 : 0);
@@ -151,7 +154,8 @@ export function rxUpdate() {
   }
   audio.setAF(r.af);
   const d = dialHz(), f = d / 1e6;
-  const att = r.rfAtt + (1 - (r.rfGain ?? 1)) * 30; // ATT pad + RF gain backed off
+  const att = (r.rfAtt || 0) + (1 - (r.rfGain ?? 1)) * 30; // ATT pad + RF gain backed off
+  const preGain = preampGainDb(r); // the preamp lifts everything ahead of the detector (and the S-meter with it)
   const sys = rs.antennaOk ? system(d) : null;
   let nf = -132;
   if (rs.antennaOk && sys) nf = Math.max(-132, bandNoiseDbm(f, player()) + sys.effDb - sys.totalLoss);
@@ -162,9 +166,14 @@ export function rxUpdate() {
   if (rs.antennaOk) nf += site.noiseDb;
   const bw = r.mode === 'CW' ? r.filter.CW : r.mode === 'FM' ? 12000 : r.mode === 'WFM' ? 150000 : r.mode === 'AM' ? r.filter.AM / 2 : r.filter[r.mode];
   const nBW = nf + 10 * Math.log10(bw / 2400);
-  rx.noiseDbm = nf;
-  const NREF = 0.1;
-  let maxRms = NREF, strongest = null, strongDbm = -200;
+  rx.noiseDbm = nf + preGain; // what the radio's own meter/scope see, after ATT and preamp
+  rx.gainDb = preGain - att;
+  // Audio level of the band noise follows the level reaching the detector: ATT / RF gain make
+  // the hiss quieter, the preamp makes it louder (partly evened out by AGC, like a real radio).
+  const NREF = 0.1 * db2amp(clamp((nf + preGain + 110) * 0.6, -24, 18));
+  // AGC threshold sits above ordinary band noise, so the hiss follows ATT/preamp; only a very
+  // noisy band (or a strong signal) pulls the gain down.
+  let maxRms = NREF * 0.35, strongest = null, strongDbm = -200;
   const sigs = [];
   const t = now();
   for (const st of world.stations) {
@@ -260,7 +269,7 @@ export function rxUpdate() {
   // Band hiss, plus the rasp of a signal that is off-centre in the passband (not tamed by AGC).
   const fmMode = r.mode === 'FM' || r.mode === 'WFM';
   const offTune = strongest && open ? strongest.rough * 0.16 : 0;
-  audio.setNoise((noiseRms * agc * (fmMode ? 1 : 1.4) + offTune) * (r.nr && (owns('dsp') || rig().dsp) ? 0.55 : 1) * (S.settings.noiseLvl ?? 1));
+  audio.setNoise((noiseRms * agc * (fmMode ? 1 : 1.4) + offTune) * (r.nr && hasDsp() ? 0.55 : 1) * (S.settings.noiseLvl ?? 1));
   const liveNow = new Set(); // live streams the receiver is on this tick
   for (const s of sigs) {
     let rms = s.audible && open ? NREF * db2amp(s.snr) * agc : 0;
@@ -297,7 +306,7 @@ export function rxUpdate() {
   audio.muteStreamsExcept(liveNow);
   audio.streamGC();
   // S-meter
-  const sm = Math.max(nf, strongDbm);
+  const sm = Math.max(nf, strongDbm) + preGain; // S-meter is read after the preamp, as on a real rig
   lastSmeter = sm > lastSmeter ? sm : lastSmeter + (sm - lastSmeter) * 0.25;
   rx.smeterDbm = lastSmeter;
   rx.strongest = strongest;
@@ -370,7 +379,7 @@ function updateDecoder(s) {
   let out = '';
   while (decState.idx < chars.length && chars[decState.idx].t <= el) {
     let c = chars[decState.idx].c;
-    const pErr = clamp((4 - s.snr - (R().nr && owns('dsp') ? 3 : 0)) / 14, 0, 0.6);
+    const pErr = clamp((4 - s.snr - (R().nr && (owns('dsp') || rig().dsp) ? 3 : 0)) / 14, 0, 0.6);
     if (c !== ' ' && Math.random() < pErr) c = 'ETIANMSURWDKGOH'[Math.floor(Math.random() * 15)];
     out += c.length > 1 ? `<${c}>` : c;
     decState.idx++;
@@ -410,10 +419,13 @@ export function initRadioUI(el) {
   const freqIn = h('input', { class: 'rsel', placeholder: 'kHz ↵', size: 9, title: 'Type a frequency in kHz and press Enter' });
   freqIn.onkeydown = (e) => { if (e.key === 'Enter') { const v = parseFloat(freqIn.value); if (v >= 100) { prevFreq = R().freq; setFreq(v * 1000); freqIn.value = ''; freqIn.blur(); } } };
 
-  const slider = (label, min, max, step, val, fn, fmt = (v) => v) => {
+  sliderSync = [];
+  const slider = (label, min, max, step, val, fn, fmt = (v) => v, get = () => null) => {
     const out = h('span', { class: 'val' }, fmt(val));
     const i = h('input', { type: 'range', min, max, step, value: val });
-    i.oninput = () => { fn(+i.value); out.textContent = fmt(+i.value); save(); };
+    i.oninput = () => { fn(+i.value); out.textContent = fmt(+i.value); save(); updateDisplay(); };
+    // keep the slider in step when the same setting is changed elsewhere (faceplate knob, master view)
+    sliderSync.push(() => { const v = get(); if (v != null && +i.value !== v && document.activeElement !== i) { i.value = v; out.textContent = fmt(+i.value); } });
     return h('label', { class: 'knobrow' }, h('span', {}, label), i, out);
   };
   const filterSel = h('select', { class: 'rsel', id: 'filter-sel' });
@@ -425,13 +437,18 @@ export function initRadioUI(el) {
   filterSel.onchange = () => { r.filter[r.mode] = +filterSel.value; applyMode(); save(); updateDisplay(); };
   panel.fillFilters = fillFilters;
 
-  const atuBtn = h('button', { class: 'rbtn', id: 'atu-btn', onclick: () => { r.atuOn = !r.atuOn; save(); updateDisplay(); } }, 'ATU');
+  const atuBtn = h('button', { class: 'rbtn', id: 'atu-btn', onclick: () => { r.atuOn = !r.atuOn; save(); updateDisplay(); bus.emit('radio-ctl'); } }, 'ATU');
   const tuneBtn = h('button', { class: 'rbtn warnb', onclick: atuTune, title: 'Transmit a low-power carrier and let the automatic tuner find a match' }, 'TUNE');
-  const attBtn = h('button', { class: 'rbtn', id: 'att-btn', onclick: () => { r.rfAtt = r.rfAtt ? 0 : 12; save(); updateDisplay(); } }, 'ATT');
-  const ritBtn = h('button', { class: 'rbtn', id: 'rit-btn', onclick: () => { r.ritOn = !r.ritOn; save(); updateDisplay(); } }, 'RIT');
+  const ctl = (fn) => () => { fn(); save(); updateDisplay(); bus.emit('radio-ctl'); };
+  const attBtn = h('button', { class: 'rbtn', id: 'att-btn', title: 'Attenuator: cuts signals and band noise by 12 dB (S-meter drops ~2 S-units)', onclick: ctl(() => { r.rfAtt = r.rfAtt ? 0 : 12; }) }, 'ATT');
+  const preBtn = h('button', { class: 'rbtn', id: 'pre-btn', title: 'Preamp: +10 dB (P.AMP2 +18 dB). Louder and higher on the S-meter; only improves weak-signal reception on the quiet upper bands', onclick: ctl(() => { r.preamp = ((r.preamp || 0) + 1) % ((rig().preamps ?? 1) + 1); }) }, 'PRE');
+  const nbBtn = h('button', { class: 'rbtn', id: 'nb-btn', title: 'Noise blanker: gates static crashes and impulse noise', onclick: ctl(() => { r.nb = !r.nb; }) }, 'NB');
+  const nrBtn = h('button', { class: 'rbtn', id: 'nr-btn', title: 'DSP noise reduction: lowers the steady hiss', onclick: ctl(() => { r.nr = !r.nr; }) }, 'NR');
+  const ritBtn = h('button', { class: 'rbtn', id: 'rit-btn', onclick: ctl(() => { r.ritOn = !r.ritOn; }) }, 'RIT');
   const ritSl = h('input', { type: 'range', min: -2000, max: 2000, step: 10, value: r.rit });
-  ritSl.oninput = () => { r.rit = +ritSl.value; save(); updateDisplay(); };
-  ritSl.ondblclick = () => { r.rit = 0; ritSl.value = 0; save(); updateDisplay(); };
+  ritSl.id = 'rit-sl';
+  ritSl.oninput = () => { r.rit = +ritSl.value; save(); updateDisplay(); rxUpdate(); };
+  ritSl.ondblclick = () => { r.rit = 0; ritSl.value = 0; save(); updateDisplay(); rxUpdate(); };
 
   const rptSel = h('select', { class: 'rsel' }, ...[[0, 'Simplex'], [-600000, '− 600 kHz'], [600000, '+ 600 kHz']].map(([v, l]) => h('option', { value: v, selected: v === r.rptOffset }, l)));
   rptSel.onchange = () => { r.rptOffset = +rptSel.value; save(); updateDisplay(); };
@@ -464,11 +481,12 @@ export function initRadioUI(el) {
       h('details', { class: 'rig-more', id: 'rig-more', open: !!S.settings.rigMore, ontoggle: (e) => { S.settings.rigMore = e.target.open; save(); } }, h('summary', {}, 'More controls'), h('div', { class: 'rig-more-grid' },
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'OTHER SERVICES (LISTEN)'), serviceButtons()),
       h('div', { class: 'ctl-group' }, h('div', { class: 'ctl-title' }, 'AUDIO'),
-        slider('AF GAIN', 0, 1, 0.01, r.af, (v) => { r.af = v; }, (v) => Math.round(v * 100)),
-        slider('SQL', 0, 1, 0.01, r.sql, (v) => { r.sql = v; }, (v) => Math.round(v * 100)),
-        h('div', { class: 'row' }, attBtn, ritBtn, ritSl), owns('dsp') || rig().dsp ? h('button', { class: `rbtn ${r.nr ? 'active' : ''}`, onclick: (e) => { r.nr = !r.nr; e.target.classList.toggle('active', r.nr); save(); } }, 'NR (DSP)') : null),
+        slider('AF GAIN', 0, 1, 0.01, r.af, (v) => { r.af = v; }, (v) => Math.round(v * 100), () => R().af),
+        slider('SQL', 0, 1, 0.01, r.sql, (v) => { r.sql = v; }, (v) => Math.round(v * 100), () => R().sql),
+        h('div', { class: 'row' }, preBtn, attBtn, nbBtn, nrBtn),
+        h('div', { class: 'row' }, ritBtn, ritSl)),
       h('div', { class: 'ctl-group tx-group', hidden: !rg0.tx.length }, h('div', { class: 'ctl-title' }, 'TRANSMIT'),
-        slider('POWER', 5, maxPower(), 5, Math.min(r.power, maxPower()), (v) => { r.power = v; if (v <= 25) elmer('power_min'); }, (v) => `${v} W`),
+        slider('POWER', 5, maxPower(), 5, Math.min(r.power, maxPower()), (v) => { r.power = v; if (v <= 25) elmer('power_min'); }, (v) => `${v} W`, () => Math.min(R().power, maxPower())),
         h('div', { class: 'row' }, atuBtn, tuneBtn),
         h('div', { class: 'fm-only' }, h('label', { class: 'knobrow' }, h('span', {}, 'OFFSET'), rptSel), h('label', { class: 'knobrow' }, h('span', {}, 'CTCSS'), toneSel)),
         rotator, mtuner, h('div', { id: 'antswitch' })))),
@@ -484,6 +502,7 @@ export function initRadioUI(el) {
   radioListeners = true;
   bus.on('rig', () => { const r2 = R(); if (!rig().modes.includes(r2.mode)) r2.mode = rig().modes[0]; if (r2.power > maxPower()) r2.power = maxPower(); if (!(r2.power > 0) && maxPower() > 0) r2.power = Math.min(100, maxPower()); initRadioUI(panel); applyMode(); world.setFreq(r2.freq); });
   bus.on('antenna', updateDisplay);
+  bus.on('radio-ctl', () => { updateDisplay(); rxUpdate(); });
   bus.on('shack', updateDisplay);
   bus.on('license', updateDisplay);
   bus.on('mode', () => initRadioUI(panel));
@@ -505,7 +524,7 @@ function serviceButtons() {
   return h('div', { class: 'btn-grid bands' }, ...P.map(([l, fn, t]) => h('button', { class: 'rbtn svc', title: t, onclick: fn }, l)));
 }
 
-let knobRot = 0, radioListeners = false;
+let knobRot = 0, radioListeners = false, sliderSync = [];
 const angle = (e, el) => { const b = el.getBoundingClientRect(); return Math.atan2(e.clientY - (b.top + b.height / 2), e.clientX - (b.left + b.width / 2)) * 180 / Math.PI; };
 
 export function tuneBy(n) {
@@ -613,7 +632,7 @@ export function updateDisplay() {
   const swr = rs.powered ? effectiveSwr(r.freq) : 0;
   lcd.className = 'lcd-panel' + (rs.powered ? ' on' : '');
   lcd.innerHTML = rs.powered ? `
-    <div class="lcd-row small"><span>VFO-A${r.split ? ' <b class="hl">SPLIT</b>' : ''}</span>${r.preamp ? `<span class="hl">P.AMP${r.preamp}</span>` : ''}${r.nb ? '<span class="hl">NB</span>' : ''}${r.notch && rig().notch ? '<span class="hl">NOTCH</span>' : ''}<span>${band ? band.name : serviceOf(r.freq)?.label || 'GEN'}</span>${rig().atu ? `<span class="${r.atuOn ? 'hl' : 'dim'}">ATU${r.atuOn && r.atuTunedFreq && Math.abs(r.freq - r.atuTunedFreq) < Math.max(8000, r.freq * 0.005) ? '✓' : ''}</span>` : ''}<span class="${r.rfAtt ? 'hl' : 'dim'}">ATT</span>${rig().tx.length ? `<span>${r.power}W</span><span id="lcd-tx" class="dim">TX</span>` : '<span>RX ONLY</span>'}</div>
+    <div class="lcd-row small"><span>VFO-A${r.split ? ' <b class="hl">SPLIT</b>' : ''}</span>${(rig().preamps ?? 1) > 0 ? `<span class="${r.preamp ? 'hl' : 'dim'}">${r.preamp ? `P.AMP${r.preamp}` : 'P.AMP'}</span>` : ''}<span class="${r.nb ? 'hl' : 'dim'}">NB</span>${hasDsp() ? `<span class="${r.nr ? 'hl' : 'dim'}">NR</span>` : ''}${r.notch && rig().notch ? '<span class="hl">NOTCH</span>' : ''}<span>${band ? band.name : serviceOf(r.freq)?.label || 'GEN'}</span>${rig().atu ? `<span class="${r.atuOn ? 'hl' : 'dim'}">ATU${r.atuOn && r.atuTunedFreq && Math.abs(r.freq - r.atuTunedFreq) < Math.max(8000, r.freq * 0.005) ? '✓' : ''}</span>` : ''}<span class="${r.rfAtt ? 'hl' : 'dim'}">ATT${r.rfAtt ? ` ${r.rfAtt}dB` : ''}</span>${(r.rfGain ?? 1) < 0.99 ? `<span class="hl">RFG ${Math.round((r.rfGain ?? 1) * 100)}</span>` : ''}${rig().agc !== false ? `<span class="${r.agcSpd === 'off' ? 'hl' : ''}">AGC-${({ fast: 'F', mid: 'M', slow: 'S', off: 'OFF' })[r.agcSpd || 'mid']}</span>` : ''}${rig().tx.length ? `<span>${r.power}W</span><span id="lcd-tx" class="dim">TX</span>` : '<span>RX ONLY</span>'}</div>
     <div class="lcd-freq">${fmtFreq(r.freq)}<span class="unit">MHz</span></div>
     <div class="lcd-row"><span class="mode">${r.mode}</span><span>FIL ${r.filter[r.mode] >= 1000 ? (r.filter[r.mode] / 1000) + 'k' : r.filter[r.mode]}</span>
       <span class="${r.ritOn ? 'hl' : 'dim'}">RIT ${r.rit >= 0 ? '+' : ''}${(r.rit / 1000).toFixed(2)}</span>
@@ -627,7 +646,14 @@ export function updateDisplay() {
   $$('.rbtn[data-mode]', panel).forEach((b) => b.classList.toggle('active', b.dataset.mode === r.mode));
   $('#atu-btn', panel)?.classList.toggle('active', r.atuOn);
   $('#att-btn', panel)?.classList.toggle('active', !!r.rfAtt);
-  $('#rit-btn', panel)?.classList.toggle('active', r.ritOn);
+  $('#rit-btn', panel)?.classList.toggle('active', !!r.ritOn);
+  $('#pre-btn', panel)?.classList.toggle('active', !!r.preamp);
+  if ($('#pre-btn', panel)) { $('#pre-btn', panel).textContent = r.preamp ? `PRE ${r.preamp}` : 'PRE'; $('#pre-btn', panel).hidden = !((rig().preamps ?? 1) > 0); }
+  $('#nb-btn', panel)?.classList.toggle('active', !!r.nb);
+  $('#nr-btn', panel)?.classList.toggle('active', !!r.nr);
+  if ($('#nr-btn', panel)) $('#nr-btn', panel).hidden = !hasDsp();
+  for (const f of sliderSync) f();
+  if ($('#rit-sl', panel) && +$('#rit-sl', panel).value !== r.rit) $('#rit-sl', panel).value = r.rit;
   panel.classList.toggle('mode-fm', r.mode === 'FM');
   document.body.classList.toggle('op-cw', r.mode === 'CW');
   panel.fillFilters && panel.fillFilters();
@@ -758,7 +784,7 @@ function computeBins(Wb, span, f0, nfBin, t, rs, r) {
   for (const st of world.stations) {
     if (!st.tx || t < st.tx.start || t > st.tx.end + (st.tx.speaking ? 3 : 0)) continue;
     if (Math.abs(st.freq - r.freq) > span) continue;
-    const dbm = world.rxDbm(st) - r.rfAtt;
+    const dbm = world.rxDbm(st) + (rx.gainDb ?? -(r.rfAtt || 0));
     let keyed = true;
     if (st.tx.sch) { const el = t - st.tx.start; keyed = st.tx.sch.segs.some((s) => el >= s.t0 && el <= s.t1); }
     const kind = st.mode === 'WFM' ? 'wfm' : st.mode === 'AM' && st.tx.kind !== 'amtone' ? 'am' : st.mode === 'CW' || st.tx.kind === 'cwtone' || st.tx.kind === 'amtone' ? 'cw' : st.mode === 'FT8' ? 'ft8' : st.mode === 'FM' ? 'fm' : 'voice';
@@ -904,7 +930,7 @@ function drawMeter(rs) {
   }
   const a = A0 + (A1 - A0) * frac;
   c.strokeStyle = '#111'; c.lineWidth = 2; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * (rad + 4), cy + Math.sin(a) * (rad + 4)); c.stroke();
-  c.textAlign = 'right'; c.fillStyle = '#555'; c.fillText(mode, W - 6, 14);
+  c.textAlign = 'right'; c.fillStyle = '#555'; c.fillText(mode === 'S' && r.meter && r.meter !== 'S' ? `S  (TX: ${r.meter})` : mode, W - 6, 14);
 }
 
 export function stationInfo(call) {

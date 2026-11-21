@@ -4,7 +4,7 @@
 import { S, save } from './state.js';
 import { h, bus, clamp } from './util.js';
 import { rig, gearOf } from './rigs.js';
-import { rx, reapplyMode, updateDisplay, setFreq, effectiveSwr } from './radio.js';
+import { rx, reapplyMode, updateDisplay, setFreq, effectiveSwr, preampGainDb } from './radio.js';
 import { maxPower, powerChain } from './limits.js';
 import { txState } from './operating.js';
 import { rigStatus } from './shack.js';
@@ -19,6 +19,7 @@ export function mountMaster(el) {
   if (timer) return;
   timer = setInterval(() => { if (S.settings.master && root?.isConnected && !document.hidden) live(); }, 300);
   bus.on('rig', () => render());
+  bus.on('radio-ctl', () => render()); // a key on the faceplate or panel changed something shown here
 }
 
 const seg = (opts, cur, fn, { dis } = {}) => h('div', { class: 'mv-seg' }, ...opts.map(([v, l]) => h('button', { class: `rbtn ${cur === v ? 'active' : ''}`, disabled: dis, onclick: () => { fn(v); save(); reapplyMode(); updateDisplay(); render(); } }, l)));
@@ -94,7 +95,7 @@ function live() {
   rxEl.innerHTML = [
     block('ANTENNA', S.antenna.built ? `${S.antenna.type}` : 'none', `${S.antenna.feedLen} ft ${S.antenna.feed}`),
     block('ATU', r.atuOn && rg.atu ? 'IN' : 'thru', `SWR ${swr > 50 ? '∞' : swr.toFixed(1)}`, r.atuOn ? 'on' : ''),
-    block('ATT / PRE', `${r.rfAtt ? `−${r.rfAtt} dB` : r.preamp ? `P${r.preamp}` : 'flat'}`, `RF gain ${Math.round((r.rfGain ?? 1) * 100)}`),
+    block('ATT / PRE', [r.rfAtt ? `ATT −${r.rfAtt} dB` : '', r.preamp ? `P.AMP${r.preamp} +${preampGainDb(r)} dB` : ''].filter(Boolean).join(', ') || 'flat', `RF gain ${Math.round((r.rfGain ?? 1) * 100)}`, r.rfAtt || r.preamp ? 'on' : ''),
     block('BPF', r.freq < 30e6 ? 'HF band filter' : 'VHF', `${(r.freq / 1e6).toFixed(3)} MHz`),
     block(rg.look === 'touch' || rg.look === 'sdr' || rg.look === 'portable' ? 'ADC (SDR)' : 'MIXER', 'signal', dbm(sig)),
     block('IF FILTER', `${rx.bw >= 1000 ? (rx.bw / 1000).toFixed(1) + ' kHz' : rx.bw + ' Hz'}`, rg.ifs && r.ifShift ? `shift ${r.ifShift > 0 ? '+' : ''}${r.ifShift}` : 'centred'),
