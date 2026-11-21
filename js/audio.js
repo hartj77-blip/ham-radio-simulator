@@ -280,9 +280,13 @@ class AudioEngine {
   // ring-modulates the audio (frequency shift / spectrum inversion) to imitate a mistuned or
   // wrong-sideband SSB signal.
   streamIn(stream) {
-    const ctx = this.ctx;
     const el = new Audio(); el.muted = true; el.srcObject = stream; el.play().catch(() => { });
-    const src = ctx.createMediaStreamSource(stream);
+    const src = this.ctx.createMediaStreamSource(stream);
+    return { ...this.nodeIn(src), el };
+  }
+  // The same receiver input for audio arriving some other way (the relay): feed `src`.
+  nodeIn(src = this.ctx.createGain()) {
+    const ctx = this.ctx;
     const out = ctx.createGain(); out.gain.value = 0;
     const dry = ctx.createGain(); dry.gain.value = 1;
     const rm = ctx.createGain(); rm.gain.value = 0;
@@ -292,7 +296,7 @@ class AudioEngine {
     src.connect(dry); dry.connect(out);
     src.connect(rm); rm.connect(lp); lp.connect(wet); wet.connect(out);
     out.connect(this.rxIn);
-    return { gain: out, dry, wet, osc, el, src };
+    return { gain: out, dry, wet, osc, src, input: src };
   }
 
   // ---- speech synthesis ----
